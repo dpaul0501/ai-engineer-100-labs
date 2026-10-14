@@ -1,0 +1,52 @@
+site_name: '100 Days: Daily Guide'
+site_description: The self-paced daily guide for the 100-day Zero to One AI Engineer
+  program.
+repo_url: https://github.com/dpaul0501/ai-engineer-100-labs
+docs_dir: docs
+nav:
+- Start here: index.md
+- By pillar:
+  - DSA: tracks/dsa.md
+  - ML/DL: tracks/ml-dl.md
+  - AI Engineering: tracks/ai-engineering.md
+  - System Design & Engineering Practice: tracks/system-design.md
+- Weeks:
+  - 'Week 1: Lookups, Vectors, and Your First LLM Call': weeks/week_01.md
+  - 'Week 2: Pointers, Matrices, and Structured Output': weeks/week_02.md
+theme:
+  name: material
+  features:
+  - navigation.sections
+  - navigation.top
+  - content.code.copy
+  palette:
+  - media: '(prefers-color-scheme: light)'
+    scheme: default
+    primary: indigo
+    accent: deep purple
+    toggle:
+      icon: material/weather-night
+      name: Switch to dark mode
+  - media: '(prefers-color-scheme: dark)'
+    scheme: slate
+    primary: indigo
+    accent: deep purple
+    toggle:
+      icon: material/weather-sunny
+      name: Switch to light mode
+markdown_extensions:
+- admonition
+- attr_list
+- md_in_html
+- pymdownx.details
+- pymdownx.superfences
+- pymdownx.tabbed:
+    alternate_style: true
+- tables
+- toc:
+    permalink: true
+plugins:
+- search
+validation:
+  anchors: warn
+  unrecognized_links: warn

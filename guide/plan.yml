@@ -1,0 +1,16 @@
+# The 14 weeks. Days are inclusive. The release script and the nav read this file.
+weeks:
+  - {n: 1,  month: 1, first: 1,  last: 7,   title: "Lookups, Vectors, and Your First LLM Call"}
+  - {n: 2,  month: 1, first: 8,  last: 14,  title: "Pointers, Matrices, and Structured Output"}
+  - {n: 3,  month: 1, first: 15, last: 21,  title: "Stacks, Gradients, and Tool Calls"}
+  - {n: 4,  month: 1, first: 22, last: 30,  title: "Trees, Models, and the Agent Loop"}
+  - {n: 5,  month: 2, first: 31, last: 37,  title: "Tries, Leakage, and Memory"}
+  - {n: 6,  month: 2, first: 38, last: 44,  title: "Heaps, Neural Nets, and Retrieval"}
+  - {n: 7,  month: 2, first: 45, last: 51,  title: "Graphs, Tokens, and Attention"}
+  - {n: 8,  month: 2, first: 52, last: 60,  title: "The Transformer, Multi-Agent Systems, and a Design Review"}
+  - {n: 9,  month: 3, first: 61, last: 67,  title: "Generation, and the Spec for Your Big Build"}
+  - {n: 10, month: 3, first: 68, last: 74,  title: "Fine-Tuning, and Sprint 1"}
+  - {n: 11, month: 3, first: 75, last: 81,  title: "Experiment Design, and Sprint 2"}
+  - {n: 12, month: 3, first: 82, last: 88,  title: "Systems at Scale, and Sprint 3"}
+  - {n: 13, month: 3, first: 89, last: 95,  title: "Mock Interviews, and the Day 90 Review"}
+  - {n: 14, month: 3, first: 96, last: 100, title: "Polish and Demo Day"}
