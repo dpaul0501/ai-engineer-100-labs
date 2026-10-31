@@ -1,47 +1,29 @@
 # DSA
 
-100 problems grouped by pattern. Each one: study the pattern, code it yourself, create and solve 1–2 variations, and write tests and corner cases for the original.
+Every LeetCode pattern, each placed in the week whose project uses it. Each problem: try it first, code it yourself, solve 1–2 variations, and write tests and corner cases.
 
-## Week 1 · Lookups, Vectors, and Your First LLM Call
+## Week 1 · Tokens and Decoding
 
-**[Arrays and hashing](../weeks/week_01.md#dsa-arrays-and-hashing)**
+**[Hashing, heaps, tries, stacks and automata, sampling](../weeks/week_01.md#dsa-hashing-heaps-tries-stacks-and-automata-sampling)**
 
 Study sources:
 
-- [NeetCode](https://www.youtube.com/@NeetCode) on YouTube: search the problem name for a walkthrough. His [roadmap](https://neetcode.io/roadmap) groups problems by pattern.
+- [NeetCode roadmap](https://neetcode.io/roadmap): problems grouped by pattern, each with a video.
 - [take U forward](https://www.youtube.com/@takeUforward) (Striver) on YouTube, for a second explanation.
 - [Hashing](https://mldsa.github.io/docs/part1/chapter01-hashing/) and [Top-K](https://mldsa.github.io/docs/part1/chapter02-topk/) in *From LeetCode to Learning Systems*.
-- [TimeComplexity](https://wiki.python.org/moin/TimeComplexity) on the Python wiki, for what dict and set operations cost.
 
-| Unit | Study |
-|---|---|
-| [1. Two Sum (LeetCode 1)](../weeks/week_01.md#1-two-sum-leetcode-1) | The complement-lookup idea, in the hashing chapter or a walkthrough. |
-| [2. Contains Duplicate (LeetCode 217)](../weeks/week_01.md#2-contains-duplicate-leetcode-217) | Set membership, and what a set costs in memory. |
-| [3. Valid Anagram (LeetCode 242)](../weeks/week_01.md#3-valid-anagram-leetcode-242) | Counting, then comparing counts. |
-| [4. Group Anagrams (LeetCode 49)](../weeks/week_01.md#4-group-anagrams-leetcode-49) | A canonical key turns grouping into a lookup. |
-| [5. Top K Frequent Elements (LeetCode 347)](../weeks/week_01.md#5-top-k-frequent-elements-leetcode-347) | The Top-K chapter: heap vs sort vs bucket sort. |
-| [6. Product of Array Except Self (LeetCode 238)](../weeks/week_01.md#6-product-of-array-except-self-leetcode-238) | Prefix and suffix scans. |
-| [7. Longest Consecutive Sequence (LeetCode 128)](../weeks/week_01.md#7-longest-consecutive-sequence-leetcode-128) | Start counting only where the predecessor is missing. |
-| [8. Valid Sudoku (LeetCode 36)](../weeks/week_01.md#8-valid-sudoku-leetcode-36) | One set per constraint. |
-
-## Week 2 · Pointers, Matrices, and Structured Output
-
-**[Two pointers and sliding window](../weeks/week_02.md#dsa-two-pointers-and-sliding-window)**
-
-Study sources:
-
-- [NeetCode](https://www.youtube.com/@NeetCode) on YouTube: search the problem name for a walkthrough. His [roadmap](https://neetcode.io/roadmap) groups problems by pattern.
-- [take U forward](https://www.youtube.com/@takeUforward) (Striver) on YouTube, for a second explanation.
-- The [Algo Depth Track](https://mldsa.github.io/docs/track-algo-depth/) in *From LeetCode to Learning Systems*, for where two pointers sits among the foundation patterns.
-- The [Sorting HOW TO](https://docs.python.org/3/howto/sorting.html) in the Python docs (stability and `key`), since two pointers usually starts from sorted input.
-- [`collections.deque`](https://docs.python.org/3/library/collections.html#collections.deque) in the Python docs, for which operations are O(1) at both ends.
-
-| Unit | Study |
-|---|---|
-| [1. Valid Palindrome (LeetCode 125)](../weeks/week_02.md#1-valid-palindrome-leetcode-125) | One pointer at each end, moving inward. |
-| [2. Two Sum II - Input Array Is Sorted (LeetCode 167)](../weeks/week_02.md#2-two-sum-ii-input-array-is-sorted-leetcode-167) | Compare with Week 1's dict. Two pointers use O(1) extra memory but need sorted input. |
-| [3. 3Sum (LeetCode 15)](../weeks/week_02.md#3-3sum-leetcode-15) | Sort once, fix one element, and run two pointers on the rest. [Set types](https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset) explains why a tuple can go in a set and a list cannot. |
-| [4. Container With Most Water (LeetCode 11)](../weeks/week_02.md#4-container-with-most-water-leetcode-11) | Start with the widest container and move the shorter wall. The trick is the proof. |
-| [5. Longest Substring Without Repeating Characters (LeetCode 3)](../weeks/week_02.md#5-longest-substring-without-repeating-characters-leetcode-3) | The sliding window, and `Counter` and `defaultdict` in the [`collections` module](https://docs.python.org/3/library/collections.html). |
-| [6. Minimum Window Substring (LeetCode 76)](../weeks/week_02.md#6-minimum-window-substring-leetcode-76) | A variable window that expands until valid, then shrinks. |
-| [7. Sliding Window Maximum (LeetCode 239)](../weeks/week_02.md#7-sliding-window-maximum-leetcode-239) | The monotonic deque. |
+| # | Problem | Pattern | Where it is in `tok` |
+|---|---|---|---|
+| 1 | [Two Sum](https://leetcode.com/problems/two-sum/) (1) | Hash map | Pair counts |
+| 2 | [Group Anagrams](https://leetcode.com/problems/group-anagrams/) (49) | Canonical key | The mask cache keys on a hashable state |
+| 3 | [Top K Frequent Elements](https://leetcode.com/problems/top-k-frequent-elements/) (347) | Count + heap | BPE's best pair; top-k sampling |
+| 4 | [Kth Largest Element in an Array](https://leetcode.com/problems/kth-largest-element-in-an-array/) (215) | Heap of size k / quickselect | `top_k_filter` in O(V log k) |
+| 5 | [Find K Pairs with Smallest Sums](https://leetcode.com/problems/find-k-pairs-with-smallest-sums/) (373) | Heap over candidate frontiers | Beam search |
+| 6 | [Implement Trie](https://leetcode.com/problems/implement-trie-prefix-tree/) (208) | Trie | `TokenTrie` |
+| 7 | [Design Add and Search Words](https://leetcode.com/problems/design-add-and-search-words-data-structure/) (211) | Trie + DFS | Walking the trie with a state |
+| 8 | ★ [Word Search II](https://leetcode.com/problems/word-search-ii/) (212) | Trie + pruned DFS | Pruning a subtree on the first invalid byte |
+| 9 | [Valid Parentheses](https://leetcode.com/problems/valid-parentheses/) (20) | Stack | The automaton's stack of open `{` and `[` |
+| 10 | [Decode String](https://leetcode.com/problems/decode-string/) (394) | Stack of contexts | Nested objects and arrays |
+| 11 | ★ [Valid Number](https://leetcode.com/problems/valid-number/) (65) | Finite automaton | The number DFA inside the grammar |
+| 12 | [Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) (528) | Prefix sums + binary search | `categorical` |
+| 13 | ★ [Linked List Random Node](https://leetcode.com/problems/linked-list-random-node/) (382) | Reservoir sampling | The held-out split |

@@ -6,12 +6,12 @@ The program itself (philosophy, how each week works, the paths, and what you bui
 
 ## How to work through it
 
-1. **One week at a time.** Each weekly page lists the units for all four pillars. Every unit follows the same cycle: **study** an authoritative source, **do** it yourself, make **1–2 variations**, write **tests**, and cover the **corner cases**. A suggested day order is at the bottom of each week.
+1. **Start with the [Month 1 plan](month_01.md),** then **one week at a time.** Each weekly page lists the units for all five dimensions: DSA, ML, AI, System Design, and Software Delivery. Every unit follows the same cycle: **study** an authoritative source, **do** it yourself, make **1–2 variations**, write **tests**, and cover the **corner cases**. A suggested day order is at the bottom of each week.
 2. **Post every day you work**, as **Day N/100**, in the [standard format](https://dpaul0501.github.io/ai-engineer-100/how-it-works/#the-daily-linkedin-post).
 3. **Log your progress** in your own repo: a `PROGRESS.md` with the units you finished and when. Moderators use it to match you with peers at the same stage.
 4. **Do the labs** in the `week_NN/` folders of this repo for each weekly build.
 
-The **By pillar** pages list every week's study sources and units for one pillar, so you can see a pillar from start to finish.
+The **By dimension** pages list every week's study sources and units for one dimension, so you can follow it from start to finish.
 
 ## The peer group, at your own pace
 

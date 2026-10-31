@@ -1,4 +1,4 @@
-"""Write one page per pillar: its study sources and units, week by week.
+"""Write one page per dimension: its study sources and units, week by week.
 
 Generated from the weekly pages (guide/docs/weeks/week_NN.md), so it stays in
 sync. Run after editing a weekly page:
@@ -14,11 +14,12 @@ from markdown.extensions.toc import slugify
 GUIDE = Path(__file__).resolve().parent.parent / "guide"
 LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
-PILLARS = {
-    "dsa": ("DSA", "100 problems grouped by pattern. Each one: study the pattern, code it yourself, create and solve 1–2 variations, and write tests and corner cases for the original."),
-    "ml-dl": ("ML/DL", "From NumPy to training a small GPT. Each concept: study it, implement it from scratch, vary it, test it against the library, and cover its numerical corner cases and parameters."),
-    "ai-engineering": ("AI Engineering", "From one LLM call to production agents. Each experiment: study the technique, build it without a framework, measure variants, and test it with an eval set and edge cases."),
-    "system-design": ("System Design & Engineering Practice", "How systems are designed and how industry builds and ships them. Each week: one design (requirements, estimates, variations, failure modes) and the practices applied in your own repo."),
+DIMENSIONS = {
+    "dsa": ("DSA", "Every LeetCode pattern, each placed in the week whose project uses it. Each problem: try it first, code it yourself, solve 1–2 variations, and write tests and corner cases."),
+    "ml": ("ML", "Statistics and core ML: probability, linear algebra, calculus, optimization and measurement, each learned where the build needs it. Each unit: derive it, check it numerically, and vary it."),
+    "ai": ("AI", "LLMs from the inside out: tokens and decoding, prompts, context and memory, retrieval, agents and skills, then the models themselves. Each unit: study it, build it, vary it, test it, and cover its corner cases."),
+    "system-design": ("System Design", "Two design reps a week (◆ = timed mock) covering the Google and Meta product, infrastructure, ML and LLM rounds. Each one: requirements with numbers, estimates, API, data model, deep dives, bottlenecks."),
+    "software-delivery": ("Software Delivery", "Spec → contract → test → code, every week. Each week adds one technique: properties, golden tests, planted bugs, CI, release, security, operations."),
 }
 
 
@@ -40,7 +41,7 @@ def sections(text: str) -> dict[str, list[str]]:
 
 def main() -> None:
     weeks = sorted((GUIDE / "docs" / "weeks").glob("week_*.md"))
-    for slug, (name, intro) in PILLARS.items():
+    for slug, (name, intro) in DIMENSIONS.items():
         page = [f"# {name}", "", intro, ""]
         for week in weeks:
             text = week.read_text(encoding="utf-8")
@@ -63,6 +64,10 @@ def main() -> None:
             if sources:
                 page += ["Study sources:", "", *sources, ""]
 
+            if not any(line.startswith("### ") for line in body):
+                table = [line for line in body if line.startswith("|")]
+                page += [*table, ""] if table else []
+                continue
             page += ["| Unit | Study |", "|---|---|"]
             unit = None
             for line in body:

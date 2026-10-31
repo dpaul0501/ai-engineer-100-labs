@@ -5,14 +5,15 @@ repo_url: https://github.com/dpaul0501/ai-engineer-100-labs
 docs_dir: docs
 nav:
 - Start here: index.md
-- By pillar:
-  - DSA: tracks/dsa.md
-  - ML/DL: tracks/ml-dl.md
-  - AI Engineering: tracks/ai-engineering.md
-  - System Design & Engineering Practice: tracks/system-design.md
+- Month 1 plan: month_01.md
 - Weeks:
-  - 'Week 1: Lookups, Vectors, and Your First LLM Call': weeks/week_01.md
-  - 'Week 2: Pointers, Matrices, and Structured Output': weeks/week_02.md
+  - 'Week 1: Tokens and Decoding': weeks/week_01.md
+- By dimension:
+  - DSA: tracks/dsa.md
+  - ML: tracks/ml.md
+  - AI: tracks/ai.md
+  - System Design: tracks/system-design.md
+  - Software Delivery: tracks/software-delivery.md
 theme:
   name: material
   features:

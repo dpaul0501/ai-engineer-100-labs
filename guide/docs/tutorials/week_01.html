@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
+<title>Tokens and Decoding</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* A lab notebook: one long page, a contents rail, each section = idea → code → try it → watch out → read more. */
+:root{
+  --bg:#f2f5f4; --panel:#ffffff; --ink:#14201e; --muted:#5a6a66; --line:#d6dfdc;
+  --accent:#0c6a65; --accent-soft:#e0eeec; --trace:#ad5d17; --trace-soft:#f5e8db;
+  --code-bg:#eaf0ee; --good:#1d7a4c; --good-soft:#e1f1e8; --bad:#b03838; --bad-soft:#f7e3e3;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Serif 4",Charter,"Iowan Old Style",Georgia,serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --rail:15.5rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:1.0625rem/1.65 var(--f-body)}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,.mono{font-family:var(--f-mono);font-variant-ligatures:none}
+code{background:var(--code-bg);padding:.08em .35em;border-radius:4px;font-size:.86em}
+pre{background:var(--code-bg);color:var(--ink);padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font-size:.8rem;line-height:1.55;border:1px solid var(--line);margin:.6rem 0 1rem}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--muted)}
+h1,h2,h3,h4{font-family:var(--f-display);text-wrap:balance;line-height:1.15;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,4vw,2.8rem);font-weight:800;margin:.3rem 0 .8rem}
+h2{font-size:1.6rem;font-weight:800;margin:0 0 .4rem}
+h3{font-size:1.08rem;font-weight:700;margin:1.5rem 0 .3rem}
+p,li{max-width:70ch}
+.layout{display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+nav.rail{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:1.4rem .7rem 2rem}
+.brand{font:800 1rem var(--f-display);padding:0 .6rem .8rem;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+.rail-label{font:700 .66rem var(--f-display);color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:1rem .6rem .3rem}
+nav.rail a{display:flex;gap:.55rem;align-items:baseline;padding:.32rem .6rem;border-radius:6px;color:var(--ink);text-decoration:none;font:500 .84rem var(--f-display)}
+nav.rail a:hover{background:var(--accent-soft)}
+nav.rail a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+nav.rail a .n{font:600 .68rem var(--f-mono);color:var(--muted);min-width:1.3rem}
+main{padding-block:2rem 5rem;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
+.page{max-width:56rem;margin:0 auto}
+.eyebrow{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+.lead{font-size:1.18rem;color:var(--muted);max-width:62ch}
+.muted{color:var(--muted)}.small{font-size:.86rem}
+section.s{padding:2.6rem 0 1rem;border-top:1px solid var(--line);scroll-margin-top:.5rem}
+.shead{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem 1rem;flex-wrap:wrap;margin-bottom:.4rem}
+.sno{font:700 .74rem var(--f-mono);color:var(--accent);letter-spacing:.08em}
+.pill{font:600 .72rem var(--f-display);border:1px solid var(--line);border-radius:99px;padding:.15rem .6rem;color:var(--muted);white-space:nowrap}
+.dims{display:flex;gap:.35rem;flex-wrap:wrap}
+.dim{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.08em;padding:.15rem .5rem;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+.idea{font-size:1.12rem;border-left:3px solid var(--accent);padding:.2rem 0 .2rem 1rem;margin:1rem 0;max-width:66ch}
+.talk{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;margin:1.2rem 0;font:.9rem/1.55 var(--f-display)}
+.talk b{font-weight:700}
+.talk .row{display:grid;grid-template-columns:4.8rem minmax(0,1fr);gap:.6rem;padding:.25rem 0}
+.talk .k{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace);padding-top:.2rem}
+.watch{background:var(--trace-soft);border-radius:8px;padding:.7rem 1rem;margin:1rem 0;max-width:72ch}
+.watch>b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.watch ul{margin:.3rem 0 0;padding-left:1.2rem}
+.read{font:.88rem/1.6 var(--f-display);margin:1rem 0}
+.read b{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:.2rem}
+.read ul{margin:0;padding-left:1.1rem}
+.tablewrap{overflow-x:auto;margin:.8rem 0 1.2rem}
+table{border-collapse:collapse;width:100%;font:.86rem/1.45 var(--f-display);background:var(--panel)}
+th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:700;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--bg)}
+td.num{text-align:right;font-family:var(--f-mono);font-size:.8rem;font-variant-numeric:tabular-nums}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:1.2rem 0;font:600 .8rem var(--f-display)}
+.flow .b{padding:.4rem .65rem;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.flow .b.hi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.flow .ar{color:var(--muted)}
+/* Demos */
+.demo{border:1px solid var(--trace);border-radius:12px;margin:1.4rem 0;background:var(--panel);overflow:hidden}
+.demo>.dh{background:var(--trace-soft);padding:.55rem 1rem;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.demo>.dh b{font:700 .9rem var(--f-display)}
+.demo>.dh span{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.demo .db{padding:1rem}
+.controls{display:flex;flex-wrap:wrap;gap:.7rem 1.2rem;align-items:center;margin-bottom:.8rem;font:500 .84rem var(--f-display)}
+.controls label{display:flex;align-items:center;gap:.45rem}
+.controls input[type=text]{font:500 .88rem var(--f-mono);padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:22rem;max-width:100%;min-width:0}
+.controls output{font:600 .8rem var(--f-mono);min-width:2.6rem;display:inline-block}
+.btn{font:600 .8rem var(--f-display);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:.38rem .7rem;border-radius:7px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.toks{display:flex;flex-wrap:wrap;gap:.25rem;margin:.4rem 0}
+.tk{font:500 .8rem var(--f-mono);padding:.12rem .38rem;border-radius:4px;background:var(--accent-soft);color:var(--ink);white-space:pre;border:1px solid transparent}
+.tk.new{border-color:var(--accent);background:var(--accent);color:var(--panel)}
+.tk.ok{background:var(--good-soft);color:var(--good)}
+.tk.no{background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.stat{font:500 .8rem var(--f-mono);color:var(--muted);margin:.5rem 0 0;font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink)}
+.barrow{display:grid;grid-template-columns:6.5rem minmax(0,1fr) 3.6rem 3.6rem;gap:.6rem;align-items:center;font:.82rem var(--f-display);padding:.18rem 0}
+.barrow .lbl{font:500 .8rem var(--f-mono);white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.barrow .bar{height:.75rem;background:var(--line);border-radius:4px;overflow:hidden}
+.barrow .bar i{display:block;height:100%;background:var(--accent)}
+.barrow.cut .bar i{background:var(--muted);opacity:.35}
+.barrow.cut .lbl{color:var(--muted);text-decoration:line-through}
+.barrow .v{font:600 .76rem var(--f-mono);text-align:right}
+.barrow.headrow{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.pda{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin:.6rem 0}
+.pda>div{border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;min-width:0}
+.pda .k{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.pda .v{font:600 .9rem var(--f-mono);overflow-wrap:anywhere}
+.ok-t{color:var(--good)}.bad-t{color:var(--bad)}
+details{margin:1rem 0;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+details>summary{cursor:pointer;padding:.6rem 1rem;font:600 .86rem var(--f-display)}
+details>div{padding:0 1rem .8rem}
+.lc{display:grid;grid-template-columns:2.2rem minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr);gap:0}
+.fund{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:1.4rem 0;overflow:hidden}
+.fund .fh{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:.55rem 1rem;border-bottom:1px solid var(--line);background:var(--bg)}
+.fund .fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))}
+.fund .f{padding:.8rem 1rem;border-right:1px solid var(--line);min-width:0;font-size:.95rem}
+.fund .f:last-child{border-right:0}
+.fund .f p{margin:.35rem 0}
+.ft{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.08em}
+.ft.dsa{color:var(--accent)}.ft.ml{color:var(--good)}.ft.ai{color:var(--trace)}.ft.design{color:var(--bad)}
+.fl{font:.82rem/1.7 var(--f-display)}
+.fl b{font-weight:700;color:var(--muted);margin-right:.3rem}
+a.lc{display:inline-block;font:600 .74rem var(--f-display);padding:.08rem .45rem;margin:.1rem .15rem .1rem 0;border-radius:4px;background:var(--accent-soft);text-decoration:none;white-space:nowrap}
+a.lc:hover{background:var(--accent);color:var(--panel)}
+.obj{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.8rem;margin:1rem 0}
+.obj>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;min-width:0}
+.obj ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:.92rem}
+.obj li{margin:.25rem 0}
+.principles{counter-reset:p;list-style:none;padding:0;margin:1rem 0}
+.principles li{counter-increment:p;display:grid;grid-template-columns:2rem minmax(0,1fr);gap:.4rem;padding:.55rem 0;border-bottom:1px solid var(--line);max-width:none}
+.principles li::before{content:counter(p);font:700 .9rem var(--f-mono);color:var(--accent)}
+footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:var(--muted);font-size:.85rem}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  nav.rail{position:sticky;top:0;z-index:5;height:auto;display:flex;gap:.2rem;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:.45rem max(16px,env(safe-area-inset-right,0px)) .45rem max(16px,env(safe-area-inset-left,0px));padding-top:calc(.45rem + env(safe-area-inset-top,0px))}
+  nav.rail .brand,nav.rail .rail-label{display:none}
+  nav.rail a{white-space:nowrap}
+  .pda{grid-template-columns:1fr 1fr}
+}
+@media (max-width:560px){
+  .barrow{grid-template-columns:5rem minmax(0,1fr) 3.2rem}
+  .barrow .v2{display:none}
+  .talk .row{grid-template-columns:1fr;gap:0}
+  .pda{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head><body>
+
+<div class="layout">
+<nav class="rail" id="rail">
+  <div class="brand">Week 1 · <span>Tokens &amp; Decoding</span></div>
+  <div class="rail-label">Start</div>
+  <a href="#problem"><span class="n">··</span>Problem &amp; objectives</a>
+  <a href="#loop"><span class="n">00</span>The loop</a>
+  <div class="rail-label">Tokens</div>
+  <a href="#utf8"><span class="n">01</span>Bytes and UTF-8</a>
+  <a href="#bpe"><span class="n">02</span>BPE training</a>
+  <a href="#heap"><span class="n">03</span>The merge heap</a>
+  <a href="#encode"><span class="n">04</span>Encode by rank</a>
+  <div class="rail-label">The model</div>
+  <a href="#ngram"><span class="n">05</span>Counting is a model</a>
+  <a href="#ppl"><span class="n">06</span>Perplexity</a>
+  <div class="rail-label">Decoding</div>
+  <a href="#softmax"><span class="n">07</span>Softmax &amp; temperature</a>
+  <a href="#filters"><span class="n">08</span>Top-k, top-p, the draw</a>
+  <a href="#beam"><span class="n">09</span>Greedy and beam</a>
+  <div class="rail-label">Guarantees</div>
+  <a href="#pda"><span class="n">10</span>JSON as an automaton</a>
+  <a href="#trie"><span class="n">11</span>Masking with a trie</a>
+  <a href="#constrained"><span class="n">12</span>The constrained loop</a>
+  <div class="rail-label">Practice</div>
+  <a href="#delivery"><span class="n">13</span>Spec, tests, bugs</a>
+  <a href="#capstone"><span class="n">14</span>Capstone design</a>
+  <a href="#reading"><span class="n">15</span>Further reading</a>
+</nav>
+
+<main><div class="page">
+
+<header>
+  <div class="eyebrow">Week 1 tutorial · AI Engineer track</div>
+  <h1>Tokens and Decoding</h1>
+  <p class="lead">A language model only ever scores the next token. What a token is, which one gets picked, and whether the output parses are all decided by code around the model. This week you write that code.</p>
+  <p class="small muted">Each section: the idea in plain words, the code, something to try, what goes wrong, and where to read more. The <b>Fundamentals</b> panels give the DSA, ML and design idea underneath each concept, with a deeper read and practice problems. The <b>Talk</b> boxes are the lecture plan: time, what to show, what to ask the room. The lab is in <code>week_01/</code>; the code here shows the idea, not the full lab solution.</p>
+</header>
+
+<section class="s" id="problem">
+  <div class="shead"><span class="sno">THE PROBLEM</span><span class="pill">read first</span></div>
+  <h2>Valid JSON, every time, in English and Hindi</h2>
+  <p>A support team wants every incoming ticket turned into a JSON record, for example <code>{"lang":"hi","priority":"high","tags":["refund"],"text":"मेरा रिफंड अभी तक नहीं आया"}</code>, by a language model. Two things go wrong straight away:</p>
+  <ul>
+    <li><b>Some answers do not parse.</b> A missing quote or a trailing comma breaks the pipeline, and retrying has no upper bound.</li>
+    <li><b>Hindi costs more.</b> The same ticket in Hindi uses several times more tokens, so it is slower and pricier.</li>
+  </ul>
+  <p>Neither is the model's fault. Both are decided by code around it: the <b>tokenizer</b> before it and the <b>decoder</b> after it. This week you build both, with a small counting model in the middle, and end with output that is valid <i>by construction</i>.</p>
+  <h3>What you will be able to do</h3>
+  <div class="obj">
+    <div><div class="ft dsa">DSA</div><ul>
+      <li>Count with hash maps and keep the best with a heap under updates (<a href="#heap">lazy deletion</a>)</li>
+      <li>Store and search shared prefixes with a <a href="#trie">trie</a>, pruning whole subtrees</li>
+      <li>Recognise nested structure with a <a href="#pda">stack and an automaton</a></li>
+      <li>Sample with <a href="#filters">prefix sums and binary search</a></li>
+    </ul></div>
+    <div><div class="ft ml">ML</div><ul>
+      <li>Derive why <a href="#ngram">counting is maximum likelihood</a>, and smooth it</li>
+      <li>Measure a model with <a href="#ppl">cross-entropy and perplexity</a></li>
+      <li>Compute <a href="#softmax">softmax stably</a> and explain temperature as entropy</li>
+      <li>Explain <a href="#constrained">masking as conditioning</a></li>
+    </ul></div>
+    <div><div class="ft ai">AI</div><ul>
+      <li>Train and use a <a href="#bpe">byte-level BPE tokenizer</a>, and measure the token tax</li>
+      <li>Choose between <a href="#filters">greedy, sampling, top-k, top-p</a> and <a href="#beam">beam search</a></li>
+      <li>Guarantee <a href="#constrained">structured output</a> the way production engines do</li>
+    </ul></div>
+    <div><div class="ft design">System Design</div><ul>
+      <li>Estimate and design a <a href="#capstone">web crawler</a> and a <a href="#capstone">unique ID generator</a></li>
+      <li>Design an end-to-end <a href="#capstone">structured-output service</a> with numbers</li>
+      <li>Apply the principles: contracts, immutability, caching, bounds, determinism</li>
+    </ul></div>
+    <div><div class="ft" style="color:var(--muted)">Software Delivery</div><ul>
+      <li>Work spec → contract → test → code, with a red-tests commit first</li>
+      <li>Write <a href="#delivery">property tests</a> and catch planted bugs</li>
+      <li>Ship a package with CI</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- 00 -->
+<section class="s" id="loop">
+  <div class="shead"><span class="sno">00 · THE LOOP</span><span class="pill">10 min</span></div>
+  <h2>One loop runs every LLM</h2>
+  <div class="flow">
+    <span class="b">text</span><span class="ar">→</span><span class="b hi">tokenizer</span><span class="ar">→</span><span class="b">ids</span><span class="ar">→</span><span class="b">model</span><span class="ar">→</span><span class="b">logits</span><span class="ar">→</span><span class="b hi">mask</span><span class="ar">→</span><span class="b hi">sampler</span><span class="ar">→</span><span class="b">one id</span><span class="ar">↺</span>
+  </div>
+  <p>The highlighted boxes are yours this week. The model box is an n-gram model you also write: small enough to understand completely, and enough to see real problems.</p>
+<pre><code>ids = tokenizer.encode(prompt)
+while not done:
+    logits = model.logprobs(ids)          <span class="c"># one score per token in the vocabulary</span>
+    logits = mask(logits, state)          <span class="c"># invalid tokens → -inf (section 12)</span>
+    next_id = sampler(logits, rng)        <span class="c"># temperature, top-k, top-p (sections 7–8)</span>
+    ids.append(next_id)
+text = tokenizer.decode(ids)</code></pre>
+  <div class="talk">
+    <div class="row"><span class="k">Show</span><span>Ask any chat model for "a support ticket as JSON" 20 times at temperature 1. Count how many parse. Then ask the same in Hindi and compare the token counts.</span></div>
+    <div class="row"><span class="k">Ask</span><span>Which of these problems is the model's fault? (Neither: both come from the code in this loop.)</span></div>
+  </div>
+</section>
+
+<!-- 01 -->
+<section class="s" id="utf8">
+  <div class="shead"><span class="sno">01 · BYTES AND UTF-8</span><div class="dims"><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <h2>Start from bytes, and nothing is ever unknown</h2>
+  <p class="idea">Every string is a sequence of bytes in UTF-8. If the vocabulary starts with all 256 byte values, any text can be encoded, in any language, with no "unknown" token.</p>
+  <p>UTF-8 uses 1 byte for ASCII and 2–4 bytes for everything else. The first byte says how many follow:</p>
+  <div class="tablewrap"><table>
+    <tr><th>First byte</th><th>Pattern</th><th>Bytes</th><th>Example</th></tr>
+    <tr><td class="num">0x00–0x7F</td><td><code>0xxxxxxx</code></td><td>1</td><td><code>A</code> → <code>41</code></td></tr>
+    <tr><td class="num">0xC2–0xDF</td><td><code>110xxxxx 10xxxxxx</code></td><td>2</td><td><code>é</code> → <code>C3 A9</code></td></tr>
+    <tr><td class="num">0xE0–0xEF</td><td><code>1110xxxx 10xxxxxx ×2</code></td><td>3</td><td><code>न</code> → <code>E0 A4 A8</code></td></tr>
+    <tr><td class="num">0xF0–0xF4</td><td><code>11110xxx 10xxxxxx ×3</code></td><td>4</td><td><code>🙂</code> → <code>F0 9F 99 82</code></td></tr>
+  </table></div>
+<pre><code>&gt;&gt;&gt; list("नमस्ते".encode("utf-8"))
+[224, 164, 168, 224, 164, 174, 224, 164, 184, 224, 165, 141, 224, 164, 164, 224, 165, 135]
+&gt;&gt;&gt; len("नमस्ते"), len("नमस्ते".encode("utf-8"))
+(6, 18)          <span class="c"># 6 code points, 18 bytes: Hindi starts 3× behind English</span></code></pre>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Bits and prefix codes</div><p>UTF-8 is a <b>prefix code</b>: the leading bits of the first byte say how long the character is, so a reader never needs to look ahead. Checking a byte is a mask-and-compare: <code>(b &amp; 0b1110_0000) == 0b1100_0000</code> means "2-byte lead".</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/utf-8-validation/">LC 393 · UTF-8 Validation</a> <a class="lc" href="https://leetcode.com/problems/number-of-1-bits/">LC 191 · Number of 1 Bits</a></p><p class="fl"><b>Deeper</b> <a href="https://en.wikipedia.org/wiki/Prefix_code">Prefix codes</a></p></div><div class="f"><div class="ft design">Design · Where the text comes from</div><p>A tokenizer is trained on a corpus, and at web scale that corpus comes from a <b>crawler</b>. The encoding of every page you fetch (UTF-8, Latin-1, broken bytes) is decided before tokenization ever sees it.</p><p class="fl"><b>This week's rep</b> <a href="#capstone">◆ Web crawler</a>: frontier, politeness, and "have I seen this page?" (hashing).</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>A token can hold <i>part</i> of a character. Decode the joined bytes, never token by token, or you get <code>&#xFFFD;</code>.</li>
+    <li><code>é</code> can be one code point or <code>e</code> + a combining accent: same look, different bytes.</li>
+    <li>The table above is a small state machine. You will build a bigger one in section 10, and this one goes inside it.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Joel Spolsky, <a href="https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses/">The Absolute Minimum Every Software Developer Must Know About Unicode</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/UTF-8">UTF-8</a> on Wikipedia: the encoding table and its history</li>
+  </ul></div>
+</section>
+
+<!-- 02 -->
+<section class="s" id="bpe">
+  <div class="shead"><span class="sno">02 · BPE TRAINING</span><div class="dims"><span class="dim">AI</span><span class="dim">DSA</span><span class="pill">10 min</span></div></div>
+  <h2>Merge the most common pair, again and again</h2>
+  <p class="idea">Byte-pair encoding starts with single bytes and repeatedly glues together the pair of neighbours that appears most often. Each glue becomes a new token. Stop when the vocabulary is big enough.</p>
+<pre><code>def merge(ids, pair, new_id):
+    """Replace every non-overlapping occurrence of pair, left to right."""
+    out, i = [], 0
+    while i &lt; len(ids):
+        if i + 1 &lt; len(ids) and (ids[i], ids[i + 1]) == pair:
+            out.append(new_id); i += 2          <span class="c"># skip both: "aaa" → [aa, a], not [aa, aa]</span>
+        else:
+            out.append(ids[i]); i += 1
+    return out
+
+def train_naive(text, vocab_size):
+    ids, merges = list(text.encode("utf-8")), []
+    while 256 + len(merges) &lt; vocab_size:
+        counts = Counter(zip(ids, ids[1:]))
+        if not counts: break
+        best = min(counts, key=lambda p: (-counts[p], p))   <span class="c"># most frequent; ties → smallest pair</span>
+        if counts[best] &lt; 2: break
+        merges.append(best)
+        ids = merge(ids, best, 255 + len(merges))
+    return merges</code></pre>
+  <p>Real tokenizers first split text into chunks (words, numbers, punctuation, spaces) with a regex and never merge across chunks, so <code>"dog."</code> and <code>"dog"</code> share a token. The lab uses GPT-2's pattern for that.</p>
+
+  <div class="demo" id="demo-bpe">
+    <div class="dh"><b>Step through BPE</b><span>Try it</span></div>
+    <div class="db">
+      <div class="controls">
+        <label>Text <input type="text" id="bpeText" value="aaabdaaabac" spellcheck="false"></label>
+        <button class="btn" id="bpeStep">Merge once</button>
+        <button class="btn" id="bpeAll">Merge until done</button>
+        <button class="btn" id="bpeReset">Reset</button>
+      </div>
+      <div class="toks" id="bpeToks"></div>
+      <p class="stat" id="bpeStat"></p>
+      <div class="tablewrap"><table id="bpeTable"><tr><th>Rank</th><th>Pair</th><th>New token</th><th>Count</th></tr></table></div>
+      <p class="small muted">No pre-tokenization here, so merges can cross spaces. Try <code>the cat the hat the</code>, then Hindi.</p>
+    </div>
+  </div>
+
+  <div class="talk">
+    <div class="row"><span class="k">Board</span><span>Do <code>aaabdaaabac</code> by hand: (a,a) wins with 4. Then (a,b) and (aa,a) tie at 2. Which wins?</span></div>
+    <div class="row"><span class="k">Ask</span><span>Why must the spec decide ties? (Without a rule, two machines train different tokenizers from the same data, and ids stop matching.)</span></div>
+  </div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Hash maps and counting</div><p>A hash map turns a key into an array slot, so insert and lookup are O(1) on average. <code>Counter(zip(ids, ids[1:]))</code> is a hash map from pair to count: one pass, O(n). BPE is "count, take the best, repeat".</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/two-sum/">LC 1 · Two Sum</a> <a class="lc" href="https://leetcode.com/problems/group-anagrams/">LC 49 · Group Anagrams</a> <a class="lc" href="https://leetcode.com/problems/top-k-frequent-elements/">LC 347 · Top K Frequent</a></p><p class="fl"><b>Deeper</b> <a href="https://docs.python.org/3/library/collections.html#collections.Counter">collections.Counter</a> · <a href="https://mldsa.github.io/docs/part1/chapter01-hashing/">Hashing for ML systems</a></p></div><div class="f"><div class="ft ml">ML · Compression is modelling</div><p>Merging frequent pairs shortens the text: fewer tokens for the same bytes. A model that predicts well also compresses well, and both are measured in the same unit: bits. Bytes per token is a compression ratio.</p><p class="fl"><b>Deeper</b> <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> (Chris Olah)</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Overlaps: in <code>aaaa</code>, the pair (a,a) occurs 3 times when counted, but only 2 merges fit.</li>
+    <li>This naive loop re-counts everything after every merge: O(merges × corpus). Section 03 fixes that.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video) and <a href="https://github.com/karpathy/minbpe">minbpe</a></li>
+    <li>Imad Dabbura, <a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">Byte Pair Encoding from Scratch</a></li>
+    <li>Hugging Face course, <a href="https://huggingface.co/learn/llm-course/chapter6/5">Byte-Pair Encoding tokenization</a></li>
+    <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a></li>
+  </ul></div>
+</section>
+
+<!-- 03 -->
+<section class="s" id="heap">
+  <div class="shead"><span class="sno">03 · THE MERGE HEAP</span><div class="dims"><span class="dim">DSA</span><span class="pill">10 min</span></div></div>
+  <h2>Don't re-count: update, and let a heap find the best</h2>
+  <p class="idea">A merge only changes the words that contain the merged pair. Keep pair counts in a hash map, update just those words, and keep a heap to find the most frequent pair. When a count changes, don't search the heap for the old entry: push a new one and ignore stale entries when they reach the top.</p>
+<pre><code>heap = [(-count, pair) for pair, count in pair_counts.items()]
+heapq.heapify(heap)                       <span class="c"># (-count, pair): biggest count first, then smallest pair</span>
+while need_more_merges and heap:
+    neg, pair = heapq.heappop(heap)
+    if pair_counts.get(pair, 0) != -neg:  <span class="c"># stale: the count changed after this was pushed</span>
+        if pair_counts.get(pair, 0) &gt; 0:
+            heapq.heappush(heap, (-pair_counts[pair], pair))
+        continue
+    <span class="c"># ... merge pair inside the words listed in where[pair] only,</span>
+    <span class="c">#     add the count deltas to pair_counts, push each changed pair again</span></code></pre>
+  <div class="tablewrap"><table>
+    <tr><th>Structure</th><th>Holds</th><th>Answers</th></tr>
+    <tr><td>Counter of chunks</td><td>each distinct chunk once, with its frequency</td><td>"the" appearing 9,000 times is processed once</td></tr>
+    <tr><td>hash map pair → count</td><td>current pair counts</td><td>is this heap entry stale?</td></tr>
+    <tr><td>hash map pair → set of word ids</td><td>where each pair occurs</td><td>which words does a merge touch?</td></tr>
+    <tr><td>heap of (−count, pair)</td><td>candidates, some stale</td><td>the best pair, in O(log n)</td></tr>
+  </table></div>
+  <div class="talk">
+    <div class="row"><span class="k">Live</span><span>Time the naive trainer and the heap trainer on <code>alice.txt</code> at vocab 2,000. Same merges, about 80× apart.</span></div>
+    <div class="row"><span class="k">Ask</span><span>A count goes <i>down</i>. Its old entry in the heap is too high. Why is that safe? (It pops early, is found stale, and is pushed back with the true count.)</span></div>
+  </div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · The binary heap</div><p>A heap is a binary tree stored in an array: the children of index <code>i</code> are <code>2i+1</code> and <code>2i+2</code>, and every parent is ≤ its children. Push and pop are O(log n) (sift up, sift down); <code>heapify</code> is O(n). Python's <code>heapq</code> is a min-heap, so store <code>-count</code> to get the max.</p><p><b>Lazy deletion</b>: a heap cannot cheaply find and update an entry. Instead, push the new value and skip stale ones when they surface. Every "update a priority" problem (Dijkstra included) uses this trick.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-an-array/">LC 215 · Kth Largest</a> <a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">LC 703 · Kth Largest in a Stream</a> <a class="lc" href="https://leetcode.com/problems/find-median-from-data-stream/">LC 295 · Median from Data Stream</a></p><p class="fl"><b>Deeper</b> <a href="https://visualgo.net/en/heap">VisuAlgo heap</a> (animated) · <a href="https://docs.python.org/3/library/heapq.html">heapq docs</a></p></div><div class="f"><div class="ft design">Design · Incremental over recompute</div><p>The principle here is general: when a small part of the input changes, update the small part of the answer. The same idea runs materialized views, incremental builds and streaming aggregates.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>The tie-break must live in the heap key too, or the heap and the naive spec disagree on ties.</li>
+    <li>A word can contain the merged pair twice: count deltas per word, not per occurrence found.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Python docs, <a href="https://docs.python.org/3/library/heapq.html">heapq</a>, including "priority queue implementation notes" on removing entries lazily</li>
+    <li>tiktoken's <a href="https://github.com/openai/tiktoken/blob/main/src/lib.rs">byte_pair_merge</a> in Rust: the encode side, tuned</li>
+  </ul></div>
+</section>
+
+<!-- 04 -->
+<section class="s" id="encode">
+  <div class="shead"><span class="sno">04 · ENCODE BY RANK</span><div class="dims"><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <h2>Encoding replays training, in merge order</h2>
+  <p class="idea">To encode new text, repeat: find the pair in this chunk that was merged <i>earliest</i> in training, and merge it. The merge list is the tokenizer.</p>
+<pre><code>def encode_chunk(data: bytes, ranks: dict) -&gt; list[int]:
+    ids = list(data)
+    while len(ids) &gt;= 2:
+        pair = min(zip(ids, ids[1:]), key=lambda p: ranks.get(p, float("inf")))
+        if pair not in ranks: break                  <span class="c"># nothing left to merge</span>
+        ids = merge(ids, pair, ranks[pair])
+    return ids
+
+def decode(ids):
+    return b"".join(vocab[i] for i in ids).decode("utf-8", errors="replace")</code></pre>
+  <p>The same sentence, measured with three real tokenizers:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Tokenizer</th><th>English tokens</th><th>Hindi tokens</th><th>Hindi costs</th></tr>
+    <tr><td><code>gpt2</code> (50k)</td><td class="num">13</td><td class="num">90</td><td class="num">6.9×</td></tr>
+    <tr><td><code>cl100k_base</code> (100k)</td><td class="num">13</td><td class="num">65</td><td class="num">5.0×</td></tr>
+    <tr><td><code>o200k_base</code> (200k)</td><td class="num">13</td><td class="num">22</td><td class="num">1.7×</td></tr>
+  </table></div>
+  <p class="small muted">"The children went to the market to buy fresh vegetables for dinner." and its Hindi translation. Price per token is the same, so the Hindi user pays the ratio.</p>
+  <div class="talk"><div class="row"><span class="k">Ask</span><span>The newest tokenizer closes most of the gap. What did that cost? (A 4× bigger vocabulary: a bigger embedding table and output layer, and a slower softmax.)</span></div></div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Memoization and caching</div><p>Real text repeats the same chunks (" the", " and"), so encode each distinct chunk once and remember the result: a dict from chunk to ids. Bound it, or memory grows with the corpus. An LRU cache is the standard bounded choice.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/lru-cache/">LC 146 · LRU Cache</a></p></div><div class="f"><div class="ft design">Design · IDs that stay stable</div><p>Token ids are a contract with every model trained on them: change a merge and every id after it shifts. That is why <code>save</code> writes a <code>format_version</code>. Stable, versioned identifiers are the same problem as this week's <a href="#capstone">unique ID generator</a> rep.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Encoding by <i>frequency in the new text</i> instead of rank gives different ids from training. Ranks only.</li>
+    <li>Cache each chunk's ids: real text repeats the same words constantly.</li>
+  </ul></div>
+</section>
+
+<!-- 05 -->
+<section class="s" id="ngram">
+  <div class="shead"><span class="sno">05 · COUNTING IS A MODEL</span><div class="dims"><span class="dim">ML</span><span class="pill">8 min</span></div></div>
+  <h2>The simplest language model counts what came next</h2>
+  <p class="idea">An n-gram model predicts the next token from the last n − 1 tokens by counting how often each token followed them in training. Counting is not a shortcut: it is exactly the maximum-likelihood answer.</p>
+<pre><code>P(w | ctx) = (count(ctx, w) + k) / (count(ctx) + k · V)     <span class="c"># add-k smoothing</span>
+
+def logprobs(self, context):
+    ctx = self._context(context)                      <span class="c"># last n-1 ids, padded with BOS</span>
+    denom = self.totals[ctx] + self.k * self.vocab_size
+    out = [log(self.k / denom)] * self.vocab_size     <span class="c"># every unseen token gets k</span>
+    for token, c in self.counts[ctx].items():         <span class="c"># only the seen ones need work</span>
+        out[token] = log((c + self.k) / denom)
+    return out</code></pre>
+  <p>Why counts? Maximise Σ c<sub>w</sub> log p<sub>w</sub> subject to Σ p<sub>w</sub> = 1. A Lagrange multiplier gives p<sub>w</sub> = c<sub>w</sub> / Σ c. Smoothing adds k imaginary counts to every token, so nothing has probability 0.</p>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft ml">ML · Maximum likelihood</div><p>Pick the parameters that make the training data most probable. For a categorical distribution with counts c<sub>w</sub>, maximise Σ c<sub>w</sub> log p<sub>w</sub> with Σ p<sub>w</sub> = 1: the answer is p<sub>w</sub> = c<sub>w</sub>/Σc. Add-k smoothing is the same estimate after adding k pseudo-counts (a Dirichlet prior).</p><p class="fl"><b>Practice</b> the <a href="https://www.kaggle.com/competitions/titanic">Titanic</a> rep: estimate P(survived | sex, class) by counting with add-k, then compare with logistic regression.</p><p class="fl"><b>Deeper</b> <a href="https://web.stanford.edu/~jurafsky/slp3/">SLP chapter 3</a>, sections 3.1–3.6</p></div><div class="f"><div class="ft dsa">DSA · Sparse nested maps</div><p><code>counts[context][token]</code> is a hash map of hash maps. Most (context, token) pairs never occur, so you store only the ones that do. <code>logprobs</code> fills a dense vector with the smoothed default, then overwrites the few seen entries: O(V + seen), not O(V) dictionary lookups.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Without <code>k · V</code> in the denominator, probabilities no longer sum to 1. A test catches that in one line.</li>
+    <li>Smoothing spreads mass over <i>every</i> token. Inside a JSON string, that mass is how a model wanders into junk (section 12).</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Jurafsky and Martin, <a href="https://web.stanford.edu/~jurafsky/slp3/">Speech and Language Processing</a>, chapter 3: N-gram Language Models</li>
+  </ul></div>
+</section>
+
+<!-- 06 -->
+<section class="s" id="ppl">
+  <div class="shead"><span class="sno">06 · PERPLEXITY</span><div class="dims"><span class="dim">ML</span><span class="pill">5 min</span></div></div>
+  <h2>How surprised is the model, on average?</h2>
+  <p class="idea">Perplexity is exp(average negative log-probability) on held-out text. A model that guesses uniformly over V tokens has perplexity exactly V. Lower is better: "as confused as choosing among this many tokens".</p>
+<pre><code>ppl = exp( -(1/N) · Σ log P(token_i | context_i) )
+
+NGramLM(2, 300).perplexity([[1, 2, 3, 4]]) == 300    <span class="c"># untrained → uniform → V</span></code></pre>
+  <div class="talk"><div class="row"><span class="k">Ask</span><span>Before running: will a 4-gram beat a 3-gram on held-out records? Write your guess in SPEC.md, then measure.</span></div></div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft ml">ML · Entropy and cross-entropy</div><p><b>Entropy</b> H(p) = −Σ p log p is the average surprise of a distribution. <b>Cross-entropy</b> H(p, q) is the average surprise when reality is p but you predict with q; it is always ≥ H(p), and the gap is the KL divergence. Perplexity is just e<sup>cross-entropy</sup>: the effective number of choices.</p><p class="fl"><b>Deeper</b> <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> · <a href="https://www.youtube.com/@3blue1brown">3Blue1Brown</a>, <i>Solving Wordle using information theory</i></p></div><div class="f"><div class="ft ml">ML · Generalization</div><p>Perplexity on training text always improves with bigger n; on held-out text it improves, then gets worse as contexts become too rare to count. That U-shape is overfitting, and you will meet it in every model this program builds.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Perplexity per token cannot compare tokenizers with different vocabularies. Use bits per byte.</li>
+    <li>Take the held-out split <i>before</i> training the tokenizer, or the test text leaks into the vocabulary.</li>
+  </ul></div>
+</section>
+
+<!-- 07 -->
+<section class="s" id="softmax">
+  <div class="shead"><span class="sno">07 · SOFTMAX AND TEMPERATURE</span><div class="dims"><span class="dim">ML</span><span class="dim">AI</span><span class="pill">8 min</span></div></div>
+  <h2>From scores to probabilities, without overflow</h2>
+  <p class="idea">Softmax turns scores into probabilities: exponentiate, then divide by the total. Temperature divides the scores first. Low temperature sharpens toward the top token; high temperature flattens toward uniform.</p>
+<pre><code>def log_softmax(x):
+    m = max(x)                                        <span class="c"># the stability trick</span>
+    if m == -inf: raise ValueError("every token is masked")
+    lse = m + log(sum(exp(v - m) for v in x))         <span class="c"># exp(v - m) ≤ 1: never overflows</span>
+    return [v - lse for v in x]
+
+probs = softmax([v / T for v in logits])              <span class="c"># T → 0: argmax.  T → ∞: uniform.</span></code></pre>
+  <p>Subtracting the max changes nothing mathematically, because softmax(x + c) = softmax(x), but <code>exp(1000)</code> overflows a float and <code>exp(0)</code> does not.</p>
+
+  <div class="demo" id="demo-sample">
+    <div class="dh"><b>One probability vector, four knobs</b><span>Try it</span></div>
+    <div class="db">
+      <p class="small" style="margin-top:0">The model has just written <code>{"lang":"hi","priority":"</code> and scores 8 candidate tokens.</p>
+      <div class="controls">
+        <label>temperature <input type="range" id="sT" min="0.05" max="3" step="0.05" value="1"><output id="sTo">1.00</output></label>
+        <label>top-k <input type="range" id="sK" min="1" max="8" step="1" value="8"><output id="sKo">8</output></label>
+        <label>top-p <input type="range" id="sP" min="0.05" max="1" step="0.01" value="1"><output id="sPo">1.00</output></label>
+        <button class="btn" id="sDraw">Draw 1,000</button>
+      </div>
+      <div id="sBars"></div>
+      <p class="stat" id="sStat"></p>
+    </div>
+  </div>
+
+  <div class="talk">
+    <div class="row"><span class="k">Live</span><span>Slide T from 0.05 to 3 and read the entropy. Then set top-p to 0.9 and move T again: the number of kept tokens changes. Now do the same with top-k: it does not.</span></div>
+    <div class="row"><span class="k">Ask</span><span>Why does the order "temperature, then top-p" matter, but "temperature, then top-k" not? (Dividing by T > 0 never reorders the scores.)</span></div>
+  </div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft ml">ML · Softmax and log-sum-exp</div><p>Softmax maps any real vector to a probability vector and keeps the order. Its log, log-softmax, is what models actually return, because adding log-probabilities is safer than multiplying probabilities (products of many small numbers underflow to 0).</p><p>Temperature T divides the logits: entropy rises with T, from 0 bits (argmax) toward log<sub>2</sub>V (uniform).</p><p class="fl"><b>Deeper</b> <a href="https://gregorygundersen.com/blog/2020/02/09/log-sum-exp/">The Log-Sum-Exp Trick</a> (Gregory Gundersen)</p></div><div class="f"><div class="ft ai">AI · What "temperature" in an API means</div><p>The <code>temperature</code> parameter in every LLM API is this division. Temperature 0 is greedy decoding; most providers then still differ run to run because of batching and floating-point order, not sampling.</p></div></div></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Sebastian Raschka, <a href="https://sebastianraschka.com/faq/docs/temperature-topk-topp-sampling.html">temperature, top-k and top-p</a></li>
+    <li>Chip Huyen, <a href="https://huyenchip.com/2024/01/16/sampling.html">Generation configurations: temperature, top-k, top-p, and test time compute</a></li>
+  </ul></div>
+</section>
+
+<!-- 08 -->
+<section class="s" id="filters">
+  <div class="shead"><span class="sno">08 · TOP-K, TOP-P, THE DRAW</span><div class="dims"><span class="dim">DSA</span><span class="dim">ML</span><span class="pill">7 min</span></div></div>
+  <h2>Cut the tail, then draw one</h2>
+  <p class="idea">Top-k keeps the k best tokens. Top-p keeps the <i>smallest</i> set of best tokens whose probability adds up to at least p, so it keeps few tokens when the model is sure and many when it is not. Then draw one token in proportion to what is left.</p>
+<pre><code>def top_k_filter(x, k):                               <span class="c"># heap of size k: O(V log k)</span>
+    keep = set(heapq.nlargest(k, range(len(x)), key=lambda i: (x[i], -i)))
+    return [v if i in keep else -inf for i, v in enumerate(x)]
+
+def top_p_filter(x, p):
+    probs = softmax(x)
+    order = sorted(range(len(x)), key=lambda i: (-probs[i], i))
+    keep, mass = set(), 0.0
+    for i in order:
+        if mass &gt;= p: break                           <span class="c"># check BEFORE adding: keep the token that crosses p</span>
+        keep.add(i); mass += probs[i]
+    return [v if i in keep else -inf for i, v in enumerate(x)]
+
+def categorical(probs, rng):                          <span class="c"># prefix sums + binary search</span>
+    prefix = list(itertools.accumulate(probs))
+    return bisect.bisect_right(prefix, rng.random() * prefix[-1])</code></pre>
+  <div class="tablewrap"><table>
+    <tr><th>probs</th><th>p</th><th>Kept</th><th>Why</th></tr>
+    <tr><td><code>[0.5, 0.3, 0.2]</code></td><td>0.5</td><td>{0}</td><td>0.5 already reaches p</td></tr>
+    <tr><td><code>[0.5, 0.3, 0.2]</code></td><td>0.7</td><td>{0, 1}</td><td>0.5 &lt; 0.7, then 0.8 ≥ 0.7</td></tr>
+    <tr><td><code>[0.5, 0.3, 0.2]</code></td><td>0.81</td><td>{0, 1, 2}</td><td>0.8 &lt; 0.81</td></tr>
+  </table></div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Selection, prefix sums, binary search</div><p><b>Top-k</b> is the selection problem: a size-k heap gives O(V log k); quickselect gives O(V) on average. <b>The draw</b> is inverse-CDF sampling: build prefix sums once, pick a uniform number u, and binary-search for the first prefix &gt; u. <code>bisect_right</code> is exactly that search.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-an-array/">LC 215 · Kth Largest</a> <a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">LC 528 · Random Pick with Weight</a> <a class="lc" href="https://leetcode.com/problems/binary-search/">LC 704 · Binary Search</a> <a class="lc" href="https://leetcode.com/problems/search-insert-position/">LC 35 · Search Insert Position</a></p></div><div class="f"><div class="ft ml">ML · Truncating a distribution</div><p>Top-k and top-p remove the long tail, where a model's probabilities are least reliable, then renormalize. Top-p adapts: when the model is confident it keeps 1–2 tokens; when it is unsure it keeps many.</p><p class="fl"><b>Deeper</b> <a href="https://en.wikipedia.org/wiki/Inverse_transform_sampling">Inverse transform sampling</a> · <a href="https://arxiv.org/abs/1904.09751">Holtzman et al.</a></p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li><code>bisect_left</code> instead of <code>bisect_right</code> can draw a token with probability 0. Test with zeros in the vector.</li>
+    <li>Ties: sort by (probability, id). Without a rule, two runs with the same seed disagree.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Holtzman et al., <a href="https://arxiv.org/abs/1904.09751">The Curious Case of Neural Text Degeneration</a>: why top-p</li>
+    <li>LeetCode <a href="https://leetcode.com/problems/random-pick-with-weight/">528 Random Pick with Weight</a> is exactly <code>categorical</code></li>
+  </ul></div>
+</section>
+
+<!-- 09 -->
+<section class="s" id="beam">
+  <div class="shead"><span class="sno">09 · GREEDY AND BEAM</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <h2>The best next token is not always on the best path</h2>
+  <p class="idea">Greedy takes the top token every step. Beam search keeps the B best partial sequences by total log-probability, extends each by every token, and keeps the B best again. Width 1 is greedy; a wide enough beam is exhaustive search.</p>
+<pre><code>beams = [(0.0, [])]
+for _ in range(steps):
+    candidates = []
+    for score, seq in beams:
+        lp = model.logprobs(prompt + seq)
+        candidates += [(score + lp[t], seq + [t]) for t in range(len(lp))]
+    beams = heapq.nsmallest(width, candidates, key=lambda c: (-c[0], c[1]))   <span class="c"># best first</span></code></pre>
+  <p>Example: greedy picks "the" (0.5) then "cat" (0.3): 0.15. Another path, "a" (0.4) then "dog" (0.9), gives 0.36. Greedy never saw it.</p>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Best-first search with a bounded frontier</div><p>Beam search is breadth-first search that keeps only the best B nodes per level, chosen with a heap. Width 1 is greedy; unbounded width is exhaustive search over V<sup>n</sup> sequences. The same "heap over frontiers" shape solves k-way merge and k-smallest-pairs.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">LC 373 · Find K Pairs with Smallest Sums</a> <a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">LC 23 · Merge k Sorted Lists</a></p></div><div class="f"><div class="ft ml">ML · Sequence probability in log space</div><p>P(sequence) = Π P(token | prefix), so log P = Σ log P. Scores only go down as sequences grow, which is why beam search favours short outputs unless you add a length penalty.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Beam search favours short, bland text in open-ended writing. It suits tasks with one right answer (translation, extraction).</li>
+    <li>Test it against brute force: with V = 4 and 3 steps, a beam of 64 must find the exact best.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Patrick von Platen, <a href="https://huggingface.co/blog/how-to-generate">How to generate text</a> (Hugging Face): greedy, beam, top-k, top-p, side by side</li>
+    <li>LeetCode <a href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">373 Find K Pairs with Smallest Sums</a>: the same heap-over-frontiers idea</li>
+  </ul></div>
+</section>
+
+<!-- 10 -->
+<section class="s" id="pda">
+  <div class="shead"><span class="sno">10 · JSON AS AN AUTOMATON</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span><span class="pill">10 min</span></div></div>
+  <h2>A state machine with a stack decides what may come next</h2>
+  <p class="idea">To guarantee valid JSON, you need to know, after any prefix, which bytes may come next. A finite state machine handles one level (inside a string, inside a number). Nesting needs memory of what is open, so add a stack. That is a pushdown automaton.</p>
+<pre><code>State = (mode, aux, stack)        <span class="c"># immutable tuple → hashable → cacheable</span>
+<span class="c">#  mode:  START, VALUE, KEY, COLON, AFTER, STR, NUM, LIT, DONE, ...</span>
+<span class="c">#  aux:   detail inside a mode (number DFA state, escape progress, UTF-8 bytes left)</span>
+<span class="c">#  stack: ("o", "a", "o") = inside an object, inside an array, inside an object</span>
+
+def step(state, b):
+    mode, aux, stack = state
+    if mode == COLON:
+        return (VALUE, None, stack) if b == ord(":") else None
+    if mode == AFTER:                                  <span class="c"># just finished a value</span>
+        if b == ord(","):
+            return (KEY, None, stack) if stack[-1] == "o" else (VALUE, None, stack)
+        return close(stack, b)                         <span class="c"># } or ] must match the top of the stack</span>
+    if mode == NUM:
+        nxt = number_dfa(aux, b)
+        if nxt is not None: return (NUM, nxt, stack)
+        if aux not in ACCEPTING: return None           <span class="c"># "1." or "-" cannot end here</span>
+        return step(after_value(stack), b)             <span class="c"># this byte belongs to what follows</span>
+    ...</code></pre>
+
+  <div class="demo" id="demo-pda">
+    <div class="dh"><b>Type JSON, watch the automaton</b><span>Try it</span></div>
+    <div class="db">
+      <div class="controls">
+        <label>Prefix <input type="text" id="pdaIn" value='{"tags":["login",' spellcheck="false"></label>
+        <button class="btn" data-ex='{"a":[1,2.5e3,{"b":null}]}'>valid</button>
+        <button class="btn" data-ex='[1,2,]'>trailing comma</button>
+        <button class="btn" data-ex='{"n":01}'>leading zero</button>
+        <button class="btn" data-ex='{"x":"नमस्ते'>Hindi in a string</button>
+      </div>
+      <div class="pda">
+        <div><div class="k">Status</div><div class="v" id="pdaStatus"></div></div>
+        <div><div class="k">Mode</div><div class="v" id="pdaMode"></div></div>
+        <div><div class="k">Stack</div><div class="v" id="pdaStack"></div></div>
+      </div>
+      <div class="k small muted" style="font:700 .66rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;margin-top:.6rem">Allowed next ASCII bytes</div>
+      <div class="toks" id="pdaNext"></div>
+      <div class="k small muted" style="font:700 .66rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;margin-top:.6rem">A toy vocabulary, masked</div>
+      <div class="toks" id="pdaVocab"></div>
+      <p class="small muted">Green tokens keep the prefix valid; red ones are set to −inf. Note that a token like <code>"],</code> spans three grammar steps.</p>
+    </div>
+  </div>
+
+  <div class="talk">
+    <div class="row"><span class="k">Ask</span><span>How does the machine know a number has ended? (It doesn't, until it sees <code>,</code> <code>]</code> or <code>}</code>. That byte ends the number <i>and</i> is processed by the next mode.)</span></div>
+    <div class="row"><span class="k">Ask</span><span>Why can't a regular expression do this? (It cannot count unbounded nesting: you need the stack.)</span></div>
+  </div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Stacks and automata</div><p>A <b>finite automaton</b> is a set of states and a transition table: enough for numbers, strings and literals. It cannot count, so it cannot match nested brackets. Add a <b>stack</b> and you get a pushdown automaton: push on <code>{</code> or <code>[</code>, pop on the matching close. Regular expressions ⊂ context-free grammars, exactly as finite automata ⊂ pushdown automata.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/valid-parentheses/">LC 20 · Valid Parentheses</a> <a class="lc" href="https://leetcode.com/problems/decode-string/">LC 394 · Decode String</a> <a class="lc" href="https://leetcode.com/problems/valid-number/">LC 65 · Valid Number</a> <a class="lc" href="https://leetcode.com/problems/string-to-integer-atoi/">LC 8 · String to Integer (atoi)</a></p><p class="fl"><b>Deeper</b> <a href="https://en.wikipedia.org/wiki/Pushdown_automaton">Pushdown automaton</a> · <a href="https://www.rfc-editor.org/rfc/rfc8259">RFC 8259</a></p></div><div class="f"><div class="ft design">Design · Make invalid states unrepresentable</div><p>Retrying until the JSON parses is a loop with no bound. A mask makes invalid output impossible by construction: the system cannot reach the bad state at all. Prefer constraints you can prove over checks you hope pass.</p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>JSON's whole grammar fits on two pages of RFC 8259: read it before coding, and turn each rule into a test.</li>
+    <li>Make states immutable. If <code>step</code> mutates a shared stack, masking one branch corrupts the next.</li>
+    <li>Bound the depth (32). Otherwise the state space, and the cache, is unbounded.</li>
+  </ul></div>
+  <div class="read"><b>Read more</b><ul>
+    <li><a href="https://www.rfc-editor.org/rfc/rfc8259">RFC 8259</a>, the JSON grammar, sections 2–7</li>
+    <li>LeetCode <a href="https://leetcode.com/problems/valid-parentheses/">20 Valid Parentheses</a> (the stack) and <a href="https://leetcode.com/problems/valid-number/">65 Valid Number</a> (the number DFA)</li>
+    <li>llama.cpp, <a href="https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md">GBNF grammars</a>: the same idea for any grammar</li>
+  </ul></div>
+</section>
+
+<!-- 11 -->
+<section class="s" id="trie">
+  <div class="shead"><span class="sno">11 · MASKING WITH A TRIE</span><div class="dims"><span class="dim">DSA</span><span class="dim">Software Delivery</span><span class="pill">7 min</span></div></div>
+  <h2>Reject thousands of tokens with one byte</h2>
+  <p class="idea">The mask needs every token that keeps the prefix valid. Checking each of 50,000 tokens separately repeats work, because tokens share prefixes. Put all tokens in a trie and walk it with the automaton: when a byte is rejected, the whole subtree under it is rejected too.</p>
+<pre><code>def allowed(state):
+    if state in cache: return cache[state]               <span class="c"># states repeat constantly</span>
+    out, todo = [], [(trie.root, state)]
+    while todo:
+        node, s = todo.pop()
+        for byte, child in node.children.items():
+            s2 = step(s, byte)
+            if s2 is None: continue                      <span class="c"># prune: no token below can be valid</span>
+            out.extend(child.tokens)                     <span class="c"># tokens can end at inner nodes ("a", "ab")</span>
+            if child.children: todo.append((child, s2))
+    cache[state] = sorted(out)
+    return cache[state]</code></pre>
+  <div class="tablewrap"><table>
+    <tr><th>GPT-2 vocabulary (~50k tokens)</th><th>Brute force</th><th>Trie</th><th>Speedup</th></tr>
+    <tr><td>Structural states (after <code>{</code>, after a value)</td><td class="num">10.2 ms</td><td class="num">0.18 ms</td><td class="num">55×</td></tr>
+    <tr><td>Inside a string (almost everything fits)</td><td class="num">55.9 ms</td><td class="num">33.0 ms</td><td class="num">1.7×</td></tr>
+  </table></div>
+  <p>The trie wins when few tokens fit. Inside strings, nearly every token fits, so there is little to prune. Production engines precompute most of the mask per grammar position and only check the few tokens that depend on the stack. That is XGrammar's main idea.</p>
+  <div class="talk">
+    <div class="row"><span class="k">Live</span><span>Run brute force and the trie on GPT-2's vocabulary for one structural state. Then show the cache hit rate during generation (about 99%).</span></div>
+    <div class="row"><span class="k">Ask</span><span>A mask that misses one valid token, and a mask that allows one invalid token: which bug is worse? (The second breaks the guarantee. The first quietly lowers quality.)</span></div>
+  </div>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft dsa">DSA · Tries and pruned search</div><p>A trie stores strings by their shared prefixes: one node per prefix, one edge per next character (here, byte). Walking it with depth-first search and stopping at the first invalid byte skips every token below that node at once. A token can end at an inner node (<code>"a"</code> and <code>"ab"</code>), so collect ids at every node, not only leaves.</p><p class="fl"><b>Practice</b> <a class="lc" href="https://leetcode.com/problems/implement-trie-prefix-tree/">LC 208 · Implement Trie</a> <a class="lc" href="https://leetcode.com/problems/design-add-and-search-words-data-structure/">LC 211 · Add and Search Words</a> <a class="lc" href="https://leetcode.com/problems/word-search-ii/">LC 212 · Word Search II</a> <a class="lc" href="https://leetcode.com/problems/search-suggestions-system/">LC 1268 · Search Suggestions System</a></p></div><div class="f"><div class="ft design">Design · Cache what repeats, precompute what you can</div><p>Masks are a pure function of the state, so they can be cached: the hit rate is about 99%. Bound the cache. Going further, split the work into what depends only on the grammar position (precompute once) and what depends on the stack (compute per request).</p></div></div></div>
+  <div class="read"><b>Read more</b><ul>
+    <li>MLC, <a href="https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar">Structured generation with XGrammar</a>: context-independent tokens and pushdown automata</li>
+    <li>Willard and Louf, <a href="https://arxiv.org/abs/2307.09702">Efficient Guided Generation for Large Language Models</a> (Outlines): index the vocabulary by automaton state</li>
+    <li>LeetCode <a href="https://leetcode.com/problems/implement-trie-prefix-tree/">208 Implement Trie</a> and <a href="https://leetcode.com/problems/word-search-ii/">212 Word Search II</a> (trie + pruned search)</li>
+  </ul></div>
+</section>
+
+<!-- 12 -->
+<section class="s" id="constrained">
+  <div class="shead"><span class="sno">12 · THE CONSTRAINED LOOP</span><div class="dims"><span class="dim">AI</span><span class="dim">ML</span><span class="pill">5 min</span></div></div>
+  <h2>Mask, renormalize, sample: invalid becomes impossible</h2>
+  <p class="idea">Before each draw, set every disallowed token to −inf. Softmax renormalizes over what is left. Every prefix is now valid by construction, and generation stops when the automaton reaches DONE.</p>
+<pre><code>state = constraint.start()
+for _ in range(max_new_tokens):
+    if constraint.is_done(state): break
+    logits = model.logprobs(ids)
+    ok = constraint.allowed(state)
+    masked = [-inf] * len(logits)
+    for t in ok: masked[t] = logits[t]
+    t = sampler(masked, rng)
+    state = constraint.advance(state, t)
+    ids.append(t)</code></pre>
+<pre><code>tok train data/records.txt --vocab-size 512 --out rec.json
+tok generate --model rec.json --train data/records.txt --samples 50          <span class="c"># free</span>
+tok generate --model rec.json --train data/records.txt --samples 50 --json   <span class="c"># constrained</span></code></pre>
+  <details><summary>Reference results (open after you have written your estimate in SPEC.md)</summary><div>
+    <p class="small">50 samples, vocab 512, add-k 0.01, up to 300 tokens, 90% of records for training. "Free" counts samples whose first JSON value parses; "constrained" counts samples that finished (every one is valid so far by construction).</p>
+    <div class="tablewrap"><table>
+      <tr><th>n</th><th>T</th><th>Free: valid</th><th>Constrained: finished</th></tr>
+      <tr><td>2</td><td>1.0</td><td class="num">42%</td><td class="num">80%</td></tr>
+      <tr><td>3</td><td>1.0</td><td class="num">24%</td><td class="num">88%</td></tr>
+      <tr><td>3</td><td>0.7</td><td class="num">76%</td><td class="num">98%</td></tr>
+      <tr><td>4</td><td>1.0</td><td class="num">2%</td><td class="num">74%</td></tr>
+      <tr><td>4</td><td>0.7</td><td class="num">34%</td><td class="num">96%</td></tr>
+    </table></div>
+    <p class="small">The unfinished constrained samples are strings that never close: smoothing mass lets the model wander inside a string, and every byte there is valid.</p>
+  </div></details>
+  <div class="fund"><div class="fh">Fundamentals behind this section</div><div class="fg"><div class="f"><div class="ft ml">ML · Masking is conditioning</div><p>Setting invalid logits to −inf and renormalizing gives P(token | token is valid): Bayes' rule with a 0/1 likelihood. The relative odds of the valid tokens are unchanged; the mass the model put on invalid ones is spread over the rest in proportion.</p></div><div class="f"><div class="ft ai">AI · Structured outputs in practice</div><p>"JSON mode" and "structured outputs" in LLM APIs, Outlines, XGrammar and llama.cpp grammars all run this loop. A JSON Schema compiles to a grammar; the grammar compiles to an automaton; the automaton masks logits.</p><p class="fl"><b>Deeper</b> <a href="https://huyenchip.com/2024/01/16/sampling.html">Chip Huyen, structured outputs</a> · <a href="https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md">GBNF</a></p></div></div></div>
+  <div class="watch"><b>Watch out</b><ul>
+    <li>Valid is not correct. The mask guarantees syntax, never that <code>"priority"</code> is right.</li>
+    <li>Hitting <code>max_new_tokens</code> mid-string leaves unfinished JSON. Decide in your spec what the caller gets.</li>
+    <li>The model was never asked; its probabilities were edited. A model that strongly wants an invalid token may produce odd valid text instead.</li>
+  </ul></div>
+</section>
+
+<!-- 13 -->
+<section class="s" id="delivery">
+  <div class="shead"><span class="sno">13 · SPEC, TESTS, BUGS</span><div class="dims"><span class="dim">Software Delivery</span><span class="pill">10 min</span></div></div>
+  <h2>Write the contract first, then prove it with properties</h2>
+  <p class="idea">Every project goes spec → contract → test → code. The first commit has <code>SPEC.md</code> and failing tests, and nothing else. Then the strongest tests are properties: rules that must hold for <i>any</i> input, checked on thousands of generated ones.</p>
+<pre><code>class Constraint(Protocol):                   <span class="c"># the contract, in tok/contracts.py</span>
+    def start(self) -&gt; Hashable: ...
+    def advance(self, state, token) -&gt; Hashable | None: ...
+    def allowed(self, state) -&gt; list[int]: ...
+    def is_done(self, state) -&gt; bool: ...
+
+@given(st.text())                             <span class="c"># Hypothesis invents the inputs</span>
+def test_round_trip_any_text(tok, text):
+    assert tok.decode(tok.encode(text)) == text
+
+@given(json_values)
+def test_accepts_everything_json_dumps_writes(value):
+    assert is_valid_json(json.dumps(value, separators=(",", ":")).encode())
+
+def test_the_mask_matches_brute_force(...):
+    assert c.allowed(s) == [t for t in vocab if c.advance(s, t) is not None]</code></pre>
+  <h3>Planted bugs: does your suite catch them?</h3>
+  <p>At the defense, mentors run <i>your</i> tests against copies of the solution with one bug planted in each, for example:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Planted bug</th><th>What catches it</th></tr>
+    <tr><td>Tie-break picks the largest pair</td><td>The golden merges on <code>aaabdaaabac</code></td></tr>
+    <tr><td>Decode joins strings, not bytes</td><td>Round trip on emoji and Hindi</td></tr>
+    <tr><td>log-softmax without the max shift</td><td>Logits of 1,000</td></tr>
+    <tr><td>Top-p drops the token that crosses p</td><td><code>[0.5, 0.3, 0.2]</code> at p = 0.7</td></tr>
+    <tr><td>Grammar allows a trailing comma</td><td><code>[1,]</code> must be rejected</td></tr>
+    <tr><td>Trie counts only leaf tokens</td><td>Mask equals brute force</td></tr>
+  </table></div>
+  <div class="talk"><div class="row"><span class="k">Ask</span><span>"Apply temperature after top-k" is a bug no test can catch. Why? And is it a bug? (It is an equivalent mutant: the output is identical for every input.)</span></div></div>
+  <div class="read"><b>Read more</b><ul>
+    <li><a href="https://hypothesis.readthedocs.io/en/latest/quickstart.html">Hypothesis quickstart</a>; <a href="https://peps.python.org/pep-0544/">PEP 544</a> (Protocols)</li>
+    <li><a href="https://packaging.python.org/en/latest/tutorials/packaging-projects/">Packaging Python Projects</a>, including TestPyPI</li>
+  </ul></div>
+</section>
+
+<!-- 14 -->
+<section class="s" id="capstone">
+  <div class="shead"><span class="sno">14 · CAPSTONE</span><div class="dims"><span class="dim">System Design</span><span class="dim">all five</span><span class="pill">defense</span></div></div>
+  <h2>Design <code>tok-serve</code>: structured output as a service</h2>
+  <p class="idea">Put the whole week together as one system and defend it with numbers: a service that takes a ticket and a JSON shape, and returns a record that is guaranteed to parse, for 10,000 requests a second.</p>
+  <h3>Requirements</h3>
+  <ul>
+    <li><b>Functional:</b> <code>POST /extract {ticket, grammar}</code> → JSON that parses, every time. English and Hindi.</li>
+    <li><b>Scale:</b> 10,000 requests/s at peak, about 150 output tokens each, so <b>1.5 million masked decoding steps a second</b>.</li>
+    <li><b>Latency:</b> the mask adds at most 1 ms per step at p99, or it dominates generation.</li>
+    <li><b>Reliability:</b> a retried request must not create a second record.</li>
+  </ul>
+  <div class="flow">
+    <span class="b">API</span><span class="ar">→</span><span class="b hi">tokenizer + chunk cache</span><span class="ar">→</span><span class="b">model server</span><span class="ar">→</span><span class="b">logits</span><span class="ar">→</span><span class="b hi">mask service</span><span class="ar">→</span><span class="b hi">sampler</span><span class="ar">→</span><span class="b">record store</span>
+  </div>
+  <h3>Deep dives, with this week's numbers</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Question</th><th>Answer from your build</th></tr>
+    <tr><td>Can the mask keep up?</td><td>Brute force on GPT-2's vocabulary: 10–56 ms per step. Trie: 0.2 ms at structural states, 33 ms inside strings. Too slow inside strings without precomputing per mode (XGrammar's split), plus the cache.</td></tr>
+    <tr><td>What does the cache key on?</td><td>(grammar version, automaton state). States are immutable tuples, so they hash. Hit rate in your runs: about 99%. Bound it (LRU) because depth makes the state space large.</td></tr>
+    <tr><td>Where does tokenizing cost go?</td><td>Chunk cache: most chunks repeat. Hindi input is 3–7× more tokens with older vocabularies: size the model servers for the Hindi share.</td></tr>
+    <tr><td>Retries?</td><td>An idempotency key per request, generated like the <b>unique ID</b> rep (Snowflake-style: time, machine, sequence) and stored with the record.</td></tr>
+    <tr><td>What if generation hits the token limit?</td><td>The output is a valid <i>prefix</i>, not valid JSON. Decide: return an error, or close open brackets with a forced suffix. Write it in the spec.</td></tr>
+  </table></div>
+  <h3>The design principles, and where you used each one</h3>
+  <ol class="principles">
+    <li><span><b>Contracts at every boundary.</b> <code>Tokenizer</code>, <code>LanguageModel</code>, <code>Constraint</code> are Protocols; any model or grammar that meets them plugs in. (<a href="#delivery">13</a>)</span></li>
+    <li><span><b>Make invalid states unrepresentable.</b> Mask instead of retry: invalid JSON cannot be produced. (<a href="#constrained">12</a>)</span></li>
+    <li><span><b>Immutable, hashable state.</b> Safe to branch in the trie walk, and cacheable by key. (<a href="#pda">10</a>)</span></li>
+    <li><span><b>Precompute what does not change; cache what repeats.</b> The trie, the chunk cache, the mask cache. (<a href="#trie">11</a>, <a href="#encode">04</a>)</span></li>
+    <li><span><b>Incremental over recompute.</b> Update only what a change touches. (<a href="#heap">03</a>)</span></li>
+    <li><span><b>Determinism.</b> Tie-breaks in the spec, seeds for every random draw, versioned formats. Reproducible ids and outputs. (<a href="#bpe">02</a>, <a href="#filters">08</a>)</span></li>
+    <li><span><b>Bound everything.</b> Nesting depth, cache size, tokens per request. Unbounded inputs become outages. (<a href="#pda">10</a>)</span></li>
+    <li><span><b>Measure before optimizing.</b> The trie is 55× faster in one place and 1.7× in another: only measurement tells you where to spend effort. (<a href="#trie">11</a>)</span></li>
+  </ol>
+  <h3>The two design reps this week</h3>
+  <div class="obj">
+    <div><div class="ft design">◆ Web crawler · timed mock</div><p class="small">Crawl 1 billion pages a month. Produce pages/s, storage and bandwidth; design the frontier (priority + per-host politeness) and dedup ("seen URL" with a Bloom filter, "seen content" with hashes). This is where tokenizer training text comes from.</p></div>
+    <div><div class="ft design">Unique ID generator</div><p class="small">64-bit, time-sortable, &gt;10,000/s per machine, no coordination per request. Compare UUIDv4, UUIDv7, ticket server, Snowflake. Work out the Snowflake bit layout. You reuse it above for idempotency keys.</p></div>
+  </div>
+  <div class="talk">
+    <div class="row"><span class="k">Defense</span><span>Each learner draws this diagram from memory, puts a number on every arrow, and names which principle each component follows.</span></div>
+  </div>
+  <div class="read"><b>Read more</b><ul>
+    <li>Alex Xu, <i>System Design Interview</i> Vol. 1, chapters 7 (unique IDs) and 9 (web crawler)</li>
+    <li><a href="https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar">XGrammar</a>: how a production mask service is built</li>
+  </ul></div>
+</section>
+
+<!-- 15 -->
+<section class="s" id="reading">
+  <div class="shead"><span class="sno">15 · FURTHER READING</span></div>
+  <h2>Go deeper</h2>
+  <h3>Every practice problem, by section</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Section</th><th>Practice</th></tr>
+    <tr><td><a href="#utf8">01 Bytes</a></td><td><a class="lc" href="https://leetcode.com/problems/utf-8-validation/">LC 393 · UTF-8 Validation</a></td></tr>
+    <tr><td><a href="#bpe">02 BPE</a></td><td><a class="lc" href="https://leetcode.com/problems/two-sum/">LC 1 · Two Sum</a><a class="lc" href="https://leetcode.com/problems/group-anagrams/">LC 49 · Group Anagrams</a><a class="lc" href="https://leetcode.com/problems/top-k-frequent-elements/">LC 347 · Top K Frequent</a></td></tr>
+    <tr><td><a href="#heap">03 Heap</a></td><td><a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-an-array/">LC 215 · Kth Largest</a><a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">LC 703 · Kth Largest in a Stream</a><a class="lc" href="https://leetcode.com/problems/find-median-from-data-stream/">LC 295 · Median from Data Stream</a></td></tr>
+    <tr><td><a href="#encode">04 Encode</a></td><td><a class="lc" href="https://leetcode.com/problems/lru-cache/">LC 146 · LRU Cache</a></td></tr>
+    <tr><td><a href="#filters">08 Sampling</a></td><td><a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">LC 528 · Random Pick with Weight</a><a class="lc" href="https://leetcode.com/problems/binary-search/">LC 704 · Binary Search</a><a class="lc" href="https://leetcode.com/problems/linked-list-random-node/">LC 382 · Linked List Random Node</a></td></tr>
+    <tr><td><a href="#beam">09 Beam</a></td><td><a class="lc" href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">LC 373 · K Pairs Smallest Sums</a><a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">LC 23 · Merge k Sorted Lists</a></td></tr>
+    <tr><td><a href="#pda">10 Automaton</a></td><td><a class="lc" href="https://leetcode.com/problems/valid-parentheses/">LC 20 · Valid Parentheses</a><a class="lc" href="https://leetcode.com/problems/decode-string/">LC 394 · Decode String</a><a class="lc" href="https://leetcode.com/problems/valid-number/">LC 65 · Valid Number</a></td></tr>
+    <tr><td><a href="#trie">11 Trie</a></td><td><a class="lc" href="https://leetcode.com/problems/implement-trie-prefix-tree/">LC 208 · Implement Trie</a><a class="lc" href="https://leetcode.com/problems/design-add-and-search-words-data-structure/">LC 211 · Add and Search Words</a><a class="lc" href="https://leetcode.com/problems/word-search-ii/">LC 212 · Word Search II</a><a class="lc" href="https://leetcode.com/problems/search-suggestions-system/">LC 1268 · Search Suggestions</a></td></tr>
+  </table></div>
+  <h3>Blogs, papers and docs</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Topic</th><th>Read</th><th>Kind</th></tr>
+    <tr><td>Tokenizers</td><td><a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a>, Andrej Karpathy</td><td>Video, 2 h</td></tr>
+    <tr><td>Tokenizers</td><td><a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">Byte Pair Encoding from Scratch</a>, Imad Dabbura</td><td>Blog</td></tr>
+    <tr><td>Tokenizers</td><td><a href="https://medium.com/p/cedc9f72de4e">Tokenization — A Complete Guide</a> (BPE, WordPiece, Unigram)</td><td>Medium</td></tr>
+    <tr><td>Tokenizers</td><td><a href="https://github.com/openai/tiktoken">tiktoken</a> source</td><td>Code</td></tr>
+    <tr><td>Decoding</td><td><a href="https://huggingface.co/blog/how-to-generate">How to generate text</a>, Hugging Face</td><td>Blog</td></tr>
+    <tr><td>Decoding</td><td><a href="https://huyenchip.com/2024/01/16/sampling.html">Generation configurations</a>, Chip Huyen</td><td>Blog</td></tr>
+    <tr><td>Decoding</td><td><a href="https://sebastianraschka.com/faq/docs/temperature-topk-topp-sampling.html">Temperature, top-k, top-p</a>, Sebastian Raschka</td><td>Short FAQ</td></tr>
+    <tr><td>Decoding</td><td><a href="https://arxiv.org/abs/1904.09751">The Curious Case of Neural Text Degeneration</a></td><td>Paper</td></tr>
+    <tr><td>Structured output</td><td><a href="https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar">XGrammar</a>, MLC</td><td>Blog</td></tr>
+    <tr><td>Structured output</td><td><a href="https://arxiv.org/abs/2307.09702">Efficient Guided Generation</a> (Outlines)</td><td>Paper</td></tr>
+    <tr><td>Structured output</td><td><a href="https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md">GBNF grammars</a>, llama.cpp</td><td>Docs</td></tr>
+    <tr><td>Language models</td><td><a href="https://web.stanford.edu/~jurafsky/slp3/">Speech and Language Processing</a>, ch. 3</td><td>Book</td></tr>
+    <tr><td>Unicode</td><td><a href="https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses/">The Absolute Minimum About Unicode</a>, Joel Spolsky</td><td>Blog</td></tr>
+    <tr><td>Testing</td><td><a href="https://hypothesis.readthedocs.io/en/latest/quickstart.html">Hypothesis quickstart</a></td><td>Docs</td></tr>
+  </table></div>
+  <footer>Week 1 of 100 · The lab, the spec and the 50 acceptance tests are in <code>ai-engineer-100-labs/week_01</code>.</footer>
+</section>
+
+</div></main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function show(bytes) {
+  try { const s = dec.decode(new Uint8Array(bytes)); return s.replace(/ /g, "·"); }
+  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
+}
+
+/* ---------- BPE stepper ---------- */
+let ids = [], vocab = {}, merges = [], lastNew = -1;
+function bpeReset() {
+  const bytes = Array.from(enc.encode($("bpeText").value));
+  ids = bytes; merges = []; lastNew = -1; vocab = {};
+  for (let i = 0; i < 256; i++) vocab[i] = [i];
+  bpeRender();
+}
+function bpeStep() {
+  const counts = new Map();
+  for (let i = 0; i + 1 < ids.length; i++) {
+    const k = ids[i] * 100000 + ids[i + 1];
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let best = null, bc = 0;
+  for (const [k, c] of counts) if (c > bc || (c === bc && k < best)) { best = k; bc = c; }
+  if (best === null || bc < 2) return false;
+  const a = Math.floor(best / 100000), b = best % 100000, id = 256 + merges.length;
+  vocab[id] = vocab[a].concat(vocab[b]);
+  const out = [];
+  for (let i = 0; i < ids.length;) {
+    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
+    else { out.push(ids[i]); i += 1; }
+  }
+  merges.push({a, b, id, c: bc}); ids = out; lastNew = id;
+  return true;
+}
+function bpeRender() {
+  $("bpeToks").innerHTML = ids.map(i => `<span class="tk${i === lastNew ? " new" : ""}" title="id ${i}">${esc(show(vocab[i]))}</span>`).join("");
+  const nb = enc.encode($("bpeText").value).length;
+  $("bpeStat").innerHTML = `<b>${nb}</b> bytes → <b>${ids.length}</b> tokens · ${merges.length} merges · ${(nb / Math.max(ids.length, 1)).toFixed(2)} bytes/token`;
+  $("bpeTable").innerHTML = "<tr><th>Rank</th><th>Pair</th><th>New token</th><th>Count</th></tr>" +
+    merges.map((m, r) => `<tr><td class="num">${r}</td><td><code>(${m.a}, ${m.b})</code> <span class="tk">${esc(show(vocab[m.a]))}</span> + <span class="tk">${esc(show(vocab[m.b]))}</span></td><td><code>${m.id}</code> <span class="tk">${esc(show(vocab[m.id]))}</span></td><td class="num">${m.c}</td></tr>`).join("");
+}
+$("bpeStep").onclick = () => { if (!bpeStep()) $("bpeStat").innerHTML += " · <b>no pair occurs twice: done</b>"; else bpeRender(); };
+$("bpeAll").onclick = () => { let n = 0; while (n < 200 && bpeStep()) n++; bpeRender(); };
+$("bpeReset").onclick = bpeReset;
+$("bpeText").addEventListener("input", bpeReset);
+bpeReset();
+
+/* ---------- Sampler ---------- */
+const sToks = ["high", "medium", "low", "hi", "urgent", "\"}", "मध्यम", "1"];
+const sLog = [3.1, 2.4, 1.9, 0.6, 0.2, -0.8, -1.5, -2.5];
+function softmax(x) {
+  const m = Math.max(...x); if (m === -Infinity) return x.map(() => 0);
+  const e = x.map(v => Math.exp(v - m)), s = e.reduce((a, b) => a + b, 0);
+  return e.map(v => v / s);
+}
+let drawn = null;
+function sState() {
+  const T = +$("sT").value, k = +$("sK").value, p = +$("sP").value;
+  let x = sLog.map(v => v / T);
+  const byScore = x.map((v, i) => i).sort((i, j) => x[j] - x[i] || i - j);
+  const keepK = new Set(byScore.slice(0, k));
+  x = x.map((v, i) => keepK.has(i) ? v : -Infinity);
+  const pr = softmax(x), order = pr.map((v, i) => i).sort((i, j) => pr[j] - pr[i] || i - j);
+  const keepP = new Set(); let mass = 0;
+  for (const i of order) { if (mass >= p - 1e-12) break; keepP.add(i); mass += pr[i]; }
+  x = x.map((v, i) => keepP.has(i) ? v : -Infinity);
+  return {T, k, p, before: softmax(sLog.map(v => v / T)), final: softmax(x)};
+}
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function sRender() {
+  const st = sState();
+  $("sTo").value = st.T.toFixed(2); $("sKo").value = st.k; $("sPo").value = st.p.toFixed(2);
+  const H = -st.final.reduce((a, q) => a + (q > 0 ? q * Math.log2(q) : 0), 0);
+  const kept = st.final.filter(q => q > 0).length;
+  let html = `<div class="barrow headrow"><span>token</span><span>final probability</span><span class="v">final</span><span class="v v2">${drawn ? "drawn" : "after T"}</span></div>`;
+  sToks.forEach((t, i) => {
+    const q = st.final[i];
+    html += `<div class="barrow${q === 0 ? " cut" : ""}"><span class="lbl">${esc(t)}</span><span class="bar"><i style="width:${(q * 100).toFixed(1)}%"></i></span><span class="v">${(q * 100).toFixed(1)}%</span><span class="v v2">${drawn ? (drawn[i] / 10).toFixed(1) + "%" : (st.before[i] * 100).toFixed(1) + "%"}</span></div>`;
+  });
+  $("sBars").innerHTML = html;
+  $("sStat").innerHTML = `kept <b>${kept}</b> of 8 tokens · entropy <b>${H.toFixed(2)}</b> bits (max 3.00)`;
+}
+["sT", "sK", "sP"].forEach(id => $(id).addEventListener("input", () => { drawn = null; sRender(); }));
+let drawSeed = 1;
+$("sDraw").onclick = () => {
+  const q = sState().final, r = rng(drawSeed++), prefix = []; let s = 0;
+  for (const v of q) { s += v; prefix.push(s); }
+  drawn = new Array(8).fill(0);
+  for (let n = 0; n < 1000; n++) {
+    const u = r() * s; let lo = 0, hi = prefix.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (prefix[mid] <= u) lo = mid + 1; else hi = mid; }
+    drawn[Math.min(lo, 7)]++;
+  }
+  sRender();
+};
+sRender();
+
+/* ---------- JSON pushdown automaton (a port of the lab's design) ---------- */
+const [START, VALUE, VALUE_OR_CLOSE, KEY, KEY_OR_CLOSE, COLON, AFTER, STR, NUM, LIT, DONE] = [0,1,2,3,4,5,6,7,8,9,10];
+const MODE = ["START: expect { or [", "VALUE", "VALUE or ]", "KEY: expect \"", "KEY or }", "COLON", "AFTER a value: , or close", "STRING", "NUMBER", "LITERAL", "DONE"];
+const C = ch => ch.charCodeAt(0);
+const LITS = {[C("t")]: "rue", [C("f")]: "alse", [C("n")]: "ull"};
+const isD = b => b >= 48 && b <= 57, HEXS = new Set(Array.from("0123456789abcdefABCDEF", C)), ESC = new Set(Array.from("\"\\/bfnrt", C));
+const [N_MINUS, N_ZERO, N_INT, N_DOT, N_FRAC, N_E, N_ESIGN, N_EXP] = [0,1,2,3,4,5,6,7];
+const N_ACC = new Set([N_ZERO, N_INT, N_FRAC, N_EXP]);
+function num(s, b) {
+  if (s === N_MINUS) return b === 48 ? N_ZERO : isD(b) ? N_INT : null;
+  if (s === N_ZERO || s === N_INT) { if (s === N_INT && isD(b)) return N_INT; return b === C(".") ? N_DOT : (b === C("e") || b === C("E")) ? N_E : null; }
+  if (s === N_DOT || s === N_FRAC) return isD(b) ? N_FRAC : (s === N_FRAC && (b === C("e") || b === C("E"))) ? N_E : null;
+  if (s === N_E) return (b === C("+") || b === C("-")) ? N_ESIGN : isD(b) ? N_EXP : null;
+  if (s === N_ESIGN || s === N_EXP) return isD(b) ? N_EXP : null;
+  return null;
+}
+const st = (m, a, s) => ({m, a, s});
+const afterV = s => s.length ? st(AFTER, null, s) : st(DONE, null, s);
+function startV(b, s) {
+  if (b === C("{")) return s.length < 32 ? st(KEY_OR_CLOSE, null, s + "o") : null;
+  if (b === C("[")) return s.length < 32 ? st(VALUE_OR_CLOSE, null, s + "a") : null;
+  if (b === C('"')) return st(STR, {key: false, esc: 0, cont: 0}, s);
+  if (LITS[b]) return st(LIT, LITS[b], s);
+  if (b === C("-")) return st(NUM, N_MINUS, s);
+  if (b === 48) return st(NUM, N_ZERO, s);
+  if (isD(b)) return st(NUM, N_INT, s);
+  return null;
+}
+function close(s, b) {
+  const want = b === C("}") ? "o" : b === C("]") ? "a" : null;
+  if (!want || !s.length || s[s.length - 1] !== want) return null;
+  return afterV(s.slice(0, -1));
+}
+function step(x, b) {
+  const {m, a, s} = x;
+  switch (m) {
+    case START: return (b === C("{") || b === C("[")) ? startV(b, s) : null;
+    case VALUE: return startV(b, s);
+    case VALUE_OR_CLOSE: return b === C("]") ? close(s, b) : startV(b, s);
+    case KEY_OR_CLOSE: return b === C("}") ? close(s, b) : b === C('"') ? st(STR, {key: true, esc: 0, cont: 0}, s) : null;
+    case KEY: return b === C('"') ? st(STR, {key: true, esc: 0, cont: 0}, s) : null;
+    case COLON: return b === C(":") ? st(VALUE, null, s) : null;
+    case AFTER: if (b === C(",")) return s[s.length - 1] === "o" ? st(KEY, null, s) : st(VALUE, null, s); return close(s, b);
+    case STR: {
+      if (a.cont) return (b >= 0x80 && b <= 0xBF) ? st(STR, {...a, cont: a.cont - 1}, s) : null;
+      if (a.esc === 1) return b === C("u") ? st(STR, {...a, esc: 2}, s) : ESC.has(b) ? st(STR, {...a, esc: 0}, s) : null;
+      if (a.esc >= 2) return HEXS.has(b) ? st(STR, {...a, esc: a.esc === 5 ? 0 : a.esc + 1}, s) : null;
+      if (b === C('"')) return a.key ? st(COLON, null, s) : afterV(s);
+      if (b === C("\\")) return st(STR, {...a, esc: 1}, s);
+      if (b < 0x20 || (b >= 0x80 && b <= 0xC1) || b > 0xF4) return null;
+      const n = (b >= 0xC2 && b <= 0xDF) ? 1 : (b >= 0xE0 && b <= 0xEF) ? 2 : b >= 0xF0 ? 3 : 0;
+      return st(STR, {...a, cont: n}, s);
+    }
+    case NUM: { const n = num(a, b); if (n !== null) return st(NUM, n, s); if (!N_ACC.has(a)) return null; return step(afterV(s), b); }
+    case LIT: return b === C(a[0]) ? (a.length > 1 ? st(LIT, a.slice(1), s) : afterV(s)) : null;
+  }
+  return null;
+}
+function run(bytes, x) { for (const b of bytes) { x = step(x, b); if (!x) return null; } return x; }
+const toyVocab = ["{", "}", "[", "]", ":", ",", "\"", "\"tags\"", "\":\"", "\"],", "\"}", "true", "tr", "null", "12", "0", "3.5", "-", "e", "high", "login", " ", "é", "न", "]}", "},{"];
+function pdaRender() {
+  const text = $("pdaIn").value, bytes = Array.from(enc.encode(text));
+  let x = st(START, null, ""), bad = -1;
+  for (let i = 0; i < bytes.length; i++) { const y = step(x, bytes[i]); if (!y) { bad = i; break; } x = y; }
+  if (bad >= 0) {
+    const okPart = new TextDecoder().decode(new Uint8Array(bytes.slice(0, bad)));
+    $("pdaStatus").innerHTML = `<span class="bad-t">rejected at byte ${bad}</span> <span class="small muted">after ${esc(JSON.stringify(okPart))}</span>`;
+  } else {
+    $("pdaStatus").innerHTML = x.m === DONE ? `<span class="ok-t">complete JSON</span>` : `<span class="ok-t">valid prefix</span>`;
+  }
+  $("pdaMode").textContent = MODE[x.m] + (x.m === NUM ? (N_ACC.has(x.a) ? " (may end)" : " (cannot end yet)") : "") + (x.m === STR && x.a.cont ? ` (${x.a.cont} UTF-8 bytes left)` : "");
+  $("pdaStack").textContent = x.s ? x.s.split("").map(c => c === "o" ? "{" : "[").join(" ") : "(empty)";
+  const next = [];
+  for (let b = 32; b < 127; b++) if (step(x, b)) next.push(String.fromCharCode(b));
+  $("pdaNext").innerHTML = (x.m === STR && !x.a.cont && !x.a.esc) ? `<span class="tk ok">any character except " \\ and control bytes</span><span class="tk ok">"</span><span class="tk ok">\\</span>` :
+    next.length ? next.map(c => `<span class="tk ok">${esc(c === " " ? "·" : c)}</span>`).join("") : `<span class="tk no">nothing: ${x.m === DONE ? "done" : "stuck"}</span>`;
+  $("pdaVocab").innerHTML = toyVocab.map(t => `<span class="tk ${run(enc.encode(t), x) ? "ok" : "no"}">${esc(t === " " ? "·" : t)}</span>`).join("");
+}
+$("pdaIn").addEventListener("input", pdaRender);
+document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => { $("pdaIn").value = b.dataset.ex; pdaRender(); });
+pdaRender();
+
+/* ---------- Contents highlight ---------- */
+const links = Array.from(document.querySelectorAll("nav.rail a"));
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+}), {rootMargin: "-20% 0px -70% 0px"});
+document.querySelectorAll("section.s").forEach(s => io.observe(s));
+})();
+</script>
+
+</body></html>

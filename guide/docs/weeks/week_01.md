@@ -1,18 +1,45 @@
-# Week 1 · Lookups, Vectors, and Your First LLM Call
+# Week 1 · Tokens and Decoding
 
-**Month 1: Foundations** · Self-paced · AI rule: **AI explains, you type.** Ask AI to explain or review. Do not paste code it writes.
+**Month 1: AI Engineer + FDE** · Self-paced · AI rule: **AI explains, you type.** Ask AI to explain or review. Do not paste code it writes.
 
 ## This week
 
-**Goal:** by the end of the week you can build a small, tested search tool from scratch, explain its design with numbers, and defend every line.
+A language model does exactly one thing: given token ids, it scores every possible next token. Everything around that is engineering, and this week you build it:
 
-| Pillar | Units this week |
+- **in front of the model:** a byte-level **BPE tokenizer**, which decides what a "token" is, and so what text costs
+- **after the model:** the **decoding loop**: softmax, temperature, top-k, top-p, beam search
+- **a guarantee:** a **grammar-constrained decoder** that makes invalid JSON impossible, not just unlikely
+- **the model in the middle:** an **n-gram model**, the baseline every later model must beat
+
+### The problem
+
+A support team wants every incoming ticket turned into a JSON record by a language model, in English and Hindi. Two things go wrong at once: **some answers do not parse**, and **Hindi costs several times more tokens** for the same meaning. Neither is the model's fault. Both are decided by the tokenizer before the model and the decoder after it, and you build both this week, ending with output that is valid *by construction*.
+
+### What you will be able to do
+
+| Dimension | Learning objectives |
 |---|---|
-| DSA | 8 problems: arrays and hashing |
-| ML/DL | 3 concepts: arrays and broadcasting, vectors and similarity, stable softmax |
-| AI Engineering | 3 experiments: the API call, temperature, grounded answers |
-| System Design & Engineering Practice | 1 design (requirements and estimates) + 3 practices (git, pytest, code review) |
-| Weekly build | A pocket search CLI, defended live |
+| **DSA** | Count with hash maps and keep the best item under updates with a heap and lazy deletion. Store shared prefixes in a trie and prune whole subtrees. Recognise nested structure with a stack and an automaton. Sample with prefix sums and binary search |
+| **ML** | Derive why counting is maximum likelihood, and smooth it. Measure a model with cross-entropy and perplexity. Compute softmax stably and explain temperature as entropy. Explain masking as conditioning |
+| **AI** | Train and use a byte-level BPE tokenizer and measure the token tax. Choose between greedy, sampling, top-k, top-p and beam search. Guarantee structured output the way production engines do |
+| **System Design** | Estimate and design a web crawler and a unique ID generator. Design an end-to-end structured-output service with numbers (the capstone) |
+| **Software Delivery** | Work spec → contract → test → code. Write property tests and catch planted bugs. Ship a package with CI |
+
+The [Week 1 tutorial](../tutorials/week_01.html) teaches each concept with its code, a live demo, the DSA and ML fundamentals underneath, and the LeetCode problems that practise it.
+
+**Pre-read (one page each, before Day 1):** calling an LLM API with JSON output; running a small open model locally with [Ollama](https://ollama.com/). These are background, not the week.
+
+**Real-world deliverable:**
+- your package on **TestPyPI**
+- a post with two tables: **bytes per token** for English vs Hindi (yours vs GPT-2's), and the **valid-JSON rate**, free vs constrained
+
+| Block | Time | What |
+|---|---|---|
+| Lecture | 75 min | The [Week 1 tutorial](../tutorials/week_01.html), one segment per dimension |
+| Project | ~20 h | Seven milestones, in the order spec → contract → test → code |
+| DSA reps | 45 min/day | 13 problems: hashing, heaps, tries, stacks and automata, sampling |
+| System design | ~3 h | ◆ Web crawler (timed mock) and a unique ID generator |
+| Kaggle rep | ~3 h | Titanic |
 
 ### Every unit follows the same cycle
 
@@ -24,251 +51,251 @@
 
 Commit each unit to your repo. Post one finding a day as **Day N/100**.
 
-## DSA: arrays and hashing
+## The lecture (75 min)
 
-**Focus.** A hash table answers "have I seen this?" in O(1) on average. Scanning a list costs O(n) per question, so you store what you have seen and look it up instead.
+| Segment | Content |
+|---|---|
+| The problem (10 min) | Ask a model for JSON 50 times: some answers do not parse. Ask in Hindi: it costs more tokens for the same meaning. Both come from the code around the model, not the model |
+| AI (15 min) | Bytes and UTF-8, BPE training, encoding by merge rank. Live: train on `aaabdaaabac` by hand, then in code |
+| ML (15 min) | Counting is maximum likelihood; perplexity; softmax, temperature, top-k, top-p as operations on one probability vector. Live: the same logits at T = 0.5, 1, 2 |
+| DSA (15 min) | The merge heap with lazy deletion; JSON as a pushdown automaton (a state machine with a stack); a vocabulary trie that prunes thousands of tokens at once. Live: brute-force mask vs trie mask on GPT-2's vocabulary |
+| Software Delivery (15 min) | Spec → contract → test → code. Protocols, golden tests, property tests that generate thousands of JSON values, planted bugs. Live: Hypothesis finds a round-trip bug |
+| Done looks like (5 min) | The milestones, the experiment table, and the defense |
+
+## The project: `tok`
+
+The spec, contracts, starter code, and 50 acceptance tests are in [`week_01/`](https://github.com/dpaul0501/ai-engineer-100-labs/tree/main/week_01).
+
+### The five dimensions
+
+| Dimension | The constraint | You learn |
+|---|---|---|
+| **AI** | The tokenizer **round-trips any Unicode text**, and its compression is **within 10% of Hugging Face `tokenizers`**. **Every** constrained sample is valid JSON so far, and every finished one parses | What a token is, what decoding does, and how structured output is guaranteed |
+| **ML** | **Probabilities sum to 1** for every context. An untrained model's **perplexity equals the vocabulary size**. Sampling frequencies match **softmax(logits / T)** | Maximum likelihood, smoothing, perplexity, softmax, temperature, nucleus sampling |
+| **DSA** | Training gives **the naive spec's merges in under 3 seconds**. The mask **equals brute force** on every state, and the trie is **over 4× faster** where few tokens fit | Hash maps, heaps with lazy deletion, tries, finite and pushdown automata |
+| **System Design** | Two one-page designs with numbers, one of them a timed mock | Estimation, frontier and dedup design, ID layouts |
+| **Software Delivery** | `SPEC.md` and failing tests are committed **before any code**. Streaming stays **under 5 MB of peak memory**. Your tests catch the planted bugs | Spec-first development, contracts, property and golden tests, mutation testing, CI |
+
+### Milestones
+
+1. **Spec and red tests.** Fill in `SPEC.md`, including your estimates, and write `tests/test_mine.py`. Commit with everything red. *Check: the commit exists before any implementation.*
+2. **BPE.** `merge`, a naive `train`, then the heap version. *Check: the golden, naive-spec and speed tests pass.*
+3. **Encode, decode, save, load, stream.** *Check: the round-trip property test passes on 300 random strings; streaming stays flat.*
+4. **The n-gram model and samplers.** `logprobs`, `log_softmax`, `top_k_filter`, `top_p_filter`, `categorical`, `Sampler`. *Check: the n-gram and sampling tests pass.*
+5. **Decoding loops.** `generate`, `greedy`, `beam_search`. *Check: width 1 equals greedy; a wide beam finds the exact best.*
+6. **The JSON automaton and the constraint.** `step`, `is_valid_json`, `TokenTrie`, `JsonConstraint`. *Check: every grammar test passes, and the mask matches brute force.*
+7. **Ship.**
+    - The CLI, and the experiment table (free vs constrained, across n and temperature).
+    - GitHub Actions running `pytest`.
+    - The package on TestPyPI.
+    - The post, and estimated vs measured numbers filled in `SPEC.md`.
+
+### Depth extensions (try one)
+
+| Major | Extension |
+|---|---|
+| Systems | Profile `allowed()` on GPT-2's vocabulary. Precompute, per automaton mode, the tokens whose validity does not depend on the stack (XGrammar's idea), and measure the speedup |
+| Models | Add **min-p** sampling and a repetition penalty. Measure how each changes the valid-JSON rate and the diversity of the samples |
+| Agents | Extend the grammar to a **schema**: a fixed set of keys with types (`"priority"` must be one of three strings). This is what "structured outputs" in an API does |
+| Architecture | Design a structured-output service for 10,000 requests a second: where masks are computed, what is cached, and what a schema change costs |
+
+## AI: tokens and decoding
 
 **Study sources this week:**
 
-- [NeetCode](https://www.youtube.com/@NeetCode) on YouTube: search the problem name for a walkthrough. His [roadmap](https://neetcode.io/roadmap) groups problems by pattern.
+- Andrej Karpathy, [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE) (video) and [minbpe](https://github.com/karpathy/minbpe) (code).
+- Imad Dabbura, [Byte Pair Encoding from Scratch](https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html): a short, code-first walkthrough.
+- Patrick von Platen, [How to generate text](https://huggingface.co/blog/how-to-generate) (Hugging Face blog): greedy, beam, top-k, top-p, side by side.
+- Chip Huyen, [Generation configurations: temperature, top-k, top-p, and test time compute](https://huyenchip.com/2024/01/16/sampling.html), including structured outputs.
+- MLC, [Structured generation with XGrammar](https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar): pushdown automata and why most of a mask can be precomputed.
+- Papers: Sennrich et al., [BPE for NMT](https://arxiv.org/abs/1508.07909); Holtzman et al., [The Curious Case of Neural Text Degeneration](https://arxiv.org/abs/1904.09751) (top-p); Willard and Louf, [Efficient Guided Generation](https://arxiv.org/abs/2307.09702) (Outlines).
+
+### 1. Bytes, UTF-8, and BPE
+
+- **Study:** how UTF-8 encodes a code point in 1–4 bytes; the merge loop in minbpe's `basic.py`; why encoding applies merges by **rank**, not frequency.
+- **Do:** Milestones 2–3.
+- **Variations:** train without pre-tokenization and show the merges that cross word boundaries; break ties by first occurrence and diff the merges.
+- **Tests:** the golden example; your heap trainer against your naive trainer on random texts.
+- **Corner cases:** overlapping pairs (`aaaa`); decoding one byte of a multi-byte character (gives `�`).
+
+### 2. From logits to one token
+
+- **Study:** the Hugging Face and Chip Huyen posts above.
+- **Do:** Milestones 4–5.
+- **Variations:** add min-p; implement beam search with a length penalty and show when it changes the winner.
+- **Tests:** frequency tests for temperature; width 1 beam equals greedy.
+- **Corner cases:** every logit `-inf`; logits of 1,000 (overflow without the max shift); ties at the k-th place.
+
+### 3. Structured output by construction
+
+- **Study:** the XGrammar post; [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), sections 2–7 (JSON's grammar is two pages); llama.cpp's [GBNF grammars](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md).
+- **Do:** Milestone 6, then run the experiment.
+- **Variations:** allow one space after `:` and `,`; restrict keys to a fixed list.
+- **Tests:** every value `json.dumps` writes is accepted; anything you accept, `json.loads` parses; the mask equals brute force.
+- **Corner cases:** a number has no closing character (`[12` could continue); a token that closes the object *and* starts something else; a string that never ends before `max_new_tokens`.
+
+## ML: probability and sampling
+
+**Study sources this week:**
+
+- Chapter 3, "N-gram Language Models", of Jurafsky and Martin, [Speech and Language Processing](https://web.stanford.edu/~jurafsky/slp3/).
+- Sebastian Raschka, [temperature, top-k and top-p](https://sebastianraschka.com/faq/docs/temperature-topk-topp-sampling.html) (short FAQ).
+- [3Blue1Brown](https://www.youtube.com/@3blue1brown), *Solving Wordle using information theory*, for entropy.
+
+### 1. Counting is maximum likelihood
+
+- **Do:** derive count(ctx, w) / count(ctx) with a Lagrange multiplier on one page, and check it numerically.
+- **Variations:** add-k smoothing as a Dirichlet prior.
+- **Corner cases:** an unseen context gives 0/0. What does your model return?
+
+### 2. Perplexity
+
+- **Do:** show that a uniform model over V tokens has perplexity V (an acceptance test). Fill the perplexity table for n = 1–4 on held-out records.
+- **Variations:** convert to **bits per byte**, so tokenizers with different vocabularies can be compared.
+
+### 3. Softmax, temperature, and entropy
+
+- **Do:** prove softmax(x + c) = softmax(x). Plot the entropy of softmax(x / T) as T goes from 0.1 to 10. What are the limits?
+- **Variations:** show that temperature never changes which tokens are top-k, but does change which are top-p. (This is why one of your planted bugs cannot be caught.)
+
+### 4. What a mask does to the distribution
+
+- **Do:** masking then renormalizing is the same as conditioning on "the next token is valid". Show it, and measure how much probability your model puts on invalid tokens at each step.
+- **Corner cases:** why can constrained output still be *wrong* (valid JSON, wrong values)?
+
+## DSA: hashing, heaps, tries, stacks and automata, sampling
+
+**Focus.** A hash map counts pairs; a heap finds the best one; a trie shares prefixes; a stack remembers what is open. Every one of them is inside `tok`.
+
+**Study sources this week:**
+
+- [NeetCode roadmap](https://neetcode.io/roadmap): problems grouped by pattern, each with a video.
 - [take U forward](https://www.youtube.com/@takeUforward) (Striver) on YouTube, for a second explanation.
 - [Hashing](https://mldsa.github.io/docs/part1/chapter01-hashing/) and [Top-K](https://mldsa.github.io/docs/part1/chapter02-topk/) in *From LeetCode to Learning Systems*.
-- [TimeComplexity](https://wiki.python.org/moin/TimeComplexity) on the Python wiki, for what dict and set operations cost.
 
-**Evidence per problem:** `solution.py`, one or two `variation_N.py` files with the changed problem written at the top, and `test_solution.py` with the corner cases marked.
+**Evidence per problem:** `solution.py`; one or two `variation_N.py` files with the changed problem at the top; and `test_solution.py` with the corner cases marked.
 
-### 1. [Two Sum](https://leetcode.com/problems/two-sum/) (LeetCode 1)
+| # | Problem | Pattern | Where it is in `tok` |
+|---|---|---|---|
+| 1 | [Two Sum](https://leetcode.com/problems/two-sum/) (1) | Hash map | Pair counts |
+| 2 | [Group Anagrams](https://leetcode.com/problems/group-anagrams/) (49) | Canonical key | The mask cache keys on a hashable state |
+| 3 | [Top K Frequent Elements](https://leetcode.com/problems/top-k-frequent-elements/) (347) | Count + heap | BPE's best pair; top-k sampling |
+| 4 | [Kth Largest Element in an Array](https://leetcode.com/problems/kth-largest-element-in-an-array/) (215) | Heap of size k / quickselect | `top_k_filter` in O(V log k) |
+| 5 | [Find K Pairs with Smallest Sums](https://leetcode.com/problems/find-k-pairs-with-smallest-sums/) (373) | Heap over candidate frontiers | Beam search |
+| 6 | [Implement Trie](https://leetcode.com/problems/implement-trie-prefix-tree/) (208) | Trie | `TokenTrie` |
+| 7 | [Design Add and Search Words](https://leetcode.com/problems/design-add-and-search-words-data-structure/) (211) | Trie + DFS | Walking the trie with a state |
+| 8 | ★ [Word Search II](https://leetcode.com/problems/word-search-ii/) (212) | Trie + pruned DFS | Pruning a subtree on the first invalid byte |
+| 9 | [Valid Parentheses](https://leetcode.com/problems/valid-parentheses/) (20) | Stack | The automaton's stack of open `{` and `[` |
+| 10 | [Decode String](https://leetcode.com/problems/decode-string/) (394) | Stack of contexts | Nested objects and arrays |
+| 11 | ★ [Valid Number](https://leetcode.com/problems/valid-number/) (65) | Finite automaton | The number DFA inside the grammar |
+| 12 | [Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) (528) | Prefix sums + binary search | `categorical` |
+| 13 | ★ [Linked List Random Node](https://leetcode.com/problems/linked-list-random-node/) (382) | Reservoir sampling | The held-out split |
 
-- **Study:** the complement-lookup idea, in the hashing chapter or a walkthrough.
-- **Do:** one pass with a dict from value to index. State the time and space complexity.
-- **Variations:** sorted input, solved with two pointers in O(1) extra space; return *all* pairs without repeats.
-- **Tests:** the examples from the problem, plus a target that needs the last element.
-- **Corner cases:** `target = 2 * x` with `x` appearing once (no self-pairing); negative numbers; duplicates that are the answer; floats (`0.1 + 0.2 == 0.3` is `False`).
-- **Go further:** PostgreSQL's hash join (`src/backend/executor/nodeHashjoin.c`) is Two Sum with `=` in place of `+`.
+For each: **Variations** (two per problem, of your own), **Corner cases** (empty input, ties, one element), and one line on where it shows up in `tok`.
 
-### 2. [Contains Duplicate](https://leetcode.com/problems/contains-duplicate/) (LeetCode 217)
+## System Design: web crawler and unique IDs
 
-- **Study:** set membership, and what a set costs in memory.
-- **Do:** one pass with a set.
-- **Variations:** duplicates within distance k (LeetCode 219); 10 billion URLs with only a few hundred MB of memory.
-- **Tests:** with and without a duplicate.
-- **Corner cases:** an empty list, one element, all elements equal.
-- **Go further:** duplicate rows shared by train and test splits leak labels. A Bloom filter answers "definitely not seen" in fixed memory.
+Write each design as a one-page doc: requirements with numbers, estimates (QPS, storage, bandwidth), the API, the data model, a diagram, two deep dives, the bottlenecks, and the failure you do *not* handle.
 
-### 3. [Valid Anagram](https://leetcode.com/problems/valid-anagram/) (LeetCode 242)
+Sources: Alex Xu, *System Design Interview* Vol. 1, chapters 7 and 9; [Bloom filters](https://en.wikipedia.org/wiki/Bloom_filter).
 
-- **Study:** counting, then comparing counts.
-- **Do:** a count dict or `Counter`, compared once.
-- **Variations:** ignore case and spaces; allow any Unicode text.
-- **Tests:** an anagram, a non-anagram, and different lengths.
-- **Corner cases:** empty strings; `"é"` as one code point vs `e` plus a combining accent (fix with `unicodedata.normalize("NFC", s)`).
+### ◆ Web crawler (45-minute timed mock with a peer and a moderator)
 
-### 4. [Group Anagrams](https://leetcode.com/problems/group-anagrams/) (LeetCode 49)
+**Prompt:** crawl 1 billion pages a month for a search engine.
 
-- **Study:** a canonical key turns grouping into a lookup.
-- **Do:** a dict from key to list, keyed by `sorted(s)`.
-- **Variations:** key by a 26-count tuple instead, and time both on long and short words; group words that are anagrams after removing one letter.
-- **Tests:** the example, and a list where every word is its own group.
-- **Corner cases:** an empty string in the list; repeated words; uppercase letters.
-- **Go further:** pretraining pipelines dedupe text the same way, with exact hashes and MinHash (`MinHashLSH` in the `datasketch` library).
+- **Numbers to produce:** pages per second (average and peak), storage per month and over 5 years, and bandwidth.
+- **Deep dives:** the URL frontier, with priority and politeness per host; "seen URL" with a Bloom filter and "seen content" with hashes.
+- **Also cover:** robots.txt, DNS caching, spider traps, and recrawl freshness.
 
-### 5. [Top K Frequent Elements](https://leetcode.com/problems/top-k-frequent-elements/) (LeetCode 347)
+### Unique ID generator
 
-- **Study:** the Top-K chapter: heap vs sort vs bucket sort.
-- **Do:** count, then select the k most frequent.
-- **Variations:** solve it three ways (heap, bucket sort, `np.argpartition`) and benchmark at n = 10⁶; the input is an endless stream.
-- **Tests:** the examples, and k equal to the number of distinct values.
-- **Corner cases:** ties at the k-th place (is your output deterministic?); k = 1; every element distinct.
-- **Go further:** top-k sampling in LLM decoding; `Counter.most_common` calls `heapq.nlargest` in `Lib/collections/__init__.py`.
+**Prompt:** 64-bit IDs, roughly sortable by time, more than 10,000 per second on each machine, across data centres, with no coordination on each request.
 
-### 6. [Product of Array Except Self](https://leetcode.com/problems/product-of-array-except-self/) (LeetCode 238)
+- **Compare:** UUIDv4, UUIDv7, a ticket server, multi-master auto-increment, and Snowflake.
+- **Deep dives:** the Snowflake bit layout (how many years the timestamp lasts, and IDs per millisecond per machine), and what happens when the clock goes backwards.
 
-- **Study:** prefix and suffix scans.
-- **Do:** one prefix pass and one suffix pass, without division.
-- **Variations:** O(1) extra space, not counting the output; the same idea for sums instead of products.
-- **Tests:** the examples, and an array of all ones.
-- **Corner cases:** one zero; two zeros; negative numbers; products that overflow int64 in NumPy (fix by summing logs).
-- **Go further:** top-p sampling uses a cumulative sum to find its cutoff; causal attention gives each token only its prefix.
+## Capstone: design `tok-serve`
 
-### 7. [Longest Consecutive Sequence](https://leetcode.com/problems/longest-consecutive-sequence/) (LeetCode 128)
+Put the week together as one system and defend it with numbers: a service that takes a ticket and a JSON shape and returns a record that always parses, at 10,000 requests a second.
 
-- **Study:** start counting only where the predecessor is missing.
-- **Do:** a set, and a count from each run's start. Explain why this is O(n), not O(n²).
-- **Variations:** return the sequence itself, not its length; the same with pandas, `s.diff().ne(1).cumsum()`.
-- **Tests:** the examples, and one long run.
-- **Corner cases:** an empty list; duplicates inside the run; negative numbers.
+- **Requirements:** `POST /extract {ticket, grammar}`; English and Hindi; about 150 output tokens per request, so **1.5 million masked steps a second**; the mask adds at most 1 ms per step at p99; a retried request never creates a second record.
+- **Components:** API → tokenizer with a chunk cache → model server → mask service → sampler → record store.
+- **Deep dives, using your own measurements:** can the mask keep up (brute force vs trie vs precomputing per mode)? What does the mask cache key on, and how is it bounded? How does the Hindi share change capacity? How do idempotency keys work (reuse your unique ID design)? What happens at the token limit?
+- **Principles to name in the defense, each tied to your code:** contracts at every boundary; make invalid states unrepresentable; immutable, hashable state; precompute what does not change and cache what repeats; incremental over recompute; determinism (tie-breaks, seeds, versions); bound everything; measure before optimizing.
 
-### 8. [Valid Sudoku](https://leetcode.com/problems/valid-sudoku/) (LeetCode 36)
+**Deliverable:** a one-page design doc with a diagram, a number on every arrow, and the principle each component follows. Present it at the defense.
 
-- **Study:** one set per constraint.
-- **Do:** sets for rows, columns, and boxes in a single pass.
-- **Variations:** a 16×16 board; report *which* rule is broken, not just whether one is.
-- **Tests:** a valid board and an invalid one for each rule.
-- **Corner cases:** an empty board; a board with only one digit.
-- **Go further:** the same idea is data validation before training. Write three uniqueness or range checks for a CSV.
-
-## ML/DL: NumPy and vectors
+## Software Delivery: spec, contracts, tests
 
 **Study sources this week:**
 
-- [Python NumPy tutorial](https://cs231n.github.io/python-numpy-tutorial/) from Stanford CS231n.
-- [Data manipulation](https://d2l.ai/chapter_preliminaries/ndarray.html) and [linear algebra](https://d2l.ai/chapter_preliminaries/linear-algebra.html) in *Dive into Deep Learning*.
-- [3Blue1Brown](https://www.youtube.com/@3blue1brown): *Essence of Linear Algebra*, the dot product chapter.
-- The [foundation chapter](https://dpaul0501.github.io/llm-agent-reads/module_01_foundations/) of *LLM Foundations from Scratch*.
+- [Hypothesis](https://hypothesis.readthedocs.io/en/latest/quickstart.html) quickstart: property-based testing.
+- [typing.Protocol](https://docs.python.org/3/library/typing.html#typing.Protocol) and [PEP 544](https://peps.python.org/pep-0544/): structural contracts.
+- [Packaging Python Projects](https://packaging.python.org/en/latest/tutorials/packaging-projects/), including TestPyPI.
+- [Building and testing Python](https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-python) with GitHub Actions.
 
-**Evidence per concept:** `impl.py`, `variation_N.py` with a plot or numbers, `test_impl.py` comparing against the library with `numpy.testing.assert_allclose`, and a parameter table in your notes.
+### Practice 1: spec first, tests red
 
-### 1. Arrays, dtype, and broadcasting
+- **Do:** Milestone 1. Name each of your tests after the bug it catches, for example `test_top_p_keeps_the_token_that_crosses_p`.
+- **Corner cases:** a test that passes on the stub proves nothing. Run your tests on the stubs first.
 
-- **Study:** [Broadcasting](https://numpy.org/doc/stable/user/basics.broadcasting.html) and [copies and views](https://numpy.org/doc/stable/user/basics.copies.html) in the NumPy docs.
-- **Do:** write your own `broadcast_shape(a, b)` that returns the result shape, or raises when the shapes are incompatible.
-- **Variations:** support three or more shapes; show a slice that is a view and one that is a copy, and prove it by changing the original.
-- **Tests:** match `np.broadcast_shapes` on 20 random shape pairs.
-- **Corner cases:** zero-length dimensions; scalars; mixing `float32` with `float64` (what is the result's dtype, and its memory at 10⁸ elements?).
+### Practice 2: properties, not examples
 
-### 2. Vectors: dot product, norms, and similarity
+- **Do:** write three properties of your own: round trip for any text; every `json.dumps` output is accepted; the trie mask equals brute force.
+- **Variations:** a golden test that freezes your tokenizer's ids on 20 sentences.
 
-- **Study:** the dot product chapter (3Blue1Brown), and [pairwise metrics](https://scikit-learn.org/stable/modules/metrics.html) in the scikit-learn user guide.
-- **Do:** cosine similarity and Euclidean distance for a matrix of vectors against one query, with no Python loop.
-- **Variations:** find two vectors where cosine and Euclidean disagree about the nearest neighbor, then normalize them and show they agree; time a loop, `np.dot`, and `@` at 10⁶ elements.
-- **Tests:** match scikit-learn's `cosine_similarity` and `euclidean_distances`.
-- **Corner cases:** a zero vector (no NaN); identical vectors; float32 precision. Read `euclidean_distances` in `sklearn/metrics/pairwise.py` and find where it clips negative results to zero.
-- **Parameters:**
+### Practice 3: planted bugs
 
-| Function | Parameter | Default | What it controls | What goes wrong at the extremes |
-|---|---|---|---|---|
-| `np.linalg.norm` | `ord` | `None` (L2) | Which norm | L1, L2, and ∞ rank neighbors differently |
-| `np.linalg.norm` | `axis`, `keepdims` | `None`, `False` | Per-row or whole-array norm | Without `keepdims`, dividing by the norm broadcasts wrongly |
-| `euclidean_distances` | `squared` | `False` | Skip the square root | Ranking is unchanged, but the values are not distances |
-| `cosine_similarity` | `dense_output` | `True` | Sparse or dense result | A dense n×n result on 10⁶ rows exhausts memory |
+- **Do:** plant five bugs in your own code (an off-by-one in top-p, a missing max shift, a trailing comma the grammar accepts). Does your suite catch each? Then find a bug no test *can* catch, and explain why it is harmless.
 
-### 3. A numerically stable softmax
+### Practice 4: package, CLI, CI
 
-- **Study:** the masking section of the [attention chapter](https://dpaul0501.github.io/llm-agent-reads/part_03_attention/), and [`math_utils.py`](https://github.com/dpaul0501/llm-agent-reads/blob/main/llm_foundations/math_utils.py) in llm-agent-reads.
-- **Do:** write `softmax(x, axis=-1)` from scratch, and explain why it subtracts the max.
-- **Variations:** add a temperature; add a boolean mask that blocks some positions.
-- **Tests:** match `scipy.special.softmax`; rows sum to 1.
-- **Corner cases:** logits of 1000 (`np.exp(1000.0)` overflows); a fully masked row (with `-1e9` you get a silent uniform average, and with `-np.inf` you get NaN; decide which you want); a float32 input.
-- **Parameters:** `axis`. The wrong axis gives rows that do not sum to 1, yet shape-only tests still pass.
+- **Do:** `pip install -e .` and `tok --help` work. GitHub Actions runs `pytest` on push. Publish to TestPyPI as `tok-<your-handle>`.
 
-## AI Engineering: the LLM API call
+## Kaggle rep: [Titanic](https://www.kaggle.com/competitions/titanic)
 
-**Study sources this week:**
-
-- Your LLM provider's official quickstart and API reference.
-- [Building LLM applications for production](https://huyenchip.com/2023/04/11/llm-engineering.html) by Chip Huyen.
-- [Patterns for building LLM-based systems](https://eugeneyan.com/writing/llm-patterns/) by Eugene Yan.
-
-**Evidence per experiment:** `tool.py`, a results table (variant vs baseline), a small eval set, and a log of tokens, cost, and latency.
-
-### 1. The API call and what comes back
-
-- **Study:** your provider's quickstart: messages and roles, and the fields of the response.
-- **Do:** make one call with the key in an environment variable, never in code. Print the whole response object and write down what every field is for.
-- **Variations:** add a system prompt; set max output tokens to 10.
-- **Tests:** your wrapper returns the text, the **stop reason**, and the token usage.
-- **Corner cases:** a truncated answer (does your code notice the stop reason?); a missing API key; an empty prompt.
-- **Cost:** log input and output tokens and compute the cost from your provider's current price page.
-
-### 2. Temperature
-
-- **Study:** the temperature section of the [inference chapter](https://dpaul0501.github.io/llm-agent-reads/part_06_inference_and_tricks/). Temperature divides the logits before the softmax you wrote above.
-- **Do:** send the same prompt 20 times at temperature 0 and 20 times at temperature 1. Count distinct answers.
-- **Variations:** a factual question vs a creative one; a third temperature.
-- **Tests:** your script reports the count of distinct answers and their frequencies.
-- **Corner cases:** temperature 0 is often not bit-for-bit deterministic. Did your 20 runs agree exactly?
-
-### 3. Grounded answers, retries, and failures
-
-- **Study:** the retrieval section of Eugene Yan's patterns post, and [Exponential Backoff And Jitter](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) on the AWS Architecture Blog.
-- **Do:** a prompt that gives three snippets and a question, answers only from the snippets, and cites which one it used. Wrap the call so timeouts and rate limits are retried with backoff, and bad requests fail at once.
-- **Variations:** five snippets instead of three; ask for the answer as JSON.
-- **Tests:** an eval set of 10 questions with known answers and sources. Report how many come back correct and cited.
-- **Corner cases:** a question the snippets cannot answer (does the model say so?); contradictory snippets; a simulated timeout.
-- **Go further:** find the retry logic in your provider's official Python SDK (search for `max_retries`). Which errors does it retry?
-
-## System Design & Engineering Practice: requirements, estimates, and proof
-
-**Study sources this week:**
-
-- [*Pro Git*](https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository), chapter 2.
-- [pytest: get started](https://docs.pytest.org/en/stable/getting-started.html) and [parametrize](https://docs.pytest.org/en/stable/how-to/parametrize.html).
-- The [System Design Primer](https://github.com/donnemartin/system-design-primer#back-of-the-envelope-calculations), back-of-the-envelope calculations, and the [latency numbers](https://gist.github.com/jboner/2841832) table.
-- [ByteByteGo](https://www.youtube.com/@ByteByteGo) on YouTube, for system design basics.
-- [The reviewer guide](https://google.github.io/eng-practices/review/reviewer/) in Google's engineering practices.
-
-**Evidence:** `docs/design.md`, your commit history, the tests, and the review thread.
-
-### Design: requirements and estimates for pocket search
-
-- **Study:** back-of-the-envelope calculations and the latency numbers.
-- **Do:** write five functional requirements ("search a folder of markdown files") and five non-functional ones ("results in under 100 ms for 10,000 files"). Then estimate:
-    - **Storage:** a dense TF-IDF matrix for 100,000 documents and a 50,000-word vocabulary in float64 is 10⁵ × 5×10⁴ × 8 bytes. Compare it with a sparse matrix at about 200 distinct words per document.
-    - **Latency:** loading a 50 MB index from disk on every query, vs keeping it in memory.
-    - **Throughput:** time one matrix-vector product at 10,000 documents. How many queries per second can one process serve?
-- **Variations:** 100× the documents; 100× the queries.
-- **Tests:** after the build, measure each estimate and write estimate vs measured in `design.md`.
-- **Corner cases:** the index does not fit in memory; the folder changes while the index is being built.
-
-### Practice 1: git and a clean repo
-
-- **Do:** one public repo for the 100 days, with a `venv`, `requirements.txt`, a README stating your goal, and `.env` in `.gitignore` before the first commit.
-- **Corner cases:** check that your API key appears nowhere in the git history.
-
-### Practice 2: tests that prove something
-
-- **Do:** write pytest tests with `@pytest.mark.parametrize` for your DSA solutions.
-- **Seeded bugs:** clone [llm-agent-reads](https://github.com/dpaul0501/llm-agent-reads), delete the max subtraction in `softmax`, and run `pytest`. **The tests still pass.** Write a test that fails on the broken version. Do the same for two more planted bugs: ignore `mask` in `scaled_dot_product_attention`, and change `softmax`'s default `axis` to `0`.
-- **Corner cases:** a test that passes on every input proves nothing. For each test, record the bug it catches.
-
-### Practice 3: code review
-
-- **Do:** write a ten-item review checklist. Review one peer's code with it, and leave comments on their repo.
-- **Variations:** have a peer review yours, and address every comment.
-
-## Weekly build: pocket search CLI
-
-Combine the week into one tool. The spec, starter code, and acceptance tests are in [`week_01/`](https://github.com/dpaul0501/ai-engineer-100-labs/tree/main/week_01) of this repo.
-
-```bash
-pocket index ./docs
-pocket search "rotary position" -k 5
-pocket ask "why does softmax subtract the max?"
-```
-
-1. **Design doc first:** requirements, estimates, components, decisions (dense or sparse, heap or `argpartition`), and risks.
-2. **Build:** lowercase word tokens, a vocabulary dict, TF-IDF vectors, vectorized cosine similarity, top-k, and an `ask` command that answers only from the top 3 snippets and checks the stop reason.
-3. **Prove it:** the acceptance tests pass, and your own tests catch the seeded bugs in the lab README.
-4. **Open a PR** into your own `main` that lists what AI explained and how you verified your code.
-
-Use the `docs/` folder of [llm-agent-reads](https://github.com/dpaul0501/llm-agent-reads) as the corpus.
+1. **Data contract first:** a schema check for `train.csv` and `test.csv` (columns, dtypes, ranges, allowed nulls, `Survived` absent from test), run as a test.
+2. **Validation:** stratified 5-fold cross-validation, reported as mean ± standard deviation.
+3. **Baselines:** everyone dies; then women survive. Submit the second.
+4. **This week's idea:** estimate P(survived | sex, class) **by counting, with add-k smoothing**: your n-gram maths on a table. Then fit a logistic regression and compare.
+5. **Calibration:** a reliability plot and the Brier score for both models.
+6. **Ship:** a submission, a public notebook, and the gap between cross-validation and the leaderboard, explained.
 
 ## End of the week
 
-- **Defend** the build to a moderator and your peers: they pick lines, and you say what breaks if each one changes. See [the defense](https://dpaul0501.github.io/ai-engineer-100/how-it-works/#the-defense).
-- **Peer mock interview:** 45 minutes in pairs on a problem from this week that your partner has not solved. See [the format](https://dpaul0501.github.io/ai-engineer-100/how-it-works/#peer-mock-interviews-every-week).
-- **Publish** a README write-up that a stranger can follow.
-- **Choose your two paths.** See [Choose your paths](https://dpaul0501.github.io/ai-engineer-100/paths/).
-- **Value-creation step:** write down three problems people around you struggle with, where search, data, or an AI assistant could help, and one person you could ask about each.
+- **Defend** `tok` to a moderator and your peers. Expect questions like:
+  - "Why is your merge loop not O(merges × corpus)?"
+  - "How does your automaton know a number has ended?"
+  - "Why can't any test catch temperature applied after top-k?"
+  - "Show me the commit where this test was red."
+- **Peer mock interview:** 45 minutes on a problem from this week's DSA reps.
+- **Publish** the post with both tables.
+
+## Practical question
+
+A constrained decoder guarantees the JSON parses. What does it *not* guarantee, and how would you find out how often that happens?
 
 ## Suggested order
 
-| Day | DSA | ML/DL | AI Engineering | System Design & Engineering Practice | Post idea |
+| Day | DSA | Project | ML | Software Delivery | Other |
 |---|---|---|---|---|---|
-| 1 | Two Sum, Contains Duplicate | Arrays and broadcasting | The API call | Git and a clean repo · requirements | Two Sum is a database hash join |
-| 2 | Valid Anagram, Group Anagrams | Vectors and similarity | Temperature | Tests · latency estimate | Two strings that look equal but are not |
-| 3 | Top K Frequent | Vectors (parameters) | Temperature (results) | Storage estimate | Why Euclidean distance can go negative |
-| 4 | Product Except Self | Stable softmax | Grounded answers and retries | Seeded bugs · throughput | I broke softmax and the tests still passed |
-| 5 | Longest Consecutive, Valid Sudoku | Softmax (corner cases) | Grounded answers (eval) | Code review · mock interview | The question my snippets could not answer |
-| 6 | Weekly build | | | Design doc first | My search tool on a real folder |
-| 7 | Defense, write-up, paths | | | | What the defense exposed |
+| 1 | Two Sum, Group Anagrams | Read the starter; write `SPEC.md` | Counting is MLE | Practice 1 (red tests) | Lecture |
+| 2 | Top K Frequent, Kth Largest | Milestone 2 (BPE) | — | Practice 2 | Kaggle: data contract |
+| 3 | Random Pick with Weight, Random Node | Milestone 3 (round trip, streaming) | Perplexity | — | Design: unique ID generator |
+| 4 | Find K Pairs | Milestones 4–5 (samplers, decoding) | Softmax and temperature | — | Kaggle: baselines, counting model |
+| 5 | Implement Trie, Add and Search Words | Milestone 6 (automaton) | — | Practice 3 | ◆ Design mock: web crawler |
+| 6 | Valid Parentheses, Decode String, Valid Number | Milestone 6 (constraint), the experiment | What a mask does | Practice 4 | Kaggle: calibration, submit |
+| 7 | Word Search II, peer mock | Milestone 7 (ship) | — | — | Capstone design, defense, post |
 
 ## Done when
 
-- [ ] 8 DSA problems, each with a solution, 1–2 variations, tests, and corner cases
-- [ ] 3 ML/DL concepts, each matched against the library, with corner cases and a parameter table
-- [ ] 3 AI experiments, each with results, an eval or count, and a cost log
-- [ ] `design.md` with requirements, estimates, and estimate vs measured
-- [ ] The pocket search PR passes the acceptance tests and was defended
-- [ ] Your two paths are chosen
-- [ ] A post for every day you worked
+- [ ] `SPEC.md` filled in, with estimated vs measured numbers
+- [ ] The commit with red tests comes before any implementation
+- [ ] All 50 acceptance tests pass, and your own tests catch the planted bugs at the defense
+- [ ] `tok` on TestPyPI, and CI green
+- [ ] The experiment table: free vs constrained, across n and temperature
+- [ ] 13 DSA problems, each with a solution, 1–2 variations, tests and corner cases
+- [ ] 4 ML units, with the perplexity table
+- [ ] Two design docs, one of them mocked, and the `tok-serve` capstone design
+- [ ] A Titanic submission and a public notebook
+- [ ] The post

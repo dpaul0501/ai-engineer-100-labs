@@ -1,62 +1,70 @@
-# Week 1 lab: Pocket search CLI
+# Week 1 Lab: `tok`
 
-The week's tasks are in the guide: [Week 1](../guide/docs/weeks/week_01.md). This folder has what you build with: the spec, starter code, and acceptance tests.
+You'll build the two halves around every language model:
+- **in front of it:** a byte-level BPE tokenizer
+- **after it:** the decoding loop — softmax, temperature, top-k, top-p, beam search, and a **grammar-constrained decoder** that can only produce valid JSON
+
+The model in the middle is an n-gram model you also write. It is the baseline every later model has to beat, and it is enough to see why sampled JSON breaks and how a mask fixes it.
+
+The full week is in the [Week 1 guide](../guide/docs/weeks/week_01.md).
 
 ## Setup
 
 ```bash
 cd week_01
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m pytest -q        # every test fails until you implement the stubs
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q          # all red at the start: that is the point
 ```
 
-## Spec
+## Work in this order: spec → contract → test → code
+
+1. **Spec.** Fill in the *You write* sections of [`SPEC.md`](SPEC.md), including your estimates.
+2. **Contract.** Read [`tok/contracts.py`](tok/contracts.py) and the stubs' docstrings. They are fixed.
+3. **Tests first.** Write `tests/test_mine.py` with at least one test per module, each named after the bug it catches. Commit with every test red. **This commit is Milestone 1.**
+4. **Code.** Make the tests pass, module by module, in the order of the milestones in the guide.
+
+**AI rule for Days 1–20: AI explains, you type.** You may ask AI to explain concepts or review your code. Do not paste code it writes.
+
+## Layout
+
+```
+tok/contracts.py   Tokenizer, LanguageModel and Constraint protocols (fixed)
+tok/bpe.py         merge, BPE.train / encode / decode / save / load
+tok/stream.py      iter_documents
+tok/ngram.py       NGramLM (prob, logprobs, perplexity)
+tok/sample.py      log_softmax, softmax, argmax, top_k_filter, top_p_filter, categorical, Sampler, reservoir_sample
+tok/decode.py      generate (with an optional constraint), greedy, beam_search
+tok/grammar.py     the JSON pushdown automaton, TokenTrie, JsonConstraint
+tok/cli.py         the `tok` command
+data/alice.txt     prose corpus (Alice's Adventures in Wonderland, public domain, 723 documents)
+data/records.txt   2,000 synthetic support tickets as compact JSON, English and Hindi
+data/make_records.py   rebuilds records.txt deterministically
+tests/             acceptance tests (fixed) and your own tests
+```
+
+## The experiment
 
 ```bash
-python -m pocket.cli index ./docs          # build an index of a folder of .md files
-python -m pocket.cli search "rotary position" -k 5
-python -m pocket.cli ask "why does softmax subtract the max?"
+tok train data/records.txt --vocab-size 512 --out rec.json
+tok generate --model rec.json --train data/records.txt --samples 50            # free sampling
+tok generate --model rec.json --train data/records.txt --samples 50 --json     # constrained
 ```
 
-| File | What you implement |
-|---|---|
-| `pocket/text.py` | Nothing. `tokenize` is given so everyone agrees on what a word is. |
-| `pocket/index.py` | Vocabulary, IDF, the TF-IDF matrix, query vectors, and saving and loading the index |
-| `pocket/search.py` | Vectorized cosine similarity and top-k |
-| `pocket/ask.py` | The prompt, the model call through `LLMClient`, and truncation handling |
-| `pocket/cli.py` | Wiring the three commands together |
+Compare the two `valid_rate`s, then sweep `--n`, `--temperature` and `--top-p`. Put the table in your post. Use `reservoir_sample` to hold out records **before** training the tokenizer and the n-gram, and say in your write-up why the order matters.
 
-For `ask`, write a small adapter from your provider's SDK to the `LLMClient` interface in `pocket/ask.py`. The tests use a fake client, so they run without an API key.
+## Stretch
 
-The docstrings are the contract. Read every one before you start.
+```bash
+pip install -e ".[stretch]" && TOK_STRETCH=1 pytest -q -k stretch
+```
 
-## Acceptance tests
+- `BPE.from_tiktoken("gpt2")` rebuilds GPT-2's merges and must encode exactly as tiktoken does.
+- `JsonConstraint` over GPT-2's 50,000-token vocabulary must mask fast enough to use.
+- Optional, outside the tests: run your `JsonConstraint` on top of a real model's logits (GPT-2 small through `transformers`, on CPU).
 
-`tests/test_acceptance.py` must pass in full:
+## Deliverable
 
-- An exact phrase from one document returns that document first.
-- A query with no known words returns an empty result, not an error and not NaN.
-- An empty document becomes a row of zeros, not NaN.
-- Cosine scores fall in [−1, 1], and non-empty rows have unit length.
-- IDF matches the formula in the docstring, and a rare word outweighs a common one.
-- Top-k returns the best first and breaks ties by the lower index.
-- Results match a slow pure-Python reference on a random corpus.
-- The index survives a save and load unchanged.
-- `ask` flags truncation, includes every source in the prompt, and does not call the model when there are no snippets.
-
-## Seeded bugs: prove your tests work
-
-Passing the acceptance tests is not enough. Add your own tests in `tests/test_mine.py`, then plant each bug below in your working code, one at a time. For each bug, record which of your tests fails.
-
-1. Skip the IDF multiplication in `tfidf_matrix`.
-2. Normalize over `axis=0` instead of per row.
-3. Return documents with a score of 0.0 from `top_k`.
-4. Use `np.argsort(-scores)` in `top_k` without `kind="stable"`.
-
-**Bug 4 passes every acceptance test.** NumPy's default sort does not keep equal elements in their original order, but on a 5-element array it happens to. Write a test that exposes it. Hint: try a few hundred tied scores.
-
-## Defense
-
-At the end of the week, defend your build to a moderator and your peers. They pick lines in your code and ask what breaks if each one changes. See [the defense](https://dpaul0501.github.io/ai-engineer-100/how-it-works/#the-defense).
+- **The package on TestPyPI**, as `tok-<your-github-handle>`.
+- **A post** with two tables: bytes per token for English vs Hindi records (yours vs GPT-2's), and valid-JSON rate free vs constrained across n and temperature.
+- **CI:** GitHub Actions runs `pytest` on every push.
