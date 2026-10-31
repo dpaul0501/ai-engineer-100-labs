@@ -39,7 +39,7 @@ The [Week 1 tutorial](../tutorials/week_01.html) teaches each concept with its c
 | Project | ~20 h | Seven milestones, in the order spec → contract → test → code |
 | DSA reps | 45 min/day | 13 problems: hashing, heaps, tries, stacks and automata, sampling |
 | System design | ~3 h | ◆ Web crawler (timed mock) and a unique ID generator |
-| Kaggle rep | ~3 h | Titanic |
+| Practice projects | ~4 h | A token-tax study with confidence intervals, and Kaggle's *LLM - Detect AI Generated Text* with your own tokenizer |
 
 ### Every unit follows the same cycle
 
@@ -252,14 +252,38 @@ Put the week together as one system and defend it with numbers: a service that t
 
 - **Do:** `pip install -e .` and `tok --help` work. GitHub Actions runs `pytest` on push. Publish to TestPyPI as `tok-<your-handle>`.
 
-## Kaggle rep: [Titanic](https://www.kaggle.com/competitions/titanic)
+## Practice projects: use what you built on real data
 
-1. **Data contract first:** a schema check for `train.csv` and `test.csv` (columns, dtypes, ranges, allowed nulls, `Survived` absent from test), run as a test.
-2. **Validation:** stratified 5-fold cross-validation, reported as mean ± standard deviation.
-3. **Baselines:** everyone dies; then women survive. Submit the second.
-4. **This week's idea:** estimate P(survived | sex, class) **by counting, with add-k smoothing**: your n-gram maths on a table. Then fit a logistic regression and compare.
-5. **Calibration:** a reliability plot and the Brier score for both models.
-6. **Ship:** a submission, a public notebook, and the gap between cross-validation and the leaderboard, explained.
+Both projects reuse `tok` and practise this week's probability and statistics on real data.
+
+### 1. The token tax, with error bars (~1.5 h)
+
+**Question:** how many more tokens does the same sentence cost in Indian languages, and how sure are you?
+
+- **Data:** [FLORES+](https://huggingface.co/datasets/openlanguagedata/flores_plus) `devtest`: the same 1,012 sentences translated into 200+ languages, so every comparison is paired. It is gated: accept the terms on Hugging Face, and use it only for evaluation, as its card asks.
+- **Do:** for English, Hindi, Tamil, Bengali and one more language, count tokens per sentence with `gpt2`, `cl100k_base`, `o200k_base` (tiktoken) and your own tokenizer trained on TinyStories.
+- **Statistics:**
+    - Use the **paired** ratio per sentence (language tokens / English tokens), not the ratio of two averages. Report both, and explain why they differ.
+    - A **bootstrap 95% confidence interval** for the mean ratio: resample sentences with replacement 10,000 times.
+    - Is `o200k_base` better than `cl100k_base` for Hindi? Bootstrap the paired *difference* and say whether the interval excludes 0.
+- **Deliverable:** one table and one chart with error bars, used in your post.
+
+### 2. Kaggle: [LLM - Detect AI Generated Text](https://www.kaggle.com/competitions/llm-detect-ai-generated-text) (~2.5 h)
+
+**Question:** was this essay written by a student or by an LLM? The metric is ROC AUC. The competition has ended, but late submissions are scored.
+
+- **Why this one:** strong public solutions trained their own **BPE tokenizer**, then counted **token n-grams**. That is exactly `tok`.
+- **Do:**
+    1. Write a **data contract** for the CSVs (columns, types, label values), run as a test.
+    2. Train your `BPE` on the essays; encode everything.
+    3. **Model A, two language models:** fit one `NGramLM` on human essays and one on generated essays (the competition's train set has few generated essays; add a public generated-essay dataset and cite it). Score an essay by the **log-likelihood ratio** log P(essay | AI) − log P(essay | human). This is naive Bayes with an n-gram model, and it uses your perplexity code directly.
+    4. **Model B:** TF-IDF over your token n-grams, then logistic regression.
+    5. Validate with stratified 5-fold cross-validation; report mean ± standard deviation of AUC, then submit.
+- **Probability and statistics:**
+    - Bayes' rule: why the likelihood ratio is the optimal score when the two models are right, and what the prior P(AI) changes (nothing, for AUC).
+    - **AUC is a probability:** the chance that a random AI essay scores above a random human one. Compute it from that definition with pairs, and check it matches `sklearn`.
+    - Which n gives the best likelihood ratio? Relate it to the perplexity table from the lab.
+- **Deliverable:** a public notebook, your CV and leaderboard scores, and one paragraph on the gap.
 
 ## End of the week
 
@@ -280,11 +304,11 @@ A constrained decoder guarantees the JSON parses. What does it *not* guarantee, 
 | Day | DSA | Project | ML | Software Delivery | Other |
 |---|---|---|---|---|---|
 | 1 | Two Sum, Group Anagrams | Read the starter; write `SPEC.md` | Counting is MLE | Practice 1 (red tests) | Lecture |
-| 2 | Top K Frequent, Kth Largest | Milestone 2 (BPE) | — | Practice 2 | Kaggle: data contract |
+| 2 | Top K Frequent, Kth Largest | Milestone 2 (BPE) | — | Practice 2 | Token tax: FLORES+ counts |
 | 3 | Random Pick with Weight, Random Node | Milestone 3 (round trip, streaming) | Perplexity | — | Design: unique ID generator |
-| 4 | Find K Pairs | Milestones 4–5 (samplers, decoding) | Softmax and temperature | — | Kaggle: baselines, counting model |
-| 5 | Implement Trie, Add and Search Words | Milestone 6 (automaton) | — | Practice 3 | ◆ Design mock: web crawler |
-| 6 | Valid Parentheses, Decode String, Valid Number | Milestone 6 (constraint), the experiment | What a mask does | Practice 4 | Kaggle: calibration, submit |
+| 4 | Find K Pairs | Milestones 4–5 (samplers, decoding) | Softmax and temperature | — | Token tax: bootstrap intervals |
+| 5 | Implement Trie, Add and Search Words | Milestone 6 (automaton) | — | Practice 3 | ◆ Design mock: web crawler · Kaggle: data contract, baseline |
+| 6 | Valid Parentheses, Decode String, Valid Number | Milestone 6 (constraint), the experiment | What a mask does | Practice 4 | Kaggle: tokenizer, two n-gram models, submit |
 | 7 | Word Search II, peer mock | Milestone 7 (ship) | — | — | Capstone design, defense, post |
 
 ## Done when
@@ -297,5 +321,5 @@ A constrained decoder guarantees the JSON parses. What does it *not* guarantee, 
 - [ ] 13 DSA problems, each with a solution, 1–2 variations, tests and corner cases
 - [ ] 4 ML units, with the perplexity table
 - [ ] Two design docs, one of them mocked, and the `tok-serve` capstone design
-- [ ] A Titanic submission and a public notebook
+- [ ] The token-tax table with bootstrap intervals, and a Kaggle submission with a public notebook
 - [ ] The post

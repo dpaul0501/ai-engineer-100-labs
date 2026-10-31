@@ -2,7 +2,7 @@
 
 Four builds, each one used by the next. By Day 30 you have an agent that runs on parts you wrote yourself: your tokenizer and decoder, your context and memory library, and your search engine.
 
-Every week has the same shape: **use** the real thing, **measure** it, then **rebuild** its core. Every build goes spec → contract → test → code, with your failing tests committed first.
+Every week has the same shape: **use** the real thing, **measure** it, then **rebuild** its core. Every build goes spec → contract → test → code, with your failing tests committed first. Each week's **practice projects** apply the build to real data; a Kaggle competition is used only when it exercises that week's probability and statistics.
 
 | Week | Days | Build |
 |---|---|---|
@@ -18,7 +18,7 @@ Every week has the same shape: **use** the real thing, **measure** it, then **re
 - **AI:** tokenization and the token tax, beam search, structured output
 - **System Design:** ◆ web crawler · unique IDs · capstone: a structured-output service
 - **Software Delivery:** golden and property tests, planted bugs, CI
-- **Kaggle:** Titanic
+- **Practice:** a token-tax study on FLORES+ with bootstrap intervals · Kaggle [LLM - Detect AI Generated Text](https://www.kaggle.com/competitions/llm-detect-ai-generated-text) with your own BPE and two n-gram models (likelihood ratio, AUC)
 
 ## Week 2 · Prompt, context and memory engineering
 
@@ -27,7 +27,7 @@ Every week has the same shape: **use** the real thing, **measure** it, then **re
 - **AI:** system prompts, few-shot selection, compaction, episodic and semantic memory, prompt caching
 - **System Design:** ◆ rate limiter · distributed cache
 - **Software Delivery:** prompt versioning, contract tests for prompts
-- **Kaggle:** House Prices
+- **Practice:** replicate "lost in the middle": accuracy vs where a fact sits in the context, with binomial confidence intervals · Kaggle [LLM Prompt Recovery](https://www.kaggle.com/competitions/llm-prompt-recovery) (recover the rewrite prompt; a cubed cosine-similarity metric)
 
 ## Week 3 · RAG and search
 
@@ -36,7 +36,7 @@ Every week has the same shape: **use** the real thing, **measure** it, then **re
 - **AI:** chunking, rank fusion, reranking, access-controlled retrieval, retrieved text as untrusted input
 - **System Design:** ◆ web search · autocomplete
 - **Software Delivery:** ingestion pipeline, data contracts, freshness and deletes
-- **Kaggle:** LLM Science Exam
+- **Practice:** evaluate your search on a public benchmark with nDCG and bootstrap intervals · Kaggle [LLM Science Exam](https://www.kaggle.com/competitions/kaggle-llm-science-exam) (RAG over Wikipedia, MAP@3)
 
 ## Week 4 · Month project: the agentic harness
 
@@ -45,7 +45,7 @@ Every week has the same shape: **use** the real thing, **measure** it, then **re
 - **AI:** tool schemas using Week 1's constrained decoding; Week 2 memory and Week 3 search as tools; skills, MCP, subagents
 - **System Design:** ◆ chat · job scheduler
 - **Software Delivery:** sandboxing, tracing, prompt-injection tests, release
-- **Kaggle:** AI Mathematical Olympiad
+- **Practice:** the unbiased pass@k estimator, and how often majority voting is right as samples grow · Kaggle [AI Mathematical Olympiad](https://www.kaggle.com/competitions/ai-mathematical-olympiad-prize) (an agent that writes and runs code)
 
 ## How the weeks connect
 
