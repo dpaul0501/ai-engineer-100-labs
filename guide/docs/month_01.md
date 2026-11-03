@@ -6,19 +6,21 @@ Every week has the same shape: **use** the real thing, **measure** it, then **re
 
 | Week | Days | Build |
 |---|---|---|
-| 1 | 1–7 | **[Tokens and decoding](weeks/week_01.md):** a BPE tokenizer, samplers, and a decoder that can only output valid JSON |
+| 1 | 1–7 | **[Tokenization](week_01/index.html):** byte-level BPE from first principles: the week reading, five days of ML, algorithms and design, and a weekend build |
 | 2 | 8–14 | **Prompt, context and memory engineering:** context within a token budget, compaction, short- and long-term memory |
 | 3 | 15–21 | **RAG and search:** inverted index, BM25, HNSW, hybrid retrieval, reranking, GraphRAG |
 | 4 | 22–30 | **Month project, the agentic harness:** agent loop, tools, skills, MCP, subagents, permissions |
 
-## Week 1 · Tokens and decoding
+## Week 1 · Tokenization
 
-- **DSA:** hashing, heaps with lazy deletion, tries, stacks and automata, prefix sums
-- **ML:** maximum likelihood, perplexity, softmax and temperature, top-k and top-p
-- **AI:** tokenization and the token tax, beam search, structured output
-- **System Design:** ◆ web crawler · unique IDs · capstone: a structured-output service
-- **Software Delivery:** golden and property tests, planted bugs, CI
-- **Practice:** a token-tax study on FLORES+ with bootstrap intervals · Kaggle [LLM - Detect AI Generated Text](https://www.kaggle.com/competitions/llm-detect-ai-generated-text) with your own BPE and two n-gram models (likelihood ratio, AUC)
+Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html).
+
+- **DSA:** hash maps and sliding windows, greedy vs optimal, Huffman, heaps with lazy deletion, inverted index, linked lists, LRU cache
+- **ML:** Zipf's law, the length / vocabulary / learnability trade-off, entropy and bits per byte, sufficient statistics, BPE-dropout
+- **AI:** the token tax, production split patterns, glitch tokens and other tokenizer-caused failures
+- **System Design:** the vocabulary budget, training on terabytes (MapReduce), serving and versioning a tokenizer
+- **Software Delivery:** contracts and invariants, golden, property and differential tests, a versioned file format
+- **Practice:** a token-tax study on FLORES+ with bootstrap intervals, and a vocabulary sweep on held-out text
 
 ## Week 2 · Prompt, context and memory engineering
 

@@ -27,6 +27,8 @@ A support team wants every incoming ticket turned into a JSON record by a langua
 
 The [Week 1 tutorial](../tutorials/week_01.html) teaches each concept with its code, a live demo, the DSA and ML fundamentals underneath, and the LeetCode problems that practise it.
 
+The tokenizer has its own week-long chapter, [BPE from first principles](../week_01/index.html): a main reading with the problem, the formulation, the algorithm, the code and a worked example; then five days, each with an ML, an algorithms and a design block (reading, practice, variations, solutions, further reading); then a weekend build. Its checkpoints fill a coverage tracker by dimension.
+
 **Pre-read (one page each, before Day 1):** calling an LLM API with JSON output; running a small open model locally with [Ollama](https://ollama.com/). These are background, not the week.
 
 **Real-world deliverable:**

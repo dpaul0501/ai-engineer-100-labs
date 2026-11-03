@@ -2,12 +2,21 @@ site_name: '100 Days: Daily Guide'
 site_description: The self-paced daily guide for the 100-day Zero to One AI Engineer
   program.
 repo_url: https://github.com/dpaul0501/ai-engineer-100-labs
+copyright: Text and code by Debjyoti Paul, licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC
+  BY 4.0</a>
 docs_dir: docs
 nav:
 - Start here: index.md
 - Month 1 plan: month_01.md
 - Weeks:
-  - 'Week 1: Tokens and Decoding': weeks/week_01.md
+  - 'Week 1: Tokenization':
+    - Week reading: week_01/index.html
+    - 'Day 1: Text as data': week_01/day_1.html
+    - 'Day 2: The objective': week_01/day_2.html
+    - 'Day 3: Information': week_01/day_3.html
+    - 'Day 4: Fast training': week_01/day_4.html
+    - 'Day 5: Encoding and serving': week_01/day_5.html
+    - Worksheet and learning checks: week_01/worksheet.html
 - By dimension:
   - DSA: tracks/dsa.md
   - ML: tracks/ml.md

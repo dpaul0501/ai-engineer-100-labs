@@ -1,6 +1,6 @@
 # Start Here
 
-This is the guide for the 100-day Zero to One AI Engineer program. It is self-paced: **one page per week**, worked through at your own speed. Start Week 1 whenever you are ready, and move on when you finish its checklist.
+This is the guide for the 100-day Zero to One AI Engineer program. It is self-paced and worked through at your own speed: each week starts with a week reading, then one page per day, then a worksheet. Start Week 1 whenever you are ready, and move on when you finish its checklist.
 
 The program itself (philosophy, how each week works, the paths, and what you build) is on the [public site](https://dpaul0501.github.io/ai-engineer-100/).
 

@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
+<title>BPE from First Principles</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* A chapter notebook: problem → formulation → theory → structures → algorithm → design → project.
+   Every section ends with a checkpoint; checkpoints fill the coverage bars. */
+:root{
+  --bg:#f2f5f4; --panel:#ffffff; --ink:#14201e; --muted:#5a6a66; --line:#d6dfdc;
+  --accent:#0c6a65; --accent-soft:#e0eeec; --trace:#ad5d17; --trace-soft:#f5e8db;
+  --code-bg:#eaf0ee; --good:#1d7a4c; --good-soft:#e1f1e8; --bad:#b03838; --bad-soft:#f7e3e3;
+  --dsa:#0c6a65; --ml:#1d7a4c; --ai:#ad5d17; --sys:#b03838; --del:#5a49b0; --del-soft:#ebe8f7;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Serif 4",Charter,"Iowan Old Style",Georgia,serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --rail:16.5rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:1.0625rem/1.65 var(--f-body)}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,.mono{font-family:var(--f-mono);font-variant-ligatures:none}
+code{background:var(--code-bg);padding:.08em .35em;border-radius:4px;font-size:.86em}
+pre{background:var(--code-bg);color:var(--ink);padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font-size:.8rem;line-height:1.55;border:1px solid var(--line);margin:.6rem 0 1rem}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--muted)}
+h1,h2,h3,h4{font-family:var(--f-display);text-wrap:balance;line-height:1.15;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,4vw,2.8rem);font-weight:800;margin:.3rem 0 .8rem}
+h2{font-size:1.6rem;font-weight:800;margin:0 0 .4rem}
+h3{font-size:1.12rem;font-weight:700;margin:1.8rem 0 .3rem}
+h4{font-size:.95rem;font-weight:700;margin:1.2rem 0 .2rem}
+p,li{max-width:70ch}
+.layout{display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+nav.rail{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:1.4rem .7rem 2rem}
+.brand{font:800 1rem var(--f-display);padding:0 .6rem .8rem;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+.rail-label{font:700 .66rem var(--f-display);color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:1rem .6rem .3rem}
+nav.rail a{display:flex;gap:.55rem;align-items:baseline;padding:.3rem .6rem;border-radius:6px;color:var(--ink);text-decoration:none;font:500 .84rem var(--f-display)}
+nav.rail a:hover{background:var(--accent-soft)}
+nav.rail a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+nav.rail a .n{font:600 .68rem var(--f-mono);color:var(--muted);min-width:1.3rem}
+nav.rail a .ok{margin-left:auto;font:700 .7rem var(--f-mono);color:var(--good)}
+main{padding-block:2rem 5rem;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
+.page{max-width:56rem;margin:0 auto}
+.eyebrow{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+.lead{font-size:1.18rem;color:var(--muted);max-width:62ch}
+.muted{color:var(--muted)}.small{font-size:.86rem}
+section.s{padding:2.6rem 0 1rem;border-top:1px solid var(--line);scroll-margin-top:.5rem}
+.shead{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem 1rem;flex-wrap:wrap;margin-bottom:.4rem}
+.sno{font:700 .74rem var(--f-mono);color:var(--accent);letter-spacing:.08em}
+.pill{font:600 .72rem var(--f-display);border:1px solid var(--line);border-radius:99px;padding:.15rem .6rem;color:var(--muted);white-space:nowrap}
+.dims{display:flex;gap:.35rem;flex-wrap:wrap}
+.dim{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.08em;padding:.12rem .45rem;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.dim.dsa,.t-dsa{color:var(--dsa)}.dim.ml,.t-ml{color:var(--ml)}.dim.ai,.t-ai{color:var(--ai)}.dim.sys,.t-sys{color:var(--sys)}.dim.del,.t-del{color:var(--del)}
+.idea{font-size:1.12rem;border-left:3px solid var(--accent);padding:.2rem 0 .2rem 1rem;margin:1rem 0;max-width:66ch}
+.math{font:1rem/1.9 var(--f-mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem 1rem;margin:.8rem 0;overflow-x:auto;white-space:pre}
+.math .c{color:var(--muted)}
+.watch{background:var(--trace-soft);border-radius:8px;padding:.7rem 1rem;margin:1rem 0;max-width:72ch}
+.watch>b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.watch ul{margin:.3rem 0 0;padding-left:1.2rem}
+.tablewrap{overflow-x:auto;margin:.8rem 0 1.2rem}
+table{border-collapse:collapse;width:100%;font:.86rem/1.45 var(--f-display);background:var(--panel)}
+th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:700;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--bg)}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-size:.8rem;font-variant-numeric:tabular-nums}
+tr.hi td{background:var(--accent-soft)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:1.2rem 0;font:600 .8rem var(--f-display)}
+.flow .b{padding:.4rem .65rem;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.flow .b.hi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.flow .ar{color:var(--muted)}
+/* Fundamentals cards: self-contained concept + deeper + practice */
+.fund{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:1.4rem 0;overflow:hidden}
+.fund .fh{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:.55rem 1rem;border-bottom:1px solid var(--line);background:var(--bg)}
+.fund .fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))}
+.fund .f{padding:.8rem 1rem;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0;font-size:.95rem}
+.fund .f p{margin:.35rem 0}
+.ft{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.08em}
+.fl{font:.82rem/1.7 var(--f-display);margin:.4rem 0 0}
+.fl b{font-weight:700;color:var(--muted);margin-right:.3rem}
+a.lc{display:inline-block;font:600 .74rem var(--f-display);padding:.08rem .45rem;margin:.1rem .15rem .1rem 0;border-radius:4px;background:var(--accent-soft);text-decoration:none;white-space:nowrap}
+a.lc:hover{background:var(--accent);color:var(--panel)}
+/* Checkpoints */
+.check{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:var(--panel);margin:1.6rem 0 .6rem;padding:.8rem 1rem}
+.check .ch{display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.check .ch b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--accent)}
+.check .ch span{font:600 .74rem var(--f-mono);color:var(--muted)}
+.check .grp{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.7rem 0 .2rem}
+label.ck{display:grid;grid-template-columns:1.3rem minmax(0,1fr) auto;gap:.5rem;align-items:start;padding:.32rem 0;border-bottom:1px dashed var(--line);font-size:.95rem;cursor:pointer}
+label.ck:last-child{border-bottom:0}
+label.ck input{margin:.32rem 0 0;accent-color:var(--accent);width:1rem;height:1rem}
+label.ck:has(input:checked) .tx{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.next{font:.86rem/1.65 var(--f-display);margin:.8rem 0 0;padding-top:.6rem;border-top:1px solid var(--line)}
+.next b{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:.15rem}
+.next ul{margin:0;padding-left:1.1rem}
+/* Progress */
+.prog{display:grid;gap:.45rem}
+.prow{display:grid;grid-template-columns:6.6rem minmax(0,1fr) 2.8rem;gap:.5rem;align-items:center;font:600 .74rem var(--f-display)}
+.prow .bar{height:.5rem;background:var(--line);border-radius:99px;overflow:hidden}
+.prow .bar i{display:block;height:100%;width:0;border-radius:99px;transition:width .3s}
+.prow .v{font:600 .7rem var(--f-mono);text-align:right;color:var(--muted)}
+.rail .prog{padding:0 .6rem}
+.progcard{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:1rem;margin:1.2rem 0}
+.progcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+.progcard .top b{font:800 1rem var(--f-display)}
+.linkbtn{font:600 .72rem var(--f-display);background:none;border:0;color:var(--muted);cursor:pointer;text-decoration:underline;padding:0}
+/* Coverage grid */
+.cov td,.cov th{text-align:center}
+.cov td:first-child,.cov th:first-child{text-align:left}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:currentColor}
+/* Demos */
+.demo{border:1px solid var(--trace);border-radius:12px;margin:1.4rem 0;background:var(--panel);overflow:hidden}
+.demo>.dh{background:var(--trace-soft);padding:.55rem 1rem;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.demo>.dh b{font:700 .9rem var(--f-display)}
+.demo>.dh span{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.demo .db{padding:1rem}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;margin-bottom:.8rem;font:500 .84rem var(--f-display)}
+.controls label{display:flex;align-items:center;gap:.45rem}
+.controls input[type=text],.controls textarea{font:500 .86rem var(--f-mono);padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.btn{font:600 .8rem var(--f-display);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:.38rem .7rem;border-radius:7px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn.pri:hover{color:var(--panel);opacity:.9}
+.toks{display:flex;flex-wrap:wrap;gap:.25rem;margin:.3rem 0}
+.tk{font:500 .8rem var(--f-mono);padding:.1rem .36rem;border-radius:4px;background:var(--accent-soft);color:var(--ink);white-space:pre;border:1px solid transparent}
+.tk.new{border-color:var(--accent);background:var(--accent);color:var(--panel)}
+.tk.mk{background:var(--bad-soft);color:var(--bad)}
+.stat{font:500 .8rem var(--f-mono);color:var(--muted);margin:.5rem 0 0;font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink)}
+.simgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.box{border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;min-width:0;background:var(--bg)}
+.box>.k{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.3rem;display:flex;justify-content:space-between;gap:.4rem}
+.box>.k code{text-transform:none;letter-spacing:0;font-size:.95em}
+.wrow{display:grid;grid-template-columns:2.4rem minmax(0,1fr);gap:.4rem;align-items:center;padding:.12rem .2rem;border-radius:4px}
+.wrow.hit{background:var(--trace-soft)}
+.wrow .f{font:600 .72rem var(--f-mono);color:var(--muted);text-align:right}
+.mini{width:100%;font:.76rem var(--f-mono);border-collapse:collapse;background:none}
+.mini td{padding:.14rem .3rem;border-bottom:1px solid var(--line)}
+.mini td.r{text-align:right}
+.ok-t{color:var(--good)}
+.up{color:var(--good);font-weight:600}.down{color:var(--bad);font-weight:600}
+.stale td{color:var(--muted);text-decoration:line-through}
+.log{font:.8rem/1.6 var(--f-mono);background:var(--code-bg);border-radius:8px;padding:.6rem .8rem;margin-top:.8rem;max-height:14rem;overflow:auto}
+.log div{padding:.05rem 0}
+.log .h{color:var(--accent);font-weight:600}
+.log .s{color:var(--muted)}
+details{margin:1rem 0;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+details>summary{cursor:pointer;padding:.6rem 1rem;font:600 .86rem var(--f-display)}
+details>div{padding:0 1rem .8rem}
+.obj{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.8rem;margin:1rem 0}
+.obj>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;min-width:0}
+.obj ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:.92rem}
+.obj li{margin:.25rem 0}
+.wi{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:.8rem 1rem;margin:.8rem 0}
+.wi h4{margin:0 0 .3rem;display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.wi h4 .id{font:700 .74rem var(--f-mono);color:var(--accent)}
+.wi p,.wi ul{font-size:.95rem;margin:.3rem 0}
+.wi .acc{font:.86rem/1.6 var(--f-display)}
+.wi .acc b{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:var(--muted);font:.85rem/1.6 var(--f-display)}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  nav.rail{position:sticky;top:0;z-index:5;height:auto;display:flex;gap:.2rem;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:.45rem max(16px,env(safe-area-inset-right,0px)) .45rem max(16px,env(safe-area-inset-left,0px));padding-top:calc(.45rem + env(safe-area-inset-top,0px))}
+  nav.rail .brand,nav.rail .rail-label,nav.rail .prog{display:none}
+  nav.rail a{white-space:nowrap}
+  .simgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .prow{grid-template-columns:5.6rem minmax(0,1fr) 2.6rem}
+  label.ck{grid-template-columns:1.3rem minmax(0,1fr)}
+  label.ck .dim{grid-column:2;justify-self:start}
+}
+
+/* Week layout: main reading, then days of ML / Algorithms / Design blocks, then the build */
+.weekmap td{font-size:.84rem}
+.weekmap td:first-child{font:700 .78rem var(--f-mono);white-space:nowrap;color:var(--accent)}
+.dayhead{display:flex;gap:.6rem 1rem;align-items:baseline;flex-wrap:wrap}
+.blk{border:1px solid var(--line);border-top:3px solid var(--c,var(--accent));border-radius:12px;background:var(--panel);padding:1rem 1.1rem .6rem;margin:1.4rem 0}
+.blk.ml{--c:var(--ml)}.blk.alg{--c:var(--dsa)}.blk.des{--c:var(--sys)}
+.blk>.bh{display:flex;justify-content:space-between;gap:.4rem 1rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.2rem}
+.blk>.bh .kind{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--c)}
+.blk>h3{margin:.1rem 0 .5rem}
+.part{margin:1rem 0 .2rem;padding-top:.7rem;border-top:1px dashed var(--line)}
+.part>b{display:block;font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.25rem}
+.part ul{margin:.2rem 0;padding-left:1.15rem;font-size:.95rem}
+.part li{margin:.2rem 0}
+details.sol{border-color:var(--c,var(--line));background:var(--bg)}
+details.sol>summary{color:var(--c,var(--ink))}
+details.sol>div{padding-top:.2rem}
+
+/* Visual components: metric cards, code cards, bar charts, diagrams, equations */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.7rem;margin:1.2rem 0}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;min-width:0}
+.metric .v{font:800 1.7rem/1.15 var(--f-display);letter-spacing:-.03em;color:var(--accent)}
+.metric .l{font:.8rem/1.4 var(--f-display);color:var(--muted);margin-top:.2rem}
+.code{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.8rem 0 1.1rem;background:var(--code-bg)}
+.code>.ch{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.32rem .5rem .32rem .85rem;background:var(--panel);border-bottom:1px solid var(--line);font:600 .72rem var(--f-mono);color:var(--muted)}
+.code>pre{margin:0;border:0;border-radius:0}
+button.copy{font:600 .68rem var(--f-display);border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:6px;padding:.15rem .5rem;cursor:pointer}
+button.copy:hover{color:var(--accent);border-color:var(--accent)}
+.token.comment{color:var(--muted);font-style:italic}
+.token.keyword,.token.boolean{color:var(--del)}
+.token.string,.token.triple-quoted-string{color:var(--ml)}
+.token.number{color:var(--ai)}
+.token.function{color:var(--accent)}
+.token.builtin,.token.class-name{color:var(--sys)}
+.token.operator,.token.punctuation{color:var(--ink);opacity:.8}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;margin:1rem 0}
+.chart>.t{font:700 .76rem var(--f-display);color:var(--ink);margin-bottom:.45rem}
+.chart .sub{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.6rem 0 .15rem}
+.br{display:grid;grid-template-columns:minmax(6rem,11rem) minmax(0,1fr) 5rem;gap:.6rem;align-items:center;font:.8rem var(--f-display);padding:.14rem 0}
+.br>span:first-child{min-width:0;overflow-wrap:anywhere}
+.br .tr{height:.72rem;background:var(--line);border-radius:99px;overflow:hidden}
+.br .tr i{display:block;height:100%;background:var(--c,var(--accent));border-radius:99px}
+.br .v{font:600 .76rem var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chart .cap,.dg .cap{font:.8rem/1.5 var(--f-display);color:var(--muted);margin-top:.55rem}
+.dg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem;margin:1rem 0;overflow-x:auto}
+.seq{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.nd{font:600 .84rem var(--f-mono);padding:.28rem .5rem;border-radius:6px;background:var(--accent-soft);border:1px solid transparent;white-space:pre;color:var(--ink)}
+.nd.hot{background:var(--accent);color:var(--panel)}
+.nd.new{border-color:var(--accent);color:var(--accent);background:var(--panel)}
+.lk{color:var(--muted);font:.8rem var(--f-mono)}
+.pp{font:600 .76rem var(--f-mono);padding:.1rem .42rem;border-radius:4px;white-space:nowrap}
+.pp.rm{background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.pp.add{background:var(--good-soft);color:var(--good)}
+.vflow{display:grid;justify-items:center;gap:.25rem}
+.vbox{border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;background:var(--bg);text-align:center;font:.84rem/1.45 var(--f-display);width:100%;max-width:34rem;min-width:0}
+.vbox b{display:block;font-weight:700}
+.varr{color:var(--accent);font:600 .78rem var(--f-display)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.steps{display:grid;gap:.55rem}
+.step{display:grid;grid-template-columns:3.2rem minmax(0,1fr) minmax(0,15rem);gap:.8rem;align-items:center;padding:.55rem 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border-bottom:0}
+.step .k{font:700 .7rem var(--f-mono);color:var(--muted)}
+.step .why{font:.78rem/1.45 var(--f-display);color:var(--muted)}
+.step .why b{color:var(--ink)}
+.cycle{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.4rem}
+.eq{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.5rem 1rem;margin:.8rem 0;overflow-x:auto;overflow-y:hidden}
+.eq mjx-container{margin:.4em 0!important}
+mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
+@media (max-width:640px){.step{grid-template-columns:2.6rem minmax(0,1fr)}.step .why{grid-column:2}.grid2{grid-template-columns:minmax(0,1fr)}.br{grid-template-columns:minmax(5rem,7.5rem) minmax(0,1fr) 4.2rem}}
+
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+.daycards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:.7rem;margin:1rem 0}
+.daycard{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;text-decoration:none;color:var(--ink);min-width:0}
+.daycard:hover{border-color:var(--accent)}
+.daycard b{display:block;font:700 .95rem var(--f-display);color:var(--accent);margin-bottom:.2rem}
+.daycard span{font:.84rem/1.45 var(--f-display);color:var(--muted)}
+.daycard.hi{border-color:var(--accent);background:var(--accent-soft)}
+.weekmap a{font-weight:700}
+</style>
+<div class="layout">
+<nav class="rail" aria-label="Week 1">
+  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="rail-label">Coverage, whole week</div>
+  <div class="prog" data-prog></div>
+  <div class="rail-label">Week 1 · Tokenization</div>
+  <a href="index.html" class="on" data-page="index.html"><span class="n">R</span>Week reading</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The objective</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
+  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="../"><span class="n">↩</span>Guide home</a>
+</nav>
+
+<main><div class="page">
+<section id="start" style="padding-top:0">
+  <div class="eyebrow">Week 1 · Tokenization</div>
+  <h1>Byte pair encoding, from first principles</h1>
+  <p class="lead">Every language model reads and writes tokens, not text. This week you build the tokenizer GPT-style models use. The main reading gives you the whole solution: the problem, how to state it precisely, what BPE does, the algorithm, the code and a worked example. Each day then goes deeper on one theme from three sides: ML, algorithms and design. At the weekend you put it all together into a working, tested tokenizer and use it to measure something real.</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="v">6.9×</div><div class="l">more tokens for the same sentence in Hindi than English, with GPT-2's tokenizer</div></div>
+    <div class="metric"><div class="v">3.7</div><div class="l">bytes per token on held-out text, from 1.0 with raw bytes</div></div>
+    <div class="metric"><div class="v">60×</div><div class="l">faster training from counting once and updating locally, same merges</div></div>
+    <div class="metric"><div class="v">13 vs 12</div><div class="l">tokens: greedy BPE vs the best 2-merge plan. Greedy is good, not optimal</div></div>
+  </div>
+
+  <div class="progcard">
+    <div class="top"><b>Your coverage</b><span class="small muted"><span data-total></span> · saved in this browser only · <button class="linkbtn" type="button" data-reset>Reset</button></span></div>
+    <div class="prog" data-prog></div>
+  </div>
+
+  <h3>How the week works</h3>
+  <div class="flow"><span class="b hi">Main reading · ~4 h</span><span class="ar">→</span><span class="b">Day 1–5 · ~3 h each</span><span class="ar">→</span><span class="b hi">Weekend build · ~8 h</span></div>
+  <ul>
+    <li><b>Main reading first.</b> Read it end to end before Day 1. It is enough to build a correct tokenizer; the days make you understand it, make it fast, and design it properly.</li>
+    <li><b>Every day has three blocks:</b> <span class="t-ml">ML</span>, <span class="t-dsa">Algorithms</span> and <span class="t-sys">Design</span>, about an hour each. Each block has a reading, practice problems, variations, a worked solution (closed until you open it), and further reading, video or blog links.</li>
+    <li><b>Every day ends with a checkpoint.</b> Tick the subproblems you have done; the coverage bars fill by dimension.</li>
+    <li><b>Self-paced.</b> "Day" means a unit of work, not a date. Take the time you need.</li>
+  </ul>
+
+  <h3>The week at a glance</h3>
+  <div class="tablewrap"><table class="weekmap">
+    <tr><th></th><th>Theme</th><th class="t-ml">ML</th><th class="t-dsa">Algorithms</th><th class="t-sys">Design</th></tr>
+    <tr><td>R</td><td><b>Main reading</b></td><td colspan="3">The problem, the formulation, what BPE does, the algorithm, the code, a worked example</td></tr>
+    <tr><td>D1</td><td><a href="day_1.html">Text as data</a></td><td>Zipf's law and the long tail</td><td>UTF-8, hash maps, sliding windows</td><td>The pre-tokenization pattern</td></tr>
+    <tr><td>D2</td><td><a href="day_2.html">The objective</a></td><td>Length vs vocabulary vs learnability</td><td>Greedy, and when it fails</td><td>Choosing the vocabulary budget</td></tr>
+    <tr><td>D3</td><td><a href="day_3.html">Information</a></td><td>Entropy and bits per byte</td><td>Huffman: a greedy that is optimal</td><td>Evaluating a tokenizer</td></tr>
+    <tr><td>D4</td><td><a href="day_4.html">Fast training</a></td><td>Counts are sufficient statistics</td><td>Heap, lazy deletion, inverted index</td><td>Contracts and tests</td></tr>
+    <tr><td>D5</td><td><a href="day_5.html">Encoding and serving</a></td><td>Failure modes and alternatives</td><td>The fast encoder and caches</td><td>Training on terabytes, serving at scale</td></tr>
+    <tr><td>WE</td><td><a href="worksheet.html"><b>Weekend build</b></a></td><td colspan="3"><code>tok.bpe</code> with tests, a vocabulary sweep, and the token tax with error bars</td></tr>
+  </table></div>
+
+  <h3>What you will be able to do</h3>
+  <div class="obj">
+    <div><span class="dim dsa">DSA</span><ul><li>Count with hash maps and size-2 sliding windows</li><li>Keep a running maximum with a heap and lazy deletion</li><li>Update counts incrementally with an inverted index</li><li>Show when greedy is optimal (Huffman) and when not (BPE)</li></ul></div>
+    <div><span class="dim ml">ML</span><ul><li>State tokenization as a constrained optimization</li><li>Compare tokenizers with entropy and bits per byte</li><li>Explain the length / vocabulary / learnability trade-off</li><li>Explain glitch tokens and segmentation noise</li></ul></div>
+    <div><span class="dim ai">AI</span><ul><li>Explain and measure the token tax across languages</li><li>Read a production tokenizer's split pattern</li><li>Explain spelling and arithmetic failures</li></ul></div>
+    <div><span class="dim sys">System Design</span><ul><li>Train a tokenizer on terabytes: what parallelizes</li><li>Size a tokenizer service</li><li>Version a tokenizer as part of a model</li></ul></div>
+    <div><span class="dim del">Software Delivery</span><ul><li>Write the contract and invariants before the code</li><li>Test with golden, property and differential tests</li><li>Ship a versioned file format</li></ul></div>
+  </div>
+  <p class="small muted">Prerequisites: Python, dictionaries and lists, big-O notation, logarithms. Everything else is introduced where it is used.</p>
+</section><section class="s" id="reading" data-sec="reading">
+  <div class="shead"><span class="sno">MAIN READING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="pill">~4 h</span></span></div>
+  <h2>The problem, and the whole solution</h2>
+
+  <h3>R.1 · A model needs a fixed alphabet. Text doesn't have one.</h3>
+  <p>A language model is a function from a sequence of ids to a probability for the next id. Both ends are fixed when the model is built: the input looks up one learned vector per id, and the output scores every id in a list of size <var>V</var>. Text is open-ended: any language, typos, emoji, code, names no one has seen. The <b>tokenizer</b> turns arbitrary text into ids from a fixed list and back. It is chosen once, before training, and every model trained with it is stuck with it.</p>
+  <div class="code"><div class="ch"><span>the contract</span><button class="copy" type="button">Copy</button></div><pre><code>encode : str  → list[int]        <span class="c"># every id in 0 .. V-1</span>
+decode : list[int] → str
+train  : corpus, V → tokenizer     <span class="c"># learn the list of tokens from data</span></code></pre></div>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>Requirement</th><th>Precisely</th><th>Why</th></tr>
+    <tr><td>R1</td><td><b>Lossless</b></td><td><code>decode(encode(x)) == x</code> for every string</td><td>Model output must turn back into exactly the text it means</td></tr>
+    <tr><td>R2</td><td><b>Total</b></td><td><code>encode</code> never fails, for any Unicode input</td><td>Users type anything</td></tr>
+    <tr><td>R3</td><td><b>Deterministic</b></td><td>Same input, same ids, on every machine</td><td>Training and serving must see the same tokens</td></tr>
+    <tr><td>R4</td><td><b>Short</b></td><td>Few tokens per byte</td><td>Compute, latency, price and context are counted in tokens</td></tr>
+    <tr><td>R5</td><td><b>Learnable</b></td><td>Every token appears often in training data</td><td>A token's vector is only as good as its examples</td></tr>
+    <tr><td>R6</td><td><b>Fast</b></td><td>Encoding keeps up with the model</td><td>It runs on every request and the whole corpus</td></tr>
+  </table></div>
+  <div class="tablewrap"><table>
+    <tr><th>Unit</th><th class="num">V</th><th>Total (R2)</th><th>Short (R4)</th><th>Learnable (R5)</th></tr>
+    <tr><td><b>Bytes</b></td><td class="num">256</td><td>yes: 256 bytes write anything</td><td>no: <code> the</code> is 4 steps</td><td>yes</td></tr>
+    <tr><td><b>Whole words</b></td><td class="num">millions</td><td>no: new words can't be written</td><td>yes</td><td>no: most words are rare</td></tr>
+    <tr class="hi"><td><b>Subwords (BPE)</b></td><td class="num">30k–200k</td><td>yes: falls back to bytes</td><td>mostly</td><td>mostly, by construction</td></tr>
+  </table></div>
+  <p><b>Why the details matter.</b> <em>"The children went to the market to buy fresh vegetables for dinner."</em> is 13 tokens in English with GPT-2, GPT-4's <code>cl100k_base</code> and GPT-4o's <code>o200k_base</code>. Its Hindi translation is 90, 65 and 22 tokens: Hindi users paid up to 6.9× the price and got 6.9× less context, purely because of the tokenizer. By the end of the week you can explain each number.</p>
+
+  <h3>R.2 · State it precisely</h3>
+  <p>Name the objects, the objective and the constraints before any algorithm.</p>
+  <ul>
+    <li><b>Base alphabet</b> <var>B</var>: the 256 byte values. UTF-8 writes every string as bytes, so <var>B</var> alone already gives R1 and R2.</li>
+    <li><b>Corpus</b> <var>D</var>: training text, cut into <b>chunks</b> (roughly words with their leading space), each chunk <var>w</var> occurring <var>f(w)</var> times. Merges never cross a chunk boundary.</li>
+    <li><b>Vocabulary</b> <var>V</var> ⊇ <var>B</var>, and a <b>segmentation</b> <var>s<sub>V</sub>(w)</var> of each chunk into tokens.</li>
+  </ul>
+  <div class="eq">\[
+\begin{aligned}
+\min_{V}\quad & L(V) \;=\; \sum_{w \in D} f(w)\,\bigl|s_V(w)\bigr| && \text{total tokens}\\
+\text{s.t.}\quad & |V| \le 256 + K && \text{budget: } K \text{ new tokens}\\
+& c_t(D) \ge \tau \quad \forall\, t \in V && \text{every token learnable (R5)}
+\end{aligned}
+\]</div>
+  <p>Shorter is better (R4), but without the budget the answer is useless: every chunk becomes its own token. The two constraints are the trade-off: a bigger vocabulary shortens text but creates rare, poorly learned tokens. Day 2 measures this trade-off; Day 3 explains it with information theory.</p>
+  <p>BPE searches a restricted family: every new token is <b>two existing tokens glued together</b>, and segmenting a chunk means <b>replaying the merges in order</b>. Training then reduces to one question, asked <var>K</var> times: <em>which pair do we merge next?</em></p>
+
+  <h3>R.3 · What BPE does</h3>
+  <div class="idea">Start with the 256 bytes as tokens. Count every adjacent pair of tokens in the training data. Merge the most frequent pair into a new token. Repeat until the vocabulary is full.</div>
+  <div class="eq">\[ L(\text{after merging } a\,b) \;=\; L(\text{before}) \;-\; r(a,b), \qquad r(a,b) = \text{non-overlapping occurrences, weighted by } f(w) \]</div>
+  <p>Why the most frequent pair? Merging a pair that occurs <var>c</var> times (without overlaps) shortens the corpus by exactly <var>c</var> tokens, so the most frequent pair is the <b>best possible single step</b> for the objective. That makes BPE a <em>greedy</em> algorithm. Day 2 shows it is not optimal over many steps, and why it is used anyway.</p>
+
+  <div class="dg"><div class="cycle">
+    <span class="nd">bytes 0–255</span><span class="lk">→</span><span class="nd">count adjacent pairs</span><span class="lk">→</span><span class="nd hot">merge the most frequent</span><span class="lk">→</span><span class="nd">new token 256, 257, …</span><span class="lk">↺ repeat until V is full</span>
+  </div><div class="cap">Gain of one merge: if <code>(a, b)</code> occurs <var>c</var> times without overlap, the corpus gets exactly <var>c</var> tokens shorter.</div></div>
+
+  <h3>R.4 · The algorithm</h3>
+  <div class="code"><div class="ch"><span>pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>train(corpus, vocab_size):
+    chunks ← split corpus with the pre-tokenization pattern; count each unique chunk
+    write each chunk as a list of byte ids (0..255)
+    merges ← []
+    while 256 + len(merges) &lt; vocab_size:
+        count every adjacent pair in every chunk, weighted by the chunk's count
+        (a, b) ← the most frequent pair (ties: the smaller pair)
+        if its count &lt; 2: stop                    <span class="c"># nothing worth merging</span>
+        new id ← 256 + len(merges); merges.append((a, b))
+        in every chunk, replace each non-overlapping (a, b) with the new id, left to right
+    return merges                                 <span class="c"># the ordered list IS the model</span>
+
+encode(text, merges):
+    for each chunk: start from its bytes; repeatedly apply the EARLIEST-learned merge
+    that occurs in it, until none does
+
+decode(ids): join each token's bytes, then decode the bytes as UTF-8</code></pre></div>
+
+  <h3>R.5 · A worked example by hand</h3>
+  <p>Train on the single chunk <code>aaabdaaabac</code> (11 bytes) with vocab size 259, so 3 merges. <code>a</code> = 97, <code>b</code> = 98.</p>
+  <div class="dg"><div class="steps">
+    <div class="step"><span class="k">step 0</span><span class="seq"><span class="nd hot">a</span><span class="nd hot">a</span><span class="nd">a</span><span class="nd">b</span><span class="nd">d</span><span class="nd hot">a</span><span class="nd hot">a</span><span class="nd">a</span><span class="nd">b</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>11 tokens.</b> <code>aa</code> ×4, <code>ab</code> ×2, the rest ×1 → merge <code>aa</code> = 256</span></div>
+    <div class="step"><span class="k">step 1</span><span class="seq"><span class="nd new">aa</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">d</span><span class="nd new">aa</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>9 tokens.</b> <code>(aa, a)</code> ×2 and <code>(a, b)</code> ×2 tie; <code>(97, 98)</code> is smaller → <code>ab</code> = 257</span></div>
+    <div class="step"><span class="k">step 2</span><span class="seq"><span class="nd hot">aa</span><span class="nd hot">ab</span><span class="nd">d</span><span class="nd hot">aa</span><span class="nd hot">ab</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>7 tokens.</b> <code>(aa, ab)</code> ×2 → <code>aaab</code> = 258</span></div>
+    <div class="step"><span class="k">step 3</span><span class="seq"><span class="nd new">aaab</span><span class="nd">d</span><span class="nd new">aaab</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>5 tokens.</b> Budget reached; every pair now occurs once</span></div>
+  </div>
+  <div class="chart" style="margin:.8rem 0 0"><div class="t">Pair counts at step 0</div>
+    <div class="br"><span><code>a a</code></span><span class="tr"><i style="width:100%"></i></span><span class="v">4</span></div>
+    <div class="br"><span><code>a b</code></span><span class="tr"><i style="width:50%"></i></span><span class="v">2</span></div>
+    <div class="br"><span><code>b d</code> · <code>d a</code> · <code>b a</code> · <code>a c</code></span><span class="tr"><i style="width:25%;--c:var(--muted)"></i></span><span class="v">1 each</span></div>
+  </div>
+  <div class="cap">Filled = the pair about to merge; outlined = a token created by the previous merge.</div></div>
+  <p>Three things to notice. <b>Overlaps:</b> <code>aaa</code> has two <code>aa</code> pairs, but scanning left to right merges only the first. <b>Ties</b> are broken by the smaller pair, so the result is deterministic. <b>Merges build on merges:</b> <code>aaab</code> was never looked for; it appeared because <code>aa</code> and <code>ab</code> became tokens first.</p>
+  <p><b>Encoding new text</b> with <code>merges = [(97,97), (97,98), (256,257)]</code>:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Input</th><th>Step by step (lowest rank first)</th><th>Result</th></tr>
+    <tr><td><code>aaab</code></td><td>a a a b → rank 0 <code>aa</code>: aa a b → rank 1 <code>ab</code>: aa ab → rank 2: aaab</td><td>1 token</td></tr>
+    <tr><td><code>abaa</code></td><td>pairs present: <code>ab</code> (rank 1), <code>aa</code> (rank 0) → apply rank 0 first: a b aa → then rank 1: ab aa → <code>(ab, aa)</code> was never learned</td><td>2 tokens</td></tr>
+    <tr><td><code>xyz</code></td><td>no learned pair</td><td>3 byte tokens</td></tr>
+  </table></div>
+  <p>Encoding uses the merge <b>order</b>, not frequencies: training applied merge 2 to text in which merges 0 and 1 had already happened, so encoding must too.</p>
+
+  <h3>R.6 · The code</h3>
+  <p>A complete, correct byte-level BPE tokenizer in about 50 lines. Day 4 makes training fast and Day 5 makes encoding fast; this version stays as the reference you test them against.</p>
+  <div class="code"><div class="ch"><span>bpe.py · the complete simple tokenizer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
+import regex   # pip install regex: supports \p{L} (any letter) and \p{N} (any digit)
+
+PATTERN = regex.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
+def unique_chunks(texts):
+    counts = Counter()
+    for text in texts:
+        counts.update(c.encode("utf-8") for c in PATTERN.findall(text))
+    return [list(c) for c in counts], list(counts.values())    # words, freqs
+
+def merge(ids, pair, new_id):
+    out, i = [], 0
+    while i &lt; len(ids):
+        if i + 1 &lt; len(ids) and ids[i] == pair[0] and ids[i + 1] == pair[1]:
+            out.append(new_id); i += 2                          # consume both, emit one
+        else:
+            out.append(ids[i]); i += 1
+    return out
+
+def train(texts, vocab_size):
+    words, freqs = unique_chunks(texts)
+    merges = []
+    while 256 + len(merges) &lt; vocab_size:
+        counts = Counter()
+        for w, f in zip(words, freqs):
+            for pair in zip(w, w[1:]):                          # every adjacent pair
+                counts[pair] += f
+        if not counts:
+            break
+        pair = min(counts, key=lambda p: (-counts[p], p))       # most frequent; ties → smaller pair
+        if counts[pair] &lt; 2:
+            break
+        new_id = 256 + len(merges)
+        merges.append(pair)
+        words = [merge(w, pair, new_id) for w in words]
+    return merges
+
+def encode(text, merges):
+    ranks = {pair: 256 + i for i, pair in enumerate(merges)}    # id order = merge order
+    out = []
+    for chunk in PATTERN.findall(text):
+        ids = list(chunk.encode("utf-8"))
+        while len(ids) &gt;= 2:
+            pair = min(zip(ids, ids[1:]), key=lambda p: ranks.get(p, float("inf")))
+            if pair not in ranks:
+                break
+            ids = merge(ids, pair, ranks[pair])
+        out.extend(ids)
+    return out
+
+def decode(ids, merges):
+    vocab = {i: bytes([i]) for i in range(256)}
+    for i, (a, b) in enumerate(merges):
+        vocab[256 + i] = vocab[a] + vocab[b]                    # each token's bytes
+    return b"".join(vocab[i] for i in ids).decode("utf-8", errors="replace")
+
+assert train(["aaabdaaabac"], 259) == [(97, 97), (97, 98), (256, 257)]
+text = "The cat sat on the mat. मैं घर जा रहा हूँ 🙂"
+assert decode(encode(text, train([text], 300)), train([text], 300)) == text</code></pre></div>
+  <p>Two lines deserve a second look. <code>zip(w, w[1:])</code> lines the list up against itself shifted by one, giving every adjacent pair. <code>b"".join(...)</code> joins <em>bytes</em> before decoding, because a token can hold part of a character: <code>न</code> is 3 bytes and can be split across two tokens.</p>
+
+  <h3>R.7 · Watch it run</h3>
+  <p>The simulator trains the same way, one merge per click. The <code>heap</code> panel and the "visited" highlight belong to the fast trainer from Day 4; for now, watch <code>words</code>, <code>counts</code> and <code>merges</code>.</p>
+
+  <div class="demo" id="sim">
+    <div class="dh"><b>Training simulator</b><span>Step through</span></div>
+    <div class="db">
+      <div class="controls">
+        <textarea id="simText" rows="2" aria-label="Training text">aaabdaaabac</textarea>
+      </div>
+      <div class="controls">
+        <span class="small muted">Presets:</span>
+        <button class="btn" type="button" data-mode="words" data-preset="aaabdaaabac">worked example</button>
+        <button class="btn" type="button" data-mode="gpt2" data-preset="The cat sat on the mat. The cat ate the rat. Then the cat sat.">a paragraph</button>
+        <button class="btn" type="button" data-mode="words" data-preset="nan nan nab nab anan anan anan">greedy counterexample (Day 2)</button>
+        <button class="btn" type="button" data-mode="gpt2" data-preset="aaaaa aaaaa bc bc bc">runs (overlap)</button>
+        <button class="btn" type="button" data-mode="gpt2" data-preset="मैं घर जा रहा हूँ। मैं घर पर हूँ।">Hindi</button>
+        <label>Chunks: <select id="simMode" class="btn"><option value="words">words, spaces dropped</option><option value="gpt2">GPT-2 pattern</option></select></label>
+      </div>
+      <div class="controls">
+        <button class="btn pri" type="button" id="simStep">Next merge</button>
+        <button class="btn" type="button" id="simAll">Run to the end</button>
+        <button class="btn" type="button" id="simReset">Reset</button>
+        <span class="stat" id="simStat" style="margin:0"></span>
+      </div>
+      <div class="simgrid">
+        <div class="box"><div class="k"><span><code>words</code> · unique chunks × count</span><span id="simVisited"></span></div><div id="simWords"></div></div>
+        <div class="box"><div class="k"><span><code>counts</code> · top pairs</span><span>change</span></div><table class="mini" id="simCounts"></table></div>
+        <div class="box"><div class="k"><span><code>heap</code> · top entries (Day 4)</span><span>struck = stale</span></div><table class="mini" id="simHeap"></table></div>
+        <div class="box"><div class="k"><span><code>merges</code> · the model</span><span>id</span></div><table class="mini" id="simMerges"></table></div>
+      </div>
+      <div class="log" id="simLog" aria-live="polite"></div>
+    </div>
+  </div>
+  <p class="small muted">"Words, spaces dropped" treats each space-separated word as a chunk; the GPT-2 pattern keeps each word's leading space, as real tokenizers do. Hex like <code>E0 A4</code> is part of a multi-byte character.</p>
+
+  <div class="demo">
+    <div class="dh"><b>Encoder</b><span>Uses the merges trained above</span></div>
+    <div class="db">
+      <div class="controls"><input type="text" id="encText" value="aaab abaa xyz" aria-label="Text to encode"></div>
+      <div class="toks" id="encOut"></div>
+      <div class="stat" id="encStat"></div>
+      <div class="log" id="encLog"></div>
+    </div>
+  </div>
+
+  <div class="check" data-check="reading">
+    <div class="ch"><b>Checkpoint · main reading</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="r1" data-dim="ml"><span class="tx">Write the objective and both constraints from memory, and say which requirement each encodes.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r2" data-dim="dsa"><span class="tx">Train <code>aaabdaaabac</code> by hand to vocab 259, then check with the simulator.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="r3" data-dim="dsa"><span class="tx">Type the 50 lines of R.6 yourself (no pasting) and make both asserts pass.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="r4" data-dim="del"><span class="tx">Train on <code>alice.txt</code> at vocab 1,000 and check <code>decode(encode(x)) == x</code> on every line.</span><span class="dim del">Delivery</span></label>
+    <label class="ck"><input type="checkbox" data-id="r5" data-dim="ai"><span class="tx">Explain to a friend why encoding uses merge order and not frequency, using the <code>abaa</code> example.</span><span class="dim ai">AI</span></label>
+    <div class="next"><b>Watch or read next</b><ul>
+      <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video, 2 h) and his <a href="https://github.com/karpathy/minbpe">minbpe</a> code</li>
+      <li>Hugging Face LLM course, <a href="https://huggingface.co/learn/llm-course/chapter6/5">Byte-Pair Encoding tokenization</a> (tutorial, 20 min)</li>
+      <li>Imad Dabbura, <a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">Byte Pair Encoding from Scratch</a> (blog)</li>
+      <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (paper, sections 1–3)</li>
+    </ul></div>
+  </div>
+</section>
+<section class="s" id="continue">
+  <div class="shead"><span class="sno">THE REST OF THE WEEK</span></div>
+  <h2>Now go deeper, one day at a time</h2>
+  <div class="daycards">
+    <a class="daycard" href="day_1.html"><b>Day 1 · Text as data</b><span>Zipf's law · UTF-8, hash maps, sliding windows · the split pattern</span></a>
+    <a class="daycard" href="day_2.html"><b>Day 2 · The objective</b><span>The trade-off · greedy and when it fails · the vocabulary budget</span></a>
+    <a class="daycard" href="day_3.html"><b>Day 3 · Information</b><span>Entropy and bits per byte · Huffman · evaluating a tokenizer</span></a>
+    <a class="daycard" href="day_4.html"><b>Day 4 · Fast training</b><span>Sufficient statistics · heap, lazy deletion, index · tests</span></a>
+    <a class="daycard" href="day_5.html"><b>Day 5 · Encoding and serving</b><span>Failure modes · the fast encoder · training on terabytes</span></a>
+    <a class="daycard hi" href="worksheet.html"><b>Weekend · Worksheet and learning checks</b><span>Build <code>tok.bpe</code>, measure the token tax, check yourself</span></a>
+  </div>
+</section>
+<div class="pager"><span></span><a class="btn pri" href="day_1.html">Text as data →</a></div>
+<footer>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
+</footer>
+
+</div></main>
+</div>
+<script>window.MathJax = {tex: {inlineMath: [["\\(", "\\)"]]}, svg: {fontCache: "global"}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
+const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
+const chunk = (t, p) => t.match(p) || [];
+const simChunks = t => $("simMode").value === "words" ? t.split(/\s+/).filter(Boolean) : chunk(t, PAT);
+function show(bytes) {
+  try { return dec.decode(new Uint8Array(bytes)).replace(/ /g, "·").replace(/\n/g, "⏎"); }
+  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
+}
+const span = (bytes, cls = "") => `<span class="tk${cls}">${esc(show(bytes))}</span>`;
+
+/* ---------- Chunker ---------- */
+function chRender() {
+  const t = $("chText").value, marks = $("chMarks").checked;
+  const cs = chunk(t, marks ? PAT_M : PAT);
+  $("chOut").innerHTML = cs.map(c => {
+    const lone = /^\p{M}/u.test(c);
+    return `<span class="tk${lone ? " mk" : ""}" title="${enc.encode(c).length} bytes">${esc(c.replace(/ /g, "·"))}</span>`;
+  }).join("");
+  const lone = cs.filter(c => /^\p{M}/u.test(c)).length;
+  $("chStat").innerHTML = `<b>${cs.length}</b> chunks` + (lone ? ` · <b>${lone}</b> start with a mark (red): a word was cut in two` : "");
+}
+if ($("chText")) {
+  $("chText").addEventListener("input", chRender);
+  $("chMarks").addEventListener("change", chRender);
+  chRender();
+}
+
+/* ---------- Min-heap of [negCount, a, b] ---------- */
+const less = (x, y) => x[0] !== y[0] ? x[0] < y[0] : x[1] !== y[1] ? x[1] < y[1] : x[2] < y[2];
+function hpush(h, v) { h.push(v); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(h[i], h[p])) break; [h[i], h[p]] = [h[p], h[i]]; i = p; } }
+function sift(h, i) { const n = h.length; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < n && less(h[l], h[m])) m = l; if (r < n && less(h[r], h[m])) m = r; if (m === i) return; [h[i], h[m]] = [h[m], h[i]]; i = m; } }
+function hpop(h) { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; sift(h, 0); } return top; }
+function heapify(h) { for (let i = (h.length >> 1) - 1; i >= 0; i--) sift(h, i); }
+
+/* ---------- Trainer, written exactly like the Python ---------- */
+const K = (a, b) => a + "," + b;
+const unK = k => k.split(",").map(Number);
+function mergeIds(ids, a, b, id) {
+  const out = [];
+  for (let i = 0; i < ids.length;) {
+    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
+    else { out.push(ids[i]); i += 1; }
+  }
+  return out;
+}
+let S;
+function simInit() {
+  const cnt = new Map();
+  for (const c of simChunks($("simText").value)) cnt.set(c, (cnt.get(c) || 0) + 1);
+  const words = [...cnt].map(([c, f]) => ({ids: [...enc.encode(c)], f}));
+  const vocab = new Map(); for (let i = 0; i < 256; i++) vocab.set(i, [i]);
+  const counts = new Map(), where = new Map();
+  words.forEach((w, wi) => {
+    for (let i = 0; i + 1 < w.ids.length; i++) {
+      const k = K(w.ids[i], w.ids[i + 1]);
+      counts.set(k, (counts.get(k) || 0) + w.f);
+      if (!where.has(k)) where.set(k, new Set());
+      where.get(k).add(wi);
+    }
+  });
+  const heap = [...counts].map(([k, c]) => [-c, ...unK(k)]); heapify(heap);
+  const bytes = words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  S = {words, vocab, counts, where, heap, merges: [], done: false, bytes, delta: new Map(), visited: new Set(), last: -1, stalePops: 0, pops: 0, log: []};
+  S.log.push(`<div class="s">${words.length} unique chunks, ${counts.size} distinct pairs, heap of ${heap.length}. Press "Next merge".</div>`);
+}
+function simStep() {
+  if (S.done) return false;
+  S.delta = new Map(); S.visited = new Set();
+  for (;;) {
+    if (!S.heap.length) { S.done = true; S.log.push(`<div class="h">Stop: the heap is empty. Every chunk is one token.</div>`); return false; }
+    const [neg, a, b] = hpop(S.heap); S.pops++;
+    const k = K(a, b), live = S.counts.get(k) || 0;
+    if (live !== -neg) {
+      S.stalePops++;
+      S.log.push(`<div class="s">pop (${-neg}, ${esc(show(S.vocab.get(a)))}+${esc(show(S.vocab.get(b)))}) · live count is ${live}, not ${-neg} → stale, throw away</div>`);
+      continue;
+    }
+    if (live < 2) { S.done = true; S.log.push(`<div class="h">Stop: the best pair occurs ${live} time. Nothing is worth merging.</div>`); return false; }
+    const id = 256 + S.merges.length;
+    S.vocab.set(id, S.vocab.get(a).concat(S.vocab.get(b)));
+    S.merges.push({a, b, id, count: live}); S.last = id;
+    const wis = [...(S.where.get(k) || [])];
+    for (const wi of wis) {
+      const w = S.words[wi], old = w.ids, nw = mergeIds(old, a, b, id);
+      w.ids = nw; S.visited.add(wi);
+      for (let i = 0; i + 1 < old.length; i++) { const q = K(old[i], old[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) - w.f); S.where.get(q)?.delete(wi); }
+      for (let i = 0; i + 1 < nw.length; i++) { const q = K(nw[i], nw[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) + w.f); if (!S.where.has(q)) S.where.set(q, new Set()); S.where.get(q).add(wi); }
+    }
+    const pushed = [];
+    for (const [q, d] of S.delta) {
+      if (!d) continue;
+      const c = (S.counts.get(q) || 0) + d; S.counts.set(q, c);
+      if (c > 0) { hpush(S.heap, [-c, ...unK(q)]); pushed.push(q); }
+    }
+    S.counts.delete(k); S.where.delete(k);
+    const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+    S.log.push(`<div class="h">merge #${S.merges.length}: ${esc(show(S.vocab.get(a)))} + ${esc(show(S.vocab.get(b)))} → ${esc(show(S.vocab.get(id)))} (id ${id}, count ${live})</div>` +
+      `<div>visited ${wis.length} of ${S.words.length} chunks via where[pair] · pushed ${pushed.length} new counts · corpus now ${tokens} tokens</div>`);
+    return true;
+  }
+}
+function simRender() {
+  const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  $("simStat").innerHTML = `<b>${S.bytes}</b> bytes → <b>${tokens}</b> tokens · ${S.merges.length} merges · stale pops ${S.stalePops} of ${S.pops} · heap ${S.heap.length}`;
+  $("simVisited").textContent = S.visited.size ? `${S.visited.size} visited` : "";
+  $("simWords").innerHTML = S.words.map((w, wi) =>
+    `<div class="wrow${S.visited.has(wi) ? " hit" : ""}"><span class="f">×${w.f}</span><span class="toks" style="margin:0">${w.ids.map(i => span(S.vocab.get(i), i === S.last ? " new" : "")).join("")}</span></div>`).join("");
+  const rows = [...S.counts].filter(([k, c]) => c > 0 || S.delta.get(k));
+  rows.sort((x, y) => y[1] - x[1] || (unK(x[0])[0] - unK(y[0])[0]) || (unK(x[0])[1] - unK(y[0])[1]));
+  $("simCounts").innerHTML = rows.slice(0, 10).map(([k, c]) => {
+    const [a, b] = unK(k), d = S.delta.get(k) || 0;
+    return `<tr><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${c}</td><td class="r ${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" + d : d < 0 ? d : ""}</td></tr>`;
+  }).join("") || `<tr><td class="muted">no pairs left</td></tr>`;
+  const top = [...S.heap].sort((x, y) => less(x, y) ? -1 : less(y, x) ? 1 : 0).slice(0, 10);
+  $("simHeap").innerHTML = top.map(([neg, a, b]) => {
+    const live = S.counts.get(K(a, b)) || 0, stale = live !== -neg;
+    return `<tr class="${stale ? "stale" : ""}"><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${-neg}</td><td class="r">${stale ? "live " + live : "current"}</td></tr>`;
+  }).join("") || `<tr><td class="muted">empty</td></tr>`;
+  $("simMerges").innerHTML = S.merges.slice(-10).map(m =>
+    `<tr><td class="r">${m.id}</td><td>${span(S.vocab.get(m.a))} + ${span(S.vocab.get(m.b))}</td><td>→ ${span(S.vocab.get(m.id), m.id === S.last ? " new" : "")}</td></tr>`).join("") || `<tr><td class="muted">none yet: the vocabulary is the 256 bytes</td></tr>`;
+  $("simLog").innerHTML = S.log.slice(-40).join("");
+  $("simLog").scrollTop = $("simLog").scrollHeight;
+  encRender();
+}
+if ($("simText")) {
+$("simStep").onclick = () => { simStep(); simRender(); };
+$("simAll").onclick = () => { let n = 0; while (n++ < 500 && simStep()); simRender(); };
+$("simReset").onclick = () => { simInit(); simRender(); };
+$("simText").addEventListener("input", () => { simInit(); simRender(); });
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { $("simText").value = b.dataset.preset; $("simMode").value = b.dataset.mode; simInit(); simRender(); });
+$("simMode").addEventListener("change", () => { simInit(); simRender(); });
+
+/* ---------- Encoder: replay merges by rank ---------- */
+var encRender = function () {
+  const ranks = new Map(S.merges.map(m => [K(m.a, m.b), m.id]));
+  const out = [], log = [];
+  for (const c of simChunks($("encText").value)) {
+    let ids = [...enc.encode(c)];
+    const steps = [];
+    while (ids.length >= 2) {
+      let best = null, br = Infinity;
+      for (let i = 0; i + 1 < ids.length; i++) { const r = ranks.get(K(ids[i], ids[i + 1])); if (r !== undefined && r < br) { br = r; best = [ids[i], ids[i + 1]]; } }
+      if (!best) break;
+      ids = mergeIds(ids, best[0], best[1], br);
+      steps.push(`rank ${br - 256}: ${esc(show(S.vocab.get(br)))}`);
+    }
+    out.push(...ids);
+    log.push(`<div><b>${esc(c.replace(/ /g, "·"))}</b> <span class="s">${steps.length ? steps.join(" → ") : "no learned pair: stays bytes"}</span></div>`);
+  }
+  $("encOut").innerHTML = out.map(i => span(S.vocab.get(i))).join("");
+  const nb = enc.encode($("encText").value).length;
+  $("encStat").innerHTML = `<b>${nb}</b> bytes → <b>${out.length}</b> tokens with ${S.merges.length} learned merges`;
+  $("encLog").innerHTML = log.join("");
+};
+$("encText").addEventListener("input", encRender);
+simInit(); simRender();
+}
+
+/* ---------- Progress: checkpoints fill the coverage bars ---------- */
+const KEY = "bpe-week-progress-v1";
+const ITEMS = [{"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "ml", "page": "day_5.html"}, {"id": "d5c", "dim": "ai", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
+const boxes = [...document.querySelectorAll("label.ck input")];
+function save() { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch {} }
+function progRender() {
+  const html = DIMS.map(([d, name]) => {
+    const all = ITEMS.filter(it => it.dim === d), n = all.filter(it => done.has(it.id)).length;
+    const pct = all.length ? Math.round(100 * n / all.length) : 0;
+    return `<div class="prow"><span class="t-${d}">${name}</span><span class="bar"><i style="width:${pct}%;background:var(--${d})"></i></span><span class="v">${n}/${all.length}</span></div>`;
+  }).join("");
+  document.querySelectorAll("[data-prog]").forEach(el => el.innerHTML = html);
+  const n = ITEMS.filter(it => done.has(it.id)).length;
+  document.querySelectorAll("[data-total]").forEach(el => el.textContent = `${n} of ${ITEMS.length} checks done this week`);
+  document.querySelectorAll(".check").forEach(c => {
+    const bs = [...c.querySelectorAll("input")], k = bs.filter(b => b.checked).length;
+    c.querySelector("[data-count]").textContent = `${k}/${bs.length}`;
+  });
+  document.querySelectorAll("nav.rail a[data-page]").forEach(link => {
+    const mine = ITEMS.filter(it => it.page === link.dataset.page), all = mine.length && mine.every(it => done.has(it.id));
+    let ok = link.querySelector(".ok");
+    if (all && !ok) { ok = document.createElement("span"); ok.className = "ok"; ok.textContent = "✓"; link.append(ok); }
+    else if (!all && ok) ok.remove();
+  });
+}
+boxes.forEach(b => {
+  b.checked = done.has(b.dataset.id);
+  b.addEventListener("change", () => { b.checked ? done.add(b.dataset.id) : done.delete(b.dataset.id); save(); progRender(); });
+});
+document.querySelectorAll("[data-reset]").forEach(btn => {
+  let armed = false, t;
+  btn.addEventListener("click", () => {
+    if (!armed) { armed = true; btn.textContent = "Click again to clear"; t = setTimeout(() => { armed = false; btn.textContent = "Reset"; }, 3000); return; }
+    clearTimeout(t); armed = false; btn.textContent = "Reset";
+    done.clear(); boxes.forEach(b => b.checked = false); save(); progRender();
+  });
+});
+progRender();
+
+/* ---------- Copy buttons on code cards ---------- */
+document.querySelectorAll(".code").forEach(card => {
+  const btn = card.querySelector("button.copy"), code = card.querySelector("code");
+  if (!btn || !code) return;
+  btn.addEventListener("click", () => {
+    const done = t => { btn.textContent = t; setTimeout(() => btn.textContent = "Copy", 1500); };
+    navigator.clipboard.writeText(code.textContent).then(() => done("Copied"), () => {
+      const r = document.createRange(); r.selectNodeContents(code);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done("Selected: press Ctrl/Cmd+C");
+    });
+  });
+});
+
+})();
+</script>
+
+</body></html>

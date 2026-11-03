@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
+<title>BPE Week · Encoding and serving</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* A chapter notebook: problem → formulation → theory → structures → algorithm → design → project.
+   Every section ends with a checkpoint; checkpoints fill the coverage bars. */
+:root{
+  --bg:#f2f5f4; --panel:#ffffff; --ink:#14201e; --muted:#5a6a66; --line:#d6dfdc;
+  --accent:#0c6a65; --accent-soft:#e0eeec; --trace:#ad5d17; --trace-soft:#f5e8db;
+  --code-bg:#eaf0ee; --good:#1d7a4c; --good-soft:#e1f1e8; --bad:#b03838; --bad-soft:#f7e3e3;
+  --dsa:#0c6a65; --ml:#1d7a4c; --ai:#ad5d17; --sys:#b03838; --del:#5a49b0; --del-soft:#ebe8f7;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Serif 4",Charter,"Iowan Old Style",Georgia,serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --rail:16.5rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:1.0625rem/1.65 var(--f-body)}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,.mono{font-family:var(--f-mono);font-variant-ligatures:none}
+code{background:var(--code-bg);padding:.08em .35em;border-radius:4px;font-size:.86em}
+pre{background:var(--code-bg);color:var(--ink);padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font-size:.8rem;line-height:1.55;border:1px solid var(--line);margin:.6rem 0 1rem}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--muted)}
+h1,h2,h3,h4{font-family:var(--f-display);text-wrap:balance;line-height:1.15;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,4vw,2.8rem);font-weight:800;margin:.3rem 0 .8rem}
+h2{font-size:1.6rem;font-weight:800;margin:0 0 .4rem}
+h3{font-size:1.12rem;font-weight:700;margin:1.8rem 0 .3rem}
+h4{font-size:.95rem;font-weight:700;margin:1.2rem 0 .2rem}
+p,li{max-width:70ch}
+.layout{display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+nav.rail{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:1.4rem .7rem 2rem}
+.brand{font:800 1rem var(--f-display);padding:0 .6rem .8rem;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+.rail-label{font:700 .66rem var(--f-display);color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:1rem .6rem .3rem}
+nav.rail a{display:flex;gap:.55rem;align-items:baseline;padding:.3rem .6rem;border-radius:6px;color:var(--ink);text-decoration:none;font:500 .84rem var(--f-display)}
+nav.rail a:hover{background:var(--accent-soft)}
+nav.rail a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+nav.rail a .n{font:600 .68rem var(--f-mono);color:var(--muted);min-width:1.3rem}
+nav.rail a .ok{margin-left:auto;font:700 .7rem var(--f-mono);color:var(--good)}
+main{padding-block:2rem 5rem;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
+.page{max-width:56rem;margin:0 auto}
+.eyebrow{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+.lead{font-size:1.18rem;color:var(--muted);max-width:62ch}
+.muted{color:var(--muted)}.small{font-size:.86rem}
+section.s{padding:2.6rem 0 1rem;border-top:1px solid var(--line);scroll-margin-top:.5rem}
+.shead{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem 1rem;flex-wrap:wrap;margin-bottom:.4rem}
+.sno{font:700 .74rem var(--f-mono);color:var(--accent);letter-spacing:.08em}
+.pill{font:600 .72rem var(--f-display);border:1px solid var(--line);border-radius:99px;padding:.15rem .6rem;color:var(--muted);white-space:nowrap}
+.dims{display:flex;gap:.35rem;flex-wrap:wrap}
+.dim{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.08em;padding:.12rem .45rem;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.dim.dsa,.t-dsa{color:var(--dsa)}.dim.ml,.t-ml{color:var(--ml)}.dim.ai,.t-ai{color:var(--ai)}.dim.sys,.t-sys{color:var(--sys)}.dim.del,.t-del{color:var(--del)}
+.idea{font-size:1.12rem;border-left:3px solid var(--accent);padding:.2rem 0 .2rem 1rem;margin:1rem 0;max-width:66ch}
+.math{font:1rem/1.9 var(--f-mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem 1rem;margin:.8rem 0;overflow-x:auto;white-space:pre}
+.math .c{color:var(--muted)}
+.watch{background:var(--trace-soft);border-radius:8px;padding:.7rem 1rem;margin:1rem 0;max-width:72ch}
+.watch>b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.watch ul{margin:.3rem 0 0;padding-left:1.2rem}
+.tablewrap{overflow-x:auto;margin:.8rem 0 1.2rem}
+table{border-collapse:collapse;width:100%;font:.86rem/1.45 var(--f-display);background:var(--panel)}
+th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:700;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--bg)}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-size:.8rem;font-variant-numeric:tabular-nums}
+tr.hi td{background:var(--accent-soft)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:1.2rem 0;font:600 .8rem var(--f-display)}
+.flow .b{padding:.4rem .65rem;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.flow .b.hi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.flow .ar{color:var(--muted)}
+/* Fundamentals cards: self-contained concept + deeper + practice */
+.fund{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:1.4rem 0;overflow:hidden}
+.fund .fh{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:.55rem 1rem;border-bottom:1px solid var(--line);background:var(--bg)}
+.fund .fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))}
+.fund .f{padding:.8rem 1rem;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0;font-size:.95rem}
+.fund .f p{margin:.35rem 0}
+.ft{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.08em}
+.fl{font:.82rem/1.7 var(--f-display);margin:.4rem 0 0}
+.fl b{font-weight:700;color:var(--muted);margin-right:.3rem}
+a.lc{display:inline-block;font:600 .74rem var(--f-display);padding:.08rem .45rem;margin:.1rem .15rem .1rem 0;border-radius:4px;background:var(--accent-soft);text-decoration:none;white-space:nowrap}
+a.lc:hover{background:var(--accent);color:var(--panel)}
+/* Checkpoints */
+.check{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:var(--panel);margin:1.6rem 0 .6rem;padding:.8rem 1rem}
+.check .ch{display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.check .ch b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--accent)}
+.check .ch span{font:600 .74rem var(--f-mono);color:var(--muted)}
+.check .grp{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.7rem 0 .2rem}
+label.ck{display:grid;grid-template-columns:1.3rem minmax(0,1fr) auto;gap:.5rem;align-items:start;padding:.32rem 0;border-bottom:1px dashed var(--line);font-size:.95rem;cursor:pointer}
+label.ck:last-child{border-bottom:0}
+label.ck input{margin:.32rem 0 0;accent-color:var(--accent);width:1rem;height:1rem}
+label.ck:has(input:checked) .tx{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.next{font:.86rem/1.65 var(--f-display);margin:.8rem 0 0;padding-top:.6rem;border-top:1px solid var(--line)}
+.next b{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:.15rem}
+.next ul{margin:0;padding-left:1.1rem}
+/* Progress */
+.prog{display:grid;gap:.45rem}
+.prow{display:grid;grid-template-columns:6.6rem minmax(0,1fr) 2.8rem;gap:.5rem;align-items:center;font:600 .74rem var(--f-display)}
+.prow .bar{height:.5rem;background:var(--line);border-radius:99px;overflow:hidden}
+.prow .bar i{display:block;height:100%;width:0;border-radius:99px;transition:width .3s}
+.prow .v{font:600 .7rem var(--f-mono);text-align:right;color:var(--muted)}
+.rail .prog{padding:0 .6rem}
+.progcard{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:1rem;margin:1.2rem 0}
+.progcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+.progcard .top b{font:800 1rem var(--f-display)}
+.linkbtn{font:600 .72rem var(--f-display);background:none;border:0;color:var(--muted);cursor:pointer;text-decoration:underline;padding:0}
+/* Coverage grid */
+.cov td,.cov th{text-align:center}
+.cov td:first-child,.cov th:first-child{text-align:left}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:currentColor}
+/* Demos */
+.demo{border:1px solid var(--trace);border-radius:12px;margin:1.4rem 0;background:var(--panel);overflow:hidden}
+.demo>.dh{background:var(--trace-soft);padding:.55rem 1rem;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.demo>.dh b{font:700 .9rem var(--f-display)}
+.demo>.dh span{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.demo .db{padding:1rem}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;margin-bottom:.8rem;font:500 .84rem var(--f-display)}
+.controls label{display:flex;align-items:center;gap:.45rem}
+.controls input[type=text],.controls textarea{font:500 .86rem var(--f-mono);padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.btn{font:600 .8rem var(--f-display);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:.38rem .7rem;border-radius:7px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn.pri:hover{color:var(--panel);opacity:.9}
+.toks{display:flex;flex-wrap:wrap;gap:.25rem;margin:.3rem 0}
+.tk{font:500 .8rem var(--f-mono);padding:.1rem .36rem;border-radius:4px;background:var(--accent-soft);color:var(--ink);white-space:pre;border:1px solid transparent}
+.tk.new{border-color:var(--accent);background:var(--accent);color:var(--panel)}
+.tk.mk{background:var(--bad-soft);color:var(--bad)}
+.stat{font:500 .8rem var(--f-mono);color:var(--muted);margin:.5rem 0 0;font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink)}
+.simgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.box{border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;min-width:0;background:var(--bg)}
+.box>.k{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.3rem;display:flex;justify-content:space-between;gap:.4rem}
+.box>.k code{text-transform:none;letter-spacing:0;font-size:.95em}
+.wrow{display:grid;grid-template-columns:2.4rem minmax(0,1fr);gap:.4rem;align-items:center;padding:.12rem .2rem;border-radius:4px}
+.wrow.hit{background:var(--trace-soft)}
+.wrow .f{font:600 .72rem var(--f-mono);color:var(--muted);text-align:right}
+.mini{width:100%;font:.76rem var(--f-mono);border-collapse:collapse;background:none}
+.mini td{padding:.14rem .3rem;border-bottom:1px solid var(--line)}
+.mini td.r{text-align:right}
+.ok-t{color:var(--good)}
+.up{color:var(--good);font-weight:600}.down{color:var(--bad);font-weight:600}
+.stale td{color:var(--muted);text-decoration:line-through}
+.log{font:.8rem/1.6 var(--f-mono);background:var(--code-bg);border-radius:8px;padding:.6rem .8rem;margin-top:.8rem;max-height:14rem;overflow:auto}
+.log div{padding:.05rem 0}
+.log .h{color:var(--accent);font-weight:600}
+.log .s{color:var(--muted)}
+details{margin:1rem 0;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+details>summary{cursor:pointer;padding:.6rem 1rem;font:600 .86rem var(--f-display)}
+details>div{padding:0 1rem .8rem}
+.obj{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.8rem;margin:1rem 0}
+.obj>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;min-width:0}
+.obj ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:.92rem}
+.obj li{margin:.25rem 0}
+.wi{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:.8rem 1rem;margin:.8rem 0}
+.wi h4{margin:0 0 .3rem;display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.wi h4 .id{font:700 .74rem var(--f-mono);color:var(--accent)}
+.wi p,.wi ul{font-size:.95rem;margin:.3rem 0}
+.wi .acc{font:.86rem/1.6 var(--f-display)}
+.wi .acc b{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:var(--muted);font:.85rem/1.6 var(--f-display)}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  nav.rail{position:sticky;top:0;z-index:5;height:auto;display:flex;gap:.2rem;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:.45rem max(16px,env(safe-area-inset-right,0px)) .45rem max(16px,env(safe-area-inset-left,0px));padding-top:calc(.45rem + env(safe-area-inset-top,0px))}
+  nav.rail .brand,nav.rail .rail-label,nav.rail .prog{display:none}
+  nav.rail a{white-space:nowrap}
+  .simgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .prow{grid-template-columns:5.6rem minmax(0,1fr) 2.6rem}
+  label.ck{grid-template-columns:1.3rem minmax(0,1fr)}
+  label.ck .dim{grid-column:2;justify-self:start}
+}
+
+/* Week layout: main reading, then days of ML / Algorithms / Design blocks, then the build */
+.weekmap td{font-size:.84rem}
+.weekmap td:first-child{font:700 .78rem var(--f-mono);white-space:nowrap;color:var(--accent)}
+.dayhead{display:flex;gap:.6rem 1rem;align-items:baseline;flex-wrap:wrap}
+.blk{border:1px solid var(--line);border-top:3px solid var(--c,var(--accent));border-radius:12px;background:var(--panel);padding:1rem 1.1rem .6rem;margin:1.4rem 0}
+.blk.ml{--c:var(--ml)}.blk.alg{--c:var(--dsa)}.blk.des{--c:var(--sys)}
+.blk>.bh{display:flex;justify-content:space-between;gap:.4rem 1rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.2rem}
+.blk>.bh .kind{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--c)}
+.blk>h3{margin:.1rem 0 .5rem}
+.part{margin:1rem 0 .2rem;padding-top:.7rem;border-top:1px dashed var(--line)}
+.part>b{display:block;font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.25rem}
+.part ul{margin:.2rem 0;padding-left:1.15rem;font-size:.95rem}
+.part li{margin:.2rem 0}
+details.sol{border-color:var(--c,var(--line));background:var(--bg)}
+details.sol>summary{color:var(--c,var(--ink))}
+details.sol>div{padding-top:.2rem}
+
+/* Visual components: metric cards, code cards, bar charts, diagrams, equations */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.7rem;margin:1.2rem 0}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;min-width:0}
+.metric .v{font:800 1.7rem/1.15 var(--f-display);letter-spacing:-.03em;color:var(--accent)}
+.metric .l{font:.8rem/1.4 var(--f-display);color:var(--muted);margin-top:.2rem}
+.code{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.8rem 0 1.1rem;background:var(--code-bg)}
+.code>.ch{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.32rem .5rem .32rem .85rem;background:var(--panel);border-bottom:1px solid var(--line);font:600 .72rem var(--f-mono);color:var(--muted)}
+.code>pre{margin:0;border:0;border-radius:0}
+button.copy{font:600 .68rem var(--f-display);border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:6px;padding:.15rem .5rem;cursor:pointer}
+button.copy:hover{color:var(--accent);border-color:var(--accent)}
+.token.comment{color:var(--muted);font-style:italic}
+.token.keyword,.token.boolean{color:var(--del)}
+.token.string,.token.triple-quoted-string{color:var(--ml)}
+.token.number{color:var(--ai)}
+.token.function{color:var(--accent)}
+.token.builtin,.token.class-name{color:var(--sys)}
+.token.operator,.token.punctuation{color:var(--ink);opacity:.8}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;margin:1rem 0}
+.chart>.t{font:700 .76rem var(--f-display);color:var(--ink);margin-bottom:.45rem}
+.chart .sub{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.6rem 0 .15rem}
+.br{display:grid;grid-template-columns:minmax(6rem,11rem) minmax(0,1fr) 5rem;gap:.6rem;align-items:center;font:.8rem var(--f-display);padding:.14rem 0}
+.br>span:first-child{min-width:0;overflow-wrap:anywhere}
+.br .tr{height:.72rem;background:var(--line);border-radius:99px;overflow:hidden}
+.br .tr i{display:block;height:100%;background:var(--c,var(--accent));border-radius:99px}
+.br .v{font:600 .76rem var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chart .cap,.dg .cap{font:.8rem/1.5 var(--f-display);color:var(--muted);margin-top:.55rem}
+.dg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem;margin:1rem 0;overflow-x:auto}
+.seq{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.nd{font:600 .84rem var(--f-mono);padding:.28rem .5rem;border-radius:6px;background:var(--accent-soft);border:1px solid transparent;white-space:pre;color:var(--ink)}
+.nd.hot{background:var(--accent);color:var(--panel)}
+.nd.new{border-color:var(--accent);color:var(--accent);background:var(--panel)}
+.lk{color:var(--muted);font:.8rem var(--f-mono)}
+.pp{font:600 .76rem var(--f-mono);padding:.1rem .42rem;border-radius:4px;white-space:nowrap}
+.pp.rm{background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.pp.add{background:var(--good-soft);color:var(--good)}
+.vflow{display:grid;justify-items:center;gap:.25rem}
+.vbox{border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;background:var(--bg);text-align:center;font:.84rem/1.45 var(--f-display);width:100%;max-width:34rem;min-width:0}
+.vbox b{display:block;font-weight:700}
+.varr{color:var(--accent);font:600 .78rem var(--f-display)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.steps{display:grid;gap:.55rem}
+.step{display:grid;grid-template-columns:3.2rem minmax(0,1fr) minmax(0,15rem);gap:.8rem;align-items:center;padding:.55rem 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border-bottom:0}
+.step .k{font:700 .7rem var(--f-mono);color:var(--muted)}
+.step .why{font:.78rem/1.45 var(--f-display);color:var(--muted)}
+.step .why b{color:var(--ink)}
+.cycle{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.4rem}
+.eq{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.5rem 1rem;margin:.8rem 0;overflow-x:auto;overflow-y:hidden}
+.eq mjx-container{margin:.4em 0!important}
+mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
+@media (max-width:640px){.step{grid-template-columns:2.6rem minmax(0,1fr)}.step .why{grid-column:2}.grid2{grid-template-columns:minmax(0,1fr)}.br{grid-template-columns:minmax(5rem,7.5rem) minmax(0,1fr) 4.2rem}}
+
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+.daycards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:.7rem;margin:1rem 0}
+.daycard{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;text-decoration:none;color:var(--ink);min-width:0}
+.daycard:hover{border-color:var(--accent)}
+.daycard b{display:block;font:700 .95rem var(--f-display);color:var(--accent);margin-bottom:.2rem}
+.daycard span{font:.84rem/1.45 var(--f-display);color:var(--muted)}
+.daycard.hi{border-color:var(--accent);background:var(--accent-soft)}
+.weekmap a{font-weight:700}
+</style>
+<div class="layout">
+<nav class="rail" aria-label="Week 1">
+  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="rail-label">Coverage, whole week</div>
+  <div class="prog" data-prog></div>
+  <div class="rail-label">Week 1 · Tokenization</div>
+  <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The objective</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
+  <a href="day_5.html" class="on" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="../"><span class="n">↩</span>Guide home</a>
+</nav>
+
+<main><div class="page">
+<section class="s" id="day5" data-sec="day5">
+  <div class="shead"><span class="sno">DAY 5 · ENCODING AND SERVING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="dim sys">Sys</span><span class="pill">~3.5 h</span></span></div>
+  <h2>From a trained merge list to a production tokenizer</h2>
+
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · the fast encoder and caches</span><span class="pill">~1.5 h</span></div>
+    <p>The main-reading encoder scans the chunk for the lowest-rank pair, merges all its occurrences, and repeats: O(<var>L</var> · <var>R</var>) per chunk, where <var>R</var> is the number of distinct merges that apply. Chunks are short, so this is fine, until a chunk is long. A 10 KB string with no spaces needed 428 rounds.</p>
+    <p>The fix uses a <b>doubly linked list</b> of tokens and a <b>min-heap</b> of (rank, position) for adjacent pairs. Pop the lowest rank; if the entry is stale, skip it; otherwise splice the two nodes and push only the two new neighbouring pairs.</p>
+    <div class="dg">
+      <div class="seq"><span class="nd">L</span><span class="lk">⇄</span><span class="nd hot">A</span><span class="lk">⇄</span><span class="nd hot">B</span><span class="lk">⇄</span><span class="nd">R</span><span class="lk">&nbsp;&nbsp;→&nbsp;&nbsp;</span><span class="nd">L</span><span class="lk">⇄</span><span class="nd hot">AB</span><span class="lk">⇄</span><span class="nd">R</span></div>
+      <div class="seq" style="margin-top:.6rem"><span class="small muted">push:</span><span class="pp add">(rank(L, AB), L)</span><span class="pp add">(rank(AB, R), AB)</span><span class="small muted">&nbsp;B is marked dead; entries pointing at it become stale</span></div>
+      <div class="cap">O(1) splice, O(log L) heap work per merge, so O(L log L) per chunk.</div>
+    </div>
+    <div class="chart"><div class="t">10 KB chunk (<em>Alice</em> with spaces removed), 2,000-token vocabulary, identical output</div>
+      <div class="br"><span>rescan encoder</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">0.31 s</span></div>
+      <div class="br"><span>linked list + heap</span><span class="tr"><i style="width:1.6%"></i></span><span class="v">0.005 s</span></div>
+    </div>
+    <p>Two more speed-ups matter in practice: a <b>chunk cache</b> (natural text repeats, so most chunks hit), bounded so unique strings can't exhaust memory, and a <b>compiled hot loop</b> (tiktoken and Hugging Face <code>tokenizers</code> are in Rust).</p>
+    <div class="part"><b>Practice</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/lru-cache/">146 LRU Cache</a> with a hash map and a doubly linked list: exactly the bounded chunk cache.</li>
+      <li>Implement the linked-list encoder and check it against the simple one on 20,000 chunks and random strings.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Streaming decode: tokens arrive one by one; print text as soon as it is valid UTF-8, never a <code>&#xFFFD;</code>. (Hold back incomplete bytes.)</li>
+      <li>Cache by chunk vs by whole line: hit rates on <code>alice.txt</code>?</li>
+      <li>LFU instead of LRU (<a href="https://leetcode.com/problems/lfu-cache/">460 LFU Cache</a>): which suits a tokenizer cache better?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <div class="code"><div class="ch"><span>146 · LRU cache</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Node:
+    __slots__ = ("key", "val", "prev", "next")
+    def __init__(self, key=0, val=0):
+        self.key, self.val, self.prev, self.next = key, val, None, None
+
+class LRUCache:
+    def __init__(self, capacity):
+        self.cap, self.map = capacity, {}
+        self.head, self.tail = Node(), Node()            # sentinels: no edge cases
+        self.head.next, self.tail.prev = self.tail, self.head
+    def _remove(self, n):
+        n.prev.next, n.next.prev = n.next, n.prev
+    def _push_front(self, n):
+        n.prev, n.next = self.head, self.head.next
+        self.head.next.prev = n; self.head.next = n
+    def get(self, key):
+        if key not in self.map: return -1
+        n = self.map[key]; self._remove(n); self._push_front(n)
+        return n.val
+    def put(self, key, value):
+        if key in self.map: self._remove(self.map[key])
+        n = Node(key, value); self.map[key] = n; self._push_front(n)
+        if len(self.map) &gt; self.cap:
+            lru = self.tail.prev; self._remove(lru); del self.map[lru.key]</code></pre></div>
+    <div class="code"><div class="ch"><span>bpe.py · O(L log L) encoder</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def encode_chunk_fast(data, ranks):                  # ranks: pair -&gt; new id (= rank order)
+    ids = list(data); n = len(ids)
+    if n &lt; 2: return ids
+    prev = list(range(-1, n - 1)); nxt = list(range(1, n + 1)); nxt[-1] = -1
+    alive = [True] * n
+    heap = [(ranks[(ids[i], ids[i + 1])], i) for i in range(n - 1) if (ids[i], ids[i + 1]) in ranks]
+    heapq.heapify(heap)
+    while heap:
+        r, i = heapq.heappop(heap)
+        j = nxt[i]
+        if not alive[i] or j == -1 or ranks.get((ids[i], ids[j])) != r:
+            continue                                     # stale entry
+        ids[i] = r; alive[j] = False                     # i absorbs j
+        nxt[i] = nxt[j]
+        if nxt[j] != -1: prev[nxt[j]] = i
+        for a in (prev[i], i):                           # the two new neighbouring pairs
+            if a != -1 and nxt[a] != -1 and (ids[a], ids[nxt[a]]) in ranks:
+                heapq.heappush(heap, (ranks[(ids[a], ids[nxt[a]])], a))
+    out, i = [], 0
+    while i != -1:
+        out.append(ids[i]); i = nxt[i]
+    return out</code></pre></div>
+    <p>Why the order matches the simple encoder: equal ranks pop left to right (the position is the second tuple field), and a newly created pair always has a higher rank than the merge that created it, because its token was learned later.</p></div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li><a href="https://github.com/openai/tiktoken">tiktoken</a> and Hugging Face <a href="https://github.com/huggingface/tokenizers">tokenizers</a>: production encoders in Rust</li>
+      <li><a href="https://en.wikipedia.org/wiki/Doubly_linked_list">Doubly linked list</a> (Wikipedia)</li>
+    </ul></div>
+  </div>
+
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · failure modes and alternatives</span><span class="pill">~1 h</span></div>
+    <ul>
+      <li><b>Glitch tokens.</b> <code> SolidGoldMagikarp</code> became a GPT-2 token because it was frequent in the tokenizer's training data but almost absent from the model's. Its vector stayed near its random start, and the model behaved strangely on it.</li>
+      <li><b>Spelling and counting letters.</b> The model never sees the letters inside <code> strawberry</code>, so "how many r's?" asks about something it never observed directly.</li>
+      <li><b>Prompt boundaries.</b> A prompt ending mid-word (<code>"https:"</code>) splits differently from the same text in training. "Token healing" backs up one token and constrains the next.</li>
+      <li><b>Digits.</b> GPT-2 merges digits however training happened to; later patterns cap groups at 3, which makes arithmetic easier to learn.</li>
+    </ul>
+    <p><b>BPE-dropout</b> randomly skips merges while the <em>model</em> trains, so it sees a word's pieces, not just one fixed split, and becomes more robust to typos.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Method</th><th>Training rule</th><th>Encoding</th><th>Used by</th></tr>
+      <tr><td>BPE (byte-level)</td><td>Merge the most frequent pair</td><td>Replay merges by rank</td><td>GPT-2/4/4o, Llama 3</td></tr>
+      <tr><td>WordPiece</td><td>Merge the pair maximizing count(ab) / (count(a) · count(b))</td><td>Longest match from the left</td><td>BERT</td></tr>
+      <tr><td>Unigram LM</td><td>Start big, prune tokens that hurt likelihood least</td><td>Most likely split (Viterbi), or sampled</td><td>T5, many SentencePiece models</td></tr>
+      <tr><td>Bytes only</td><td>None</td><td>Identity</td><td>ByT5</td></tr>
+    </table></div>
+    <div class="part"><b>Practice</b><ul>
+      <li>Implement BPE-dropout: at each step, drop each candidate merge with probability <var>p</var>. Show five splits of <code> unhappiness</code>.</li>
+      <li>Find a word that <code>gpt2</code>, <code>cl100k_base</code> and <code>o200k_base</code> split three different ways, and explain each from its pattern.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Unigram LM encoding: given token log-probabilities, find the most likely split with dynamic programming (Viterbi).</li>
+      <li>Detect under-trained tokens in a model you can load: which tokens have the smallest embedding norms?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <div class="code"><div class="ch"><span>bpe.py · BPE-dropout</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def encode_dropout(data, ranks, p, rng):
+    ids = list(data)
+    while len(ids) &gt;= 2:
+        cands = [(ranks[q], q) for q in zip(ids, ids[1:]) if q in ranks and rng.random() &gt;= p]
+        if not cands:
+            break
+        r, pair = min(cands)
+        ids = merge(ids, pair, r)
+    return ids
+# p = 0.3, vocab 2,000 on Alice, five seeds:
+#  ' un|ha|pp|iness'   ' un|ha|pp|ine|ss'   ' u|n|ha|pp|iness'   ' un|ha|p|p|in|es|s'   ...</code></pre></div>
+    <p>With <var>p</var> = 0 it is ordinary BPE; with <var>p</var> = 1 it returns bytes. Use it only while training the model; at inference, encode deterministically.</p></div></details>
+    <div class="part"><b>Further reading and watching</b><ul>
+      <li>Rumbelow and Watkins, <a href="https://www.lesswrong.com/posts/aPeJE8bSo6rAFoLqg/solidgoldmagikarp-plus-prompt-generation">SolidGoldMagikarp</a> (post) · Land and Bartolo, <a href="https://arxiv.org/abs/2405.05417">Fishing for Magikarp</a> (paper)</li>
+      <li>Provilkov et al., <a href="https://arxiv.org/abs/1910.13267">BPE-Dropout</a> · Kudo, <a href="https://arxiv.org/abs/1804.10959">Subword Regularization</a> · Xue et al., <a href="https://arxiv.org/abs/2105.13626">ByT5</a></li>
+      <li>Hugging Face LLM course: <a href="https://huggingface.co/learn/llm-course/chapter6/6">WordPiece</a> and <a href="https://huggingface.co/learn/llm-course/chapter6/7">Unigram</a> · <a href="https://tiktokenizer.vercel.app/">Tiktokenizer</a> to compare splits</li>
+    </ul></div>
+  </div>
+
+  <div class="blk des">
+    <div class="bh"><span class="kind">Design · training on terabytes, serving at scale</span><span class="pill">~1 h</span></div>
+    <p>Prompt: <em>train a tokenizer on a 10 TB multilingual corpus, then serve encoding for an API handling 50,000 requests per second.</em></p>
+    <div class="dg"><div class="vflow">
+      <div class="grid2" style="width:100%;max-width:32rem"><div class="vbox"><b>shard 1</b><span class="small muted">chunk + count</span></div><div class="vbox"><b>shard n</b><span class="small muted">chunk + count</span></div></div>
+      <div class="varr">↓ map (parallel)</div>
+      <div class="vbox"><b>reduce: sum counters</b><span class="small muted">then drop chunks seen fewer than a few times</span></div>
+      <div class="varr">↓ one machine</div>
+      <div class="vbox" style="border-color:var(--accent)"><b>merge loop</b><span class="small muted">sequential: each merge depends on the last</span></div>
+      <div class="varr">↓</div>
+      <div class="vbox"><b>merges file + hash</b><span class="small muted">shipped with the model; checked at load</span></div>
+    </div><div class="cap">Counting is word count, the classic MapReduce job. The merge loop would need a global barrier per merge (200,000 for a 200k vocabulary), so it isn't distributed; after deduplication it fits on one machine.</div></div>
+    <div class="tablewrap"><table>
+      <tr><th>Estimate</th><th class="num">Value</th><th>Working</th></tr>
+      <tr><td>Chunks in the corpus</td><td class="num">≈ 2 × 10<sup>12</sup></td><td>10 TB ÷ ~5 bytes per chunk</td></tr>
+      <tr><td>Unique chunks after pruning</td><td class="num">≈ 10<sup>8</sup></td><td>an assumption: measure on a sample</td></tr>
+      <tr><td>Merge-loop memory</td><td class="num">≈ 5–10 GB</td><td>10<sup>8</sup> × (~10 ids × 4 bytes + index overhead), compact language</td></tr>
+      <tr><td>Serving load</td><td class="num">≈ 5 × 10<sup>7</sup> tokens/s</td><td>50,000 req/s × ~1,000 tokens</td></tr>
+    </table></div>
+    <p><b>Serving:</b> tokenize in the API layer, before the GPU queue (the count is needed for routing, rate limits and billing); compiled code plus a bounded chunk cache. <b>The tokenizer is part of the model's contract:</b> token ids are baked into the embedding table, so ship the merges file with the model, store its hash, refuse a mismatch, and pin the regex and Unicode versions.</p>
+    <div class="part"><b>Practice</b><ul>
+      <li>Write the map and reduce for chunk counting and check they give the same counter as a single pass.</li>
+      <li>Benchmark your encoder's tokens per second on one core, with and without the cache; size the serving fleet.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>How many unique chunks does a 100 MB sample have, and how many survive pruning at count ≥ 2, 5, 10? Redo the memory estimate.</li>
+      <li>Design how a model server detects a tokenizer that doesn't match the model.</li>
+      <li>Sampling weights per language: what is the trade-off between natural frequencies and upsampling?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <div class="code"><div class="ch"><span>count.py · map and reduce</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
+from multiprocessing import Pool
+
+def map_shard(lines):
+    return Counter(c for line in lines for c in PATTERN.findall(line))
+
+def reduce_counts(counters):
+    total = Counter()
+    for c in counters:
+        total.update(c)
+    return total
+
+lines = open("data/alice.txt").read().splitlines()
+with Pool(4) as pool:
+    total = reduce_counts(pool.map(map_shard, [lines[i::4] for i in range(4)]))
+assert total == map_shard(lines)                  # same counter as one pass</code></pre></div>
+    <p>Fleet sizing: if one core encodes <var>t</var> tokens/s on real traffic (measure it; the cache hit rate dominates), the fleet needs 5 × 10<sup>7</sup> / <var>t</var> cores, plus headroom for peaks (×2) and failures (+1 zone). Mismatch detection: the model's config stores the SHA-256 of the merges file; the server hashes the tokenizer it loads and refuses to start on a difference.</p></div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/">Mining of Massive Datasets</a>, chapter 2 (MapReduce), free online</li>
+    </ul></div>
+  </div>
+
+  <div class="check" data-check="day5">
+    <div class="ch"><b>Checkpoint · Day 5</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d5a" data-dim="dsa"><span class="tx">Solve 146, and implement the O(L log L) encoder with a differential test.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5b" data-dim="ml"><span class="tx">Implement BPE-dropout and show five splits of one word.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5c" data-dim="ai"><span class="tx">Explain three tokenizer-caused model failures, with one example each.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5d" data-dim="sys"><span class="tx">MapReduce chunk counting, and a fleet estimate from your own benchmark.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5e" data-dim="sys"><span class="tx">One-page design: detecting a tokenizer that doesn't match the model.</span><span class="dim sys">System Design</span></label>
+  </div>
+</section><div class="pager"><a class="btn" href="day_4.html">← Fast training</a><a class="btn pri" href="worksheet.html">Worksheet and checks →</a></div>
+<footer>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
+</footer>
+
+</div></main>
+</div>
+<script>window.MathJax = {tex: {inlineMath: [["\\(", "\\)"]]}, svg: {fontCache: "global"}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
+const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
+const chunk = (t, p) => t.match(p) || [];
+const simChunks = t => $("simMode").value === "words" ? t.split(/\s+/).filter(Boolean) : chunk(t, PAT);
+function show(bytes) {
+  try { return dec.decode(new Uint8Array(bytes)).replace(/ /g, "·").replace(/\n/g, "⏎"); }
+  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
+}
+const span = (bytes, cls = "") => `<span class="tk${cls}">${esc(show(bytes))}</span>`;
+
+/* ---------- Chunker ---------- */
+function chRender() {
+  const t = $("chText").value, marks = $("chMarks").checked;
+  const cs = chunk(t, marks ? PAT_M : PAT);
+  $("chOut").innerHTML = cs.map(c => {
+    const lone = /^\p{M}/u.test(c);
+    return `<span class="tk${lone ? " mk" : ""}" title="${enc.encode(c).length} bytes">${esc(c.replace(/ /g, "·"))}</span>`;
+  }).join("");
+  const lone = cs.filter(c => /^\p{M}/u.test(c)).length;
+  $("chStat").innerHTML = `<b>${cs.length}</b> chunks` + (lone ? ` · <b>${lone}</b> start with a mark (red): a word was cut in two` : "");
+}
+if ($("chText")) {
+  $("chText").addEventListener("input", chRender);
+  $("chMarks").addEventListener("change", chRender);
+  chRender();
+}
+
+/* ---------- Min-heap of [negCount, a, b] ---------- */
+const less = (x, y) => x[0] !== y[0] ? x[0] < y[0] : x[1] !== y[1] ? x[1] < y[1] : x[2] < y[2];
+function hpush(h, v) { h.push(v); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(h[i], h[p])) break; [h[i], h[p]] = [h[p], h[i]]; i = p; } }
+function sift(h, i) { const n = h.length; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < n && less(h[l], h[m])) m = l; if (r < n && less(h[r], h[m])) m = r; if (m === i) return; [h[i], h[m]] = [h[m], h[i]]; i = m; } }
+function hpop(h) { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; sift(h, 0); } return top; }
+function heapify(h) { for (let i = (h.length >> 1) - 1; i >= 0; i--) sift(h, i); }
+
+/* ---------- Trainer, written exactly like the Python ---------- */
+const K = (a, b) => a + "," + b;
+const unK = k => k.split(",").map(Number);
+function mergeIds(ids, a, b, id) {
+  const out = [];
+  for (let i = 0; i < ids.length;) {
+    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
+    else { out.push(ids[i]); i += 1; }
+  }
+  return out;
+}
+let S;
+function simInit() {
+  const cnt = new Map();
+  for (const c of simChunks($("simText").value)) cnt.set(c, (cnt.get(c) || 0) + 1);
+  const words = [...cnt].map(([c, f]) => ({ids: [...enc.encode(c)], f}));
+  const vocab = new Map(); for (let i = 0; i < 256; i++) vocab.set(i, [i]);
+  const counts = new Map(), where = new Map();
+  words.forEach((w, wi) => {
+    for (let i = 0; i + 1 < w.ids.length; i++) {
+      const k = K(w.ids[i], w.ids[i + 1]);
+      counts.set(k, (counts.get(k) || 0) + w.f);
+      if (!where.has(k)) where.set(k, new Set());
+      where.get(k).add(wi);
+    }
+  });
+  const heap = [...counts].map(([k, c]) => [-c, ...unK(k)]); heapify(heap);
+  const bytes = words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  S = {words, vocab, counts, where, heap, merges: [], done: false, bytes, delta: new Map(), visited: new Set(), last: -1, stalePops: 0, pops: 0, log: []};
+  S.log.push(`<div class="s">${words.length} unique chunks, ${counts.size} distinct pairs, heap of ${heap.length}. Press "Next merge".</div>`);
+}
+function simStep() {
+  if (S.done) return false;
+  S.delta = new Map(); S.visited = new Set();
+  for (;;) {
+    if (!S.heap.length) { S.done = true; S.log.push(`<div class="h">Stop: the heap is empty. Every chunk is one token.</div>`); return false; }
+    const [neg, a, b] = hpop(S.heap); S.pops++;
+    const k = K(a, b), live = S.counts.get(k) || 0;
+    if (live !== -neg) {
+      S.stalePops++;
+      S.log.push(`<div class="s">pop (${-neg}, ${esc(show(S.vocab.get(a)))}+${esc(show(S.vocab.get(b)))}) · live count is ${live}, not ${-neg} → stale, throw away</div>`);
+      continue;
+    }
+    if (live < 2) { S.done = true; S.log.push(`<div class="h">Stop: the best pair occurs ${live} time. Nothing is worth merging.</div>`); return false; }
+    const id = 256 + S.merges.length;
+    S.vocab.set(id, S.vocab.get(a).concat(S.vocab.get(b)));
+    S.merges.push({a, b, id, count: live}); S.last = id;
+    const wis = [...(S.where.get(k) || [])];
+    for (const wi of wis) {
+      const w = S.words[wi], old = w.ids, nw = mergeIds(old, a, b, id);
+      w.ids = nw; S.visited.add(wi);
+      for (let i = 0; i + 1 < old.length; i++) { const q = K(old[i], old[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) - w.f); S.where.get(q)?.delete(wi); }
+      for (let i = 0; i + 1 < nw.length; i++) { const q = K(nw[i], nw[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) + w.f); if (!S.where.has(q)) S.where.set(q, new Set()); S.where.get(q).add(wi); }
+    }
+    const pushed = [];
+    for (const [q, d] of S.delta) {
+      if (!d) continue;
+      const c = (S.counts.get(q) || 0) + d; S.counts.set(q, c);
+      if (c > 0) { hpush(S.heap, [-c, ...unK(q)]); pushed.push(q); }
+    }
+    S.counts.delete(k); S.where.delete(k);
+    const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+    S.log.push(`<div class="h">merge #${S.merges.length}: ${esc(show(S.vocab.get(a)))} + ${esc(show(S.vocab.get(b)))} → ${esc(show(S.vocab.get(id)))} (id ${id}, count ${live})</div>` +
+      `<div>visited ${wis.length} of ${S.words.length} chunks via where[pair] · pushed ${pushed.length} new counts · corpus now ${tokens} tokens</div>`);
+    return true;
+  }
+}
+function simRender() {
+  const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  $("simStat").innerHTML = `<b>${S.bytes}</b> bytes → <b>${tokens}</b> tokens · ${S.merges.length} merges · stale pops ${S.stalePops} of ${S.pops} · heap ${S.heap.length}`;
+  $("simVisited").textContent = S.visited.size ? `${S.visited.size} visited` : "";
+  $("simWords").innerHTML = S.words.map((w, wi) =>
+    `<div class="wrow${S.visited.has(wi) ? " hit" : ""}"><span class="f">×${w.f}</span><span class="toks" style="margin:0">${w.ids.map(i => span(S.vocab.get(i), i === S.last ? " new" : "")).join("")}</span></div>`).join("");
+  const rows = [...S.counts].filter(([k, c]) => c > 0 || S.delta.get(k));
+  rows.sort((x, y) => y[1] - x[1] || (unK(x[0])[0] - unK(y[0])[0]) || (unK(x[0])[1] - unK(y[0])[1]));
+  $("simCounts").innerHTML = rows.slice(0, 10).map(([k, c]) => {
+    const [a, b] = unK(k), d = S.delta.get(k) || 0;
+    return `<tr><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${c}</td><td class="r ${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" + d : d < 0 ? d : ""}</td></tr>`;
+  }).join("") || `<tr><td class="muted">no pairs left</td></tr>`;
+  const top = [...S.heap].sort((x, y) => less(x, y) ? -1 : less(y, x) ? 1 : 0).slice(0, 10);
+  $("simHeap").innerHTML = top.map(([neg, a, b]) => {
+    const live = S.counts.get(K(a, b)) || 0, stale = live !== -neg;
+    return `<tr class="${stale ? "stale" : ""}"><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${-neg}</td><td class="r">${stale ? "live " + live : "current"}</td></tr>`;
+  }).join("") || `<tr><td class="muted">empty</td></tr>`;
+  $("simMerges").innerHTML = S.merges.slice(-10).map(m =>
+    `<tr><td class="r">${m.id}</td><td>${span(S.vocab.get(m.a))} + ${span(S.vocab.get(m.b))}</td><td>→ ${span(S.vocab.get(m.id), m.id === S.last ? " new" : "")}</td></tr>`).join("") || `<tr><td class="muted">none yet: the vocabulary is the 256 bytes</td></tr>`;
+  $("simLog").innerHTML = S.log.slice(-40).join("");
+  $("simLog").scrollTop = $("simLog").scrollHeight;
+  encRender();
+}
+if ($("simText")) {
+$("simStep").onclick = () => { simStep(); simRender(); };
+$("simAll").onclick = () => { let n = 0; while (n++ < 500 && simStep()); simRender(); };
+$("simReset").onclick = () => { simInit(); simRender(); };
+$("simText").addEventListener("input", () => { simInit(); simRender(); });
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { $("simText").value = b.dataset.preset; $("simMode").value = b.dataset.mode; simInit(); simRender(); });
+$("simMode").addEventListener("change", () => { simInit(); simRender(); });
+
+/* ---------- Encoder: replay merges by rank ---------- */
+var encRender = function () {
+  const ranks = new Map(S.merges.map(m => [K(m.a, m.b), m.id]));
+  const out = [], log = [];
+  for (const c of simChunks($("encText").value)) {
+    let ids = [...enc.encode(c)];
+    const steps = [];
+    while (ids.length >= 2) {
+      let best = null, br = Infinity;
+      for (let i = 0; i + 1 < ids.length; i++) { const r = ranks.get(K(ids[i], ids[i + 1])); if (r !== undefined && r < br) { br = r; best = [ids[i], ids[i + 1]]; } }
+      if (!best) break;
+      ids = mergeIds(ids, best[0], best[1], br);
+      steps.push(`rank ${br - 256}: ${esc(show(S.vocab.get(br)))}`);
+    }
+    out.push(...ids);
+    log.push(`<div><b>${esc(c.replace(/ /g, "·"))}</b> <span class="s">${steps.length ? steps.join(" → ") : "no learned pair: stays bytes"}</span></div>`);
+  }
+  $("encOut").innerHTML = out.map(i => span(S.vocab.get(i))).join("");
+  const nb = enc.encode($("encText").value).length;
+  $("encStat").innerHTML = `<b>${nb}</b> bytes → <b>${out.length}</b> tokens with ${S.merges.length} learned merges`;
+  $("encLog").innerHTML = log.join("");
+};
+$("encText").addEventListener("input", encRender);
+simInit(); simRender();
+}
+
+/* ---------- Progress: checkpoints fill the coverage bars ---------- */
+const KEY = "bpe-week-progress-v1";
+const ITEMS = [{"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "ml", "page": "day_5.html"}, {"id": "d5c", "dim": "ai", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
+const boxes = [...document.querySelectorAll("label.ck input")];
+function save() { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch {} }
+function progRender() {
+  const html = DIMS.map(([d, name]) => {
+    const all = ITEMS.filter(it => it.dim === d), n = all.filter(it => done.has(it.id)).length;
+    const pct = all.length ? Math.round(100 * n / all.length) : 0;
+    return `<div class="prow"><span class="t-${d}">${name}</span><span class="bar"><i style="width:${pct}%;background:var(--${d})"></i></span><span class="v">${n}/${all.length}</span></div>`;
+  }).join("");
+  document.querySelectorAll("[data-prog]").forEach(el => el.innerHTML = html);
+  const n = ITEMS.filter(it => done.has(it.id)).length;
+  document.querySelectorAll("[data-total]").forEach(el => el.textContent = `${n} of ${ITEMS.length} checks done this week`);
+  document.querySelectorAll(".check").forEach(c => {
+    const bs = [...c.querySelectorAll("input")], k = bs.filter(b => b.checked).length;
+    c.querySelector("[data-count]").textContent = `${k}/${bs.length}`;
+  });
+  document.querySelectorAll("nav.rail a[data-page]").forEach(link => {
+    const mine = ITEMS.filter(it => it.page === link.dataset.page), all = mine.length && mine.every(it => done.has(it.id));
+    let ok = link.querySelector(".ok");
+    if (all && !ok) { ok = document.createElement("span"); ok.className = "ok"; ok.textContent = "✓"; link.append(ok); }
+    else if (!all && ok) ok.remove();
+  });
+}
+boxes.forEach(b => {
+  b.checked = done.has(b.dataset.id);
+  b.addEventListener("change", () => { b.checked ? done.add(b.dataset.id) : done.delete(b.dataset.id); save(); progRender(); });
+});
+document.querySelectorAll("[data-reset]").forEach(btn => {
+  let armed = false, t;
+  btn.addEventListener("click", () => {
+    if (!armed) { armed = true; btn.textContent = "Click again to clear"; t = setTimeout(() => { armed = false; btn.textContent = "Reset"; }, 3000); return; }
+    clearTimeout(t); armed = false; btn.textContent = "Reset";
+    done.clear(); boxes.forEach(b => b.checked = false); save(); progRender();
+  });
+});
+progRender();
+
+/* ---------- Copy buttons on code cards ---------- */
+document.querySelectorAll(".code").forEach(card => {
+  const btn = card.querySelector("button.copy"), code = card.querySelector("code");
+  if (!btn || !code) return;
+  btn.addEventListener("click", () => {
+    const done = t => { btn.textContent = t; setTimeout(() => btn.textContent = "Copy", 1500); };
+    navigator.clipboard.writeText(code.textContent).then(() => done("Copied"), () => {
+      const r = document.createRange(); r.selectNodeContents(code);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done("Selected: press Ctrl/Cmd+C");
+    });
+  });
+});
+
+})();
+</script>
+
+</body></html>

@@ -2,6 +2,7 @@
 name = "tok"
 version = "0.1.0"
 description = "Week 1: a byte-level BPE tokenizer, samplers, and grammar-constrained JSON decoding"
+license = {text = "CC-BY-4.0"}
 requires-python = ">=3.11"
 dependencies = ["regex>=2024.0", "numpy>=1.26"]
 
