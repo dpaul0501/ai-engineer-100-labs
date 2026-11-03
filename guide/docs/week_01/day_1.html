@@ -281,12 +281,12 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day1" data-sec="day1">
-  <div class="shead"><span class="sno">DAY 1 · TEXT AS DATA</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="pill">~3 h</span></span></div>
+  <div class="shead"><span class="sno">DAY 1 · TEXT AS DATA</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
   <h2>What text looks like to a counter</h2>
   <p>BPE only ever counts things. Today: how text is distributed (ML), how to count it correctly and fast (algorithms), and how to cut it into the pieces that get counted (design).</p>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · Zipf's law and the long tail</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">ML · Zipf's law and the long tail</span></div>
     <p>In natural language, the word of frequency rank <var>r</var> appears roughly in proportion to 1/<var>r</var><sup>s</sup> with <var>s</var> near 1: a straight line on a log–log plot. A few words are everywhere; most words are rare. On <em>Alice in Wonderland</em> (37,404 words, 3,218 distinct):</p>
     <div class="chart"><div class="t">Share of <em>Alice</em> covered by its most frequent words</div>
       <div class="br"><span>top 10 words</span><span class="tr"><i style="width:26%"></i></span><span class="v">26%</span></div>
@@ -325,7 +325,7 @@ print(zipf_slope(words))    # -1.23 on alice.txt</code></pre></div>
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · UTF-8, hash maps, sliding windows</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Algorithms · UTF-8, hash maps, sliding windows</span></div>
     <h4>UTF-8: the 256-symbol alphabet</h4>
     <p>UTF-8 writes each Unicode character as 1–4 bytes. The first byte says how many follow:</p>
     <div class="tablewrap"><table>
@@ -382,7 +382,7 @@ assert most_frequent_pair([1, 2, 1, 2, 3, 3]) == (1, 2)</code></pre></div>
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · the pre-tokenization pattern</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Design · the pre-tokenization pattern</span></div>
     <p>Before BPE counts anything, a regular expression cuts text into <b>chunks</b>, and merges never cross a chunk boundary. Without it, BPE learns accidental tokens like <code>t␣s</code> (the end of one word, the start of the next) and separate tokens for <code>dog.</code>, <code>dog,</code> and <code>dog!</code>.</p>
     <div class="code"><div class="ch"><span>GPT-2 pre-tokenization pattern</span><button class="copy" type="button">Copy</button></div><pre><code>'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+      <span class="c"># GPT-2</span></code></pre></div>
     <div class="tablewrap"><table>

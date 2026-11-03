@@ -281,11 +281,11 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day3" data-sec="day3">
-  <div class="shead"><span class="sno">DAY 3 · INFORMATION</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="pill">~3 h</span></span></div>
+  <div class="shead"><span class="sno">DAY 3 · INFORMATION</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
   <h2>Tokenization moves information around; it never creates or destroys it</h2>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · entropy and bits per byte</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">ML · entropy and bits per byte</span></div>
     <p>An event of probability <var>p</var> carries −log₂ <var>p</var> bits of surprise. <b>Entropy</b> is the average surprise (left, below): largest (log₂ <var>V</var>) when all outcomes are equally likely, 0 when one is certain. Shannon's source coding theorem says no lossless code averages fewer than <var>H</var> bits per symbol, and the best codes give each symbol about −log₂ <var>p</var> bits: <b>frequent things get short codes</b>. BPE follows that rule with substrings: frequent strings become one token.</p>
     <p>Because tokenizing is lossless, it can't change how much information text contains. It only moves it:</p>
     <div class="eq">\[
@@ -346,7 +346,7 @@ def unigram_bits_per_byte(train_txt, test_txt, merges):
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · Huffman, a greedy that is optimal</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Algorithms · Huffman, a greedy that is optimal</span></div>
     <p>Yesterday greedy failed. Huffman coding is the classic case where it provably works. Put every symbol in a min-heap by frequency; repeatedly pop the two rarest, join them under a new node whose frequency is their sum, and push it back. The path from the root to a symbol (0 = left, 1 = right) is its codeword.</p>
     <p><b>Why greedy is optimal here:</b> an exchange argument. In some optimal tree the two rarest symbols are siblings at the deepest level (if not, swap them there; the average length can't go up). Merging them reduces the problem to one fewer symbol with the same structure, so by induction greedy is optimal.</p>
     <p><b>BPE versus Huffman.</b> Both exploit frequency. Huffman keeps the symbols fixed and gives frequent ones <em>shorter codewords</em>; BPE keeps codewords fixed-size (one id each) and gives frequent strings <em>bigger symbols</em>.</p>
@@ -379,7 +379,7 @@ def huffman(freqs):
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · evaluating a tokenizer</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Design · evaluating a tokenizer</span></div>
     <p>An evaluation plan decides which tokenizer ships. It needs:</p>
     <ul>
       <li><b>Fertility</b>: tokens per word (or per byte) for every language and domain you serve. Report the worst case, not just the average.</li>

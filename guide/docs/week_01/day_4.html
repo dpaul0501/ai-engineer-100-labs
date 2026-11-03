@@ -281,12 +281,12 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day4" data-sec="day4">
-  <div class="shead"><span class="sno">DAY 4 · FAST TRAINING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim del">Delivery</span><span class="pill">~3.5 h</span></span></div>
+  <div class="shead"><span class="sno">DAY 4 · FAST TRAINING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim del">Delivery</span></span></div>
   <h2>Count once, then update only what each merge changes</h2>
   <p>The main-reading trainer recounts every pair after every merge: O(merges × corpus). Today you make it about 60× faster on <em>Alice</em> without changing a single output, and build the tests that prove it.</p>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · counts are sufficient statistics</span><span class="pill">~45 min</span></div>
+    <div class="bh"><span class="kind">ML · counts are sufficient statistics</span></div>
     <p>A <b>sufficient statistic</b> is a summary of the data that loses nothing the estimator needs. The mean and count are sufficient for fitting a Gaussian's mean; n-gram counts are sufficient for fitting an n-gram model (you will use this in the next chapter). For BPE training, <b>the counter of unique chunks is sufficient</b>: every step of the trainer reads only <code>words</code> and <code>freqs</code>, never the order of the text.</p>
     <div class="dg"><div class="vflow">
       <div class="vbox"><b>156,630 bytes of text</b><span class="muted small">37,404 chunks, in order</span></div>
@@ -312,7 +312,7 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · heap, lazy deletion, inverted index</span><span class="pill">~1.5 h</span></div>
+    <div class="bh"><span class="kind">Algorithms · heap, lazy deletion, inverted index</span></div>
     <h4>The key observation: a merge only changes its neighbours</h4>
     <div class="dg">
       <div class="seq"><span class="nd">x</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">y</span><span class="lk">&nbsp;&nbsp;→&nbsp;&nbsp;</span><span class="nd">x</span><span class="nd hot">Z</span><span class="nd">y</span></div>
@@ -431,7 +431,7 @@ class StockPrice:                                # 2034: lazy deletion, twice
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · contracts and tests</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Design · contracts and tests</span></div>
     <p>Write the invariants before the code; each becomes a test that exists, and fails, before the implementation.</p>
     <div class="code"><div class="ch"><span>contracts.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Tokenizer(Protocol):
     vocab_size: int

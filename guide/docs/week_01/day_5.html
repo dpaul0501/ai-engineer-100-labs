@@ -281,11 +281,11 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day5" data-sec="day5">
-  <div class="shead"><span class="sno">DAY 5 · ENCODING AND SERVING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="dim sys">Sys</span><span class="pill">~3.5 h</span></span></div>
+  <div class="shead"><span class="sno">DAY 5 · ENCODING AND SERVING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="dim sys">Sys</span></span></div>
   <h2>From a trained merge list to a production tokenizer</h2>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · the fast encoder and caches</span><span class="pill">~1.5 h</span></div>
+    <div class="bh"><span class="kind">Algorithms · the fast encoder and caches</span></div>
     <p>The main-reading encoder scans the chunk for the lowest-rank pair, merges all its occurrences, and repeats: O(<var>L</var> · <var>R</var>) per chunk, where <var>R</var> is the number of distinct merges that apply. Chunks are short, so this is fine, until a chunk is long. A 10 KB string with no spaces needed 428 rounds.</p>
     <p>The fix uses a <b>doubly linked list</b> of tokens and a <b>min-heap</b> of (rank, position) for adjacent pairs. Pop the lowest rank; if the entry is stale, skip it; otherwise splice the two nodes and push only the two new neighbouring pairs.</p>
     <div class="dg">
@@ -362,7 +362,7 @@ class LRUCache:
   </div>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · failure modes and alternatives</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">ML · failure modes and alternatives</span></div>
     <ul>
       <li><b>Glitch tokens.</b> <code> SolidGoldMagikarp</code> became a GPT-2 token because it was frequent in the tokenizer's training data but almost absent from the model's. Its vector stayed near its random start, and the model behaved strangely on it.</li>
       <li><b>Spelling and counting letters.</b> The model never sees the letters inside <code> strawberry</code>, so "how many r's?" asks about something it never observed directly.</li>
@@ -406,7 +406,7 @@ class LRUCache:
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · training on terabytes, serving at scale</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Design · training on terabytes, serving at scale</span></div>
     <p>Prompt: <em>train a tokenizer on a 10 TB multilingual corpus, then serve encoding for an API handling 50,000 requests per second.</em></p>
     <div class="dg"><div class="vflow">
       <div class="grid2" style="width:100%;max-width:32rem"><div class="vbox"><b>shard 1</b><span class="small muted">chunk + count</span></div><div class="vbox"><b>shard n</b><span class="small muted">chunk + count</span></div></div>

@@ -35,13 +35,13 @@ The tokenizer has its own week-long chapter, [BPE from first principles](../week
 - your package on **TestPyPI**
 - a post with two tables: **bytes per token** for English vs Hindi (yours vs GPT-2's), and the **valid-JSON rate**, free vs constrained
 
-| Block | Time | What |
-|---|---|---|
-| Lecture | 75 min | The [Week 1 tutorial](../tutorials/week_01.html), one segment per dimension |
-| Project | ~20 h | Seven milestones, in the order spec → contract → test → code |
-| DSA reps | 45 min/day | 13 problems: hashing, heaps, tries, stacks and automata, sampling |
-| System design | ~3 h | ◆ Web crawler (timed mock) and a unique ID generator |
-| Practice projects | ~4 h | A token-tax study with confidence intervals, and Kaggle's *LLM - Detect AI Generated Text* with your own tokenizer |
+| Block | What |
+|---|---|
+| Lecture | The [Week 1 tutorial](../tutorials/week_01.html), one segment per dimension |
+| Project | Seven milestones, in the order spec → contract → test → code |
+| DSA reps | 13 problems: hashing, heaps, tries, stacks and automata, sampling |
+| System design | ◆ Web crawler (timed mock) and a unique ID generator |
+| Practice projects | A token-tax study with confidence intervals, and Kaggle's *LLM - Detect AI Generated Text* with your own tokenizer |
 
 ### Every unit follows the same cycle
 
@@ -53,16 +53,16 @@ The tokenizer has its own week-long chapter, [BPE from first principles](../week
 
 Commit each unit to your repo. Post one finding a day as **Day N/100**.
 
-## The lecture (75 min)
+## The lecture
 
 | Segment | Content |
 |---|---|
-| The problem (10 min) | Ask a model for JSON 50 times: some answers do not parse. Ask in Hindi: it costs more tokens for the same meaning. Both come from the code around the model, not the model |
-| AI (15 min) | Bytes and UTF-8, BPE training, encoding by merge rank. Live: train on `aaabdaaabac` by hand, then in code |
-| ML (15 min) | Counting is maximum likelihood; perplexity; softmax, temperature, top-k, top-p as operations on one probability vector. Live: the same logits at T = 0.5, 1, 2 |
-| DSA (15 min) | The merge heap with lazy deletion; JSON as a pushdown automaton (a state machine with a stack); a vocabulary trie that prunes thousands of tokens at once. Live: brute-force mask vs trie mask on GPT-2's vocabulary |
-| Software Delivery (15 min) | Spec → contract → test → code. Protocols, golden tests, property tests that generate thousands of JSON values, planted bugs. Live: Hypothesis finds a round-trip bug |
-| Done looks like (5 min) | The milestones, the experiment table, and the defense |
+| The problem | Ask a model for JSON 50 times: some answers do not parse. Ask in Hindi: it costs more tokens for the same meaning. Both come from the code around the model, not the model |
+| AI | Bytes and UTF-8, BPE training, encoding by merge rank. Live: train on `aaabdaaabac` by hand, then in code |
+| ML | Counting is maximum likelihood; perplexity; softmax, temperature, top-k, top-p as operations on one probability vector. Live: the same logits at T = 0.5, 1, 2 |
+| DSA | The merge heap with lazy deletion; JSON as a pushdown automaton (a state machine with a stack); a vocabulary trie that prunes thousands of tokens at once. Live: brute-force mask vs trie mask on GPT-2's vocabulary |
+| Software Delivery | Spec → contract → test → code. Protocols, golden tests, property tests that generate thousands of JSON values, planted bugs. Live: Hypothesis finds a round-trip bug |
+| Done looks like | The milestones, the experiment table, and the defense |
 
 ## The project: `tok`
 
@@ -258,7 +258,7 @@ Put the week together as one system and defend it with numbers: a service that t
 
 Both projects reuse `tok` and practise this week's probability and statistics on real data.
 
-### 1. The token tax, with error bars (~1.5 h)
+### 1. The token tax, with error bars
 
 **Question:** how many more tokens does the same sentence cost in Indian languages, and how sure are you?
 
@@ -270,7 +270,7 @@ Both projects reuse `tok` and practise this week's probability and statistics on
     - Is `o200k_base` better than `cl100k_base` for Hindi? Bootstrap the paired *difference* and say whether the interval excludes 0.
 - **Deliverable:** one table and one chart with error bars, used in your post.
 
-### 2. Kaggle: [LLM - Detect AI Generated Text](https://www.kaggle.com/competitions/llm-detect-ai-generated-text) (~2.5 h)
+### 2. Kaggle: [LLM - Detect AI Generated Text](https://www.kaggle.com/competitions/llm-detect-ai-generated-text)
 
 **Question:** was this essay written by a student or by an LLM? The metric is ROC AUC. The competition has ended, but late submissions are scored.
 

@@ -231,7 +231,7 @@ footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:v
 
 <!-- 00 -->
 <section class="s" id="loop">
-  <div class="shead"><span class="sno">00 · THE LOOP</span><span class="pill">10 min</span></div>
+  <div class="shead"><span class="sno">00 · THE LOOP</span></div>
   <h2>One loop runs every LLM</h2>
   <div class="flow">
     <span class="b">text</span><span class="ar">→</span><span class="b hi">tokenizer</span><span class="ar">→</span><span class="b">ids</span><span class="ar">→</span><span class="b">model</span><span class="ar">→</span><span class="b">logits</span><span class="ar">→</span><span class="b hi">mask</span><span class="ar">→</span><span class="b hi">sampler</span><span class="ar">→</span><span class="b">one id</span><span class="ar">↺</span>
@@ -252,7 +252,7 @@ text = tokenizer.decode(ids)</code></pre>
 
 <!-- 01 -->
 <section class="s" id="utf8">
-  <div class="shead"><span class="sno">01 · BYTES AND UTF-8</span><div class="dims"><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <div class="shead"><span class="sno">01 · BYTES AND UTF-8</span><div class="dims"><span class="dim">AI</span></div></div>
   <h2>Start from bytes, and nothing is ever unknown</h2>
   <p class="idea">Every string is a sequence of bytes in UTF-8. If the vocabulary starts with all 256 byte values, any text can be encoded, in any language, with no "unknown" token.</p>
   <p>UTF-8 uses 1 byte for ASCII and 2–4 bytes for everything else. The first byte says how many follow:</p>
@@ -281,7 +281,7 @@ text = tokenizer.decode(ids)</code></pre>
 
 <!-- 02 -->
 <section class="s" id="bpe">
-  <div class="shead"><span class="sno">02 · BPE TRAINING</span><div class="dims"><span class="dim">AI</span><span class="dim">DSA</span><span class="pill">10 min</span></div></div>
+  <div class="shead"><span class="sno">02 · BPE TRAINING</span><div class="dims"><span class="dim">AI</span><span class="dim">DSA</span></div></div>
   <h2>Merge the most common pair, again and again</h2>
   <p class="idea">Byte-pair encoding starts with single bytes and repeatedly glues together the pair of neighbours that appears most often. Each glue becomes a new token. Stop when the vocabulary is big enough.</p>
 <pre><code>def merge(ids, pair, new_id):
@@ -341,7 +341,7 @@ def train_naive(text, vocab_size):
 
 <!-- 03 -->
 <section class="s" id="heap">
-  <div class="shead"><span class="sno">03 · THE MERGE HEAP</span><div class="dims"><span class="dim">DSA</span><span class="pill">10 min</span></div></div>
+  <div class="shead"><span class="sno">03 · THE MERGE HEAP</span><div class="dims"><span class="dim">DSA</span></div></div>
   <h2>Don't re-count: update, and let a heap find the best</h2>
   <p class="idea">A merge only changes the words that contain the merged pair. Keep pair counts in a hash map, update just those words, and keep a heap to find the most frequent pair. When a count changes, don't search the heap for the old entry: push a new one and ignore stale entries when they reach the top.</p>
 <pre><code>heap = [(-count, pair) for pair, count in pair_counts.items()]
@@ -378,7 +378,7 @@ while need_more_merges and heap:
 
 <!-- 04 -->
 <section class="s" id="encode">
-  <div class="shead"><span class="sno">04 · ENCODE BY RANK</span><div class="dims"><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <div class="shead"><span class="sno">04 · ENCODE BY RANK</span><div class="dims"><span class="dim">AI</span></div></div>
   <h2>Encoding replays training, in merge order</h2>
   <p class="idea">To encode new text, repeat: find the pair in this chunk that was merged <i>earliest</i> in training, and merge it. The merge list is the tokenizer.</p>
 <pre><code>def encode_chunk(data: bytes, ranks: dict) -&gt; list[int]:
@@ -409,7 +409,7 @@ def decode(ids):
 
 <!-- 05 -->
 <section class="s" id="ngram">
-  <div class="shead"><span class="sno">05 · COUNTING IS A MODEL</span><div class="dims"><span class="dim">ML</span><span class="pill">8 min</span></div></div>
+  <div class="shead"><span class="sno">05 · COUNTING IS A MODEL</span><div class="dims"><span class="dim">ML</span></div></div>
   <h2>The simplest language model counts what came next</h2>
   <p class="idea">An n-gram model predicts the next token from the last n − 1 tokens by counting how often each token followed them in training. Counting is not a shortcut: it is exactly the maximum-likelihood answer.</p>
 <pre><code>P(w | ctx) = (count(ctx, w) + k) / (count(ctx) + k · V)     <span class="c"># add-k smoothing</span>
@@ -434,7 +434,7 @@ def logprobs(self, context):
 
 <!-- 06 -->
 <section class="s" id="ppl">
-  <div class="shead"><span class="sno">06 · PERPLEXITY</span><div class="dims"><span class="dim">ML</span><span class="pill">5 min</span></div></div>
+  <div class="shead"><span class="sno">06 · PERPLEXITY</span><div class="dims"><span class="dim">ML</span></div></div>
   <h2>How surprised is the model, on average?</h2>
   <p class="idea">Perplexity is exp(average negative log-probability) on held-out text. A model that guesses uniformly over V tokens has perplexity exactly V. Lower is better: "as confused as choosing among this many tokens".</p>
 <pre><code>ppl = exp( -(1/N) · Σ log P(token_i | context_i) )
@@ -451,7 +451,7 @@ NGramLM(2, 300).perplexity([[1, 2, 3, 4]]) == 300    <span class="c"># untrained
 
 <!-- 07 -->
 <section class="s" id="softmax">
-  <div class="shead"><span class="sno">07 · SOFTMAX AND TEMPERATURE</span><div class="dims"><span class="dim">ML</span><span class="dim">AI</span><span class="pill">8 min</span></div></div>
+  <div class="shead"><span class="sno">07 · SOFTMAX AND TEMPERATURE</span><div class="dims"><span class="dim">ML</span><span class="dim">AI</span></div></div>
   <h2>From scores to probabilities, without overflow</h2>
   <p class="idea">Softmax turns scores into probabilities: exponentiate, then divide by the total. Temperature divides the scores first. Low temperature sharpens toward the top token; high temperature flattens toward uniform.</p>
 <pre><code>def log_softmax(x):
@@ -491,7 +491,7 @@ probs = softmax([v / T for v in logits])              <span class="c"># T → 0:
 
 <!-- 08 -->
 <section class="s" id="filters">
-  <div class="shead"><span class="sno">08 · TOP-K, TOP-P, THE DRAW</span><div class="dims"><span class="dim">DSA</span><span class="dim">ML</span><span class="pill">7 min</span></div></div>
+  <div class="shead"><span class="sno">08 · TOP-K, TOP-P, THE DRAW</span><div class="dims"><span class="dim">DSA</span><span class="dim">ML</span></div></div>
   <h2>Cut the tail, then draw one</h2>
   <p class="idea">Top-k keeps the k best tokens. Top-p keeps the <i>smallest</i> set of best tokens whose probability adds up to at least p, so it keeps few tokens when the model is sure and many when it is not. Then draw one token in proportion to what is left.</p>
 <pre><code>def top_k_filter(x, k):                               <span class="c"># heap of size k: O(V log k)</span>
@@ -530,7 +530,7 @@ def categorical(probs, rng):                          <span class="c"># prefix s
 
 <!-- 09 -->
 <section class="s" id="beam">
-  <div class="shead"><span class="sno">09 · GREEDY AND BEAM</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span><span class="pill">5 min</span></div></div>
+  <div class="shead"><span class="sno">09 · GREEDY AND BEAM</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span></div></div>
   <h2>The best next token is not always on the best path</h2>
   <p class="idea">Greedy takes the top token every step. Beam search keeps the B best partial sequences by total log-probability, extends each by every token, and keeps the B best again. Width 1 is greedy; a wide enough beam is exhaustive search.</p>
 <pre><code>beams = [(0.0, [])]
@@ -554,7 +554,7 @@ for _ in range(steps):
 
 <!-- 10 -->
 <section class="s" id="pda">
-  <div class="shead"><span class="sno">10 · JSON AS AN AUTOMATON</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span><span class="pill">10 min</span></div></div>
+  <div class="shead"><span class="sno">10 · JSON AS AN AUTOMATON</span><div class="dims"><span class="dim">DSA</span><span class="dim">AI</span></div></div>
   <h2>A state machine with a stack decides what may come next</h2>
   <p class="idea">To guarantee valid JSON, you need to know, after any prefix, which bytes may come next. A finite state machine handles one level (inside a string, inside a number). Nesting needs memory of what is open, so add a stack. That is a pushdown automaton.</p>
 <pre><code>State = (mode, aux, stack)        <span class="c"># immutable tuple → hashable → cacheable</span>
@@ -619,7 +619,7 @@ def step(state, b):
 
 <!-- 11 -->
 <section class="s" id="trie">
-  <div class="shead"><span class="sno">11 · MASKING WITH A TRIE</span><div class="dims"><span class="dim">DSA</span><span class="dim">Software Delivery</span><span class="pill">7 min</span></div></div>
+  <div class="shead"><span class="sno">11 · MASKING WITH A TRIE</span><div class="dims"><span class="dim">DSA</span><span class="dim">Software Delivery</span></div></div>
   <h2>Reject thousands of tokens with one byte</h2>
   <p class="idea">The mask needs every token that keeps the prefix valid. Checking each of 50,000 tokens separately repeats work, because tokens share prefixes. Put all tokens in a trie and walk it with the automaton: when a byte is rejected, the whole subtree under it is rejected too.</p>
 <pre><code>def allowed(state):
@@ -654,7 +654,7 @@ def step(state, b):
 
 <!-- 12 -->
 <section class="s" id="constrained">
-  <div class="shead"><span class="sno">12 · THE CONSTRAINED LOOP</span><div class="dims"><span class="dim">AI</span><span class="dim">ML</span><span class="pill">5 min</span></div></div>
+  <div class="shead"><span class="sno">12 · THE CONSTRAINED LOOP</span><div class="dims"><span class="dim">AI</span><span class="dim">ML</span></div></div>
   <h2>Mask, renormalize, sample: invalid becomes impossible</h2>
   <p class="idea">Before each draw, set every disallowed token to −inf. Softmax renormalizes over what is left. Every prefix is now valid by construction, and generation stops when the automaton reaches DONE.</p>
 <pre><code>state = constraint.start()
@@ -692,7 +692,7 @@ tok generate --model rec.json --train data/records.txt --samples 50 --json   <sp
 
 <!-- 13 -->
 <section class="s" id="delivery">
-  <div class="shead"><span class="sno">13 · SPEC, TESTS, BUGS</span><div class="dims"><span class="dim">Software Delivery</span><span class="pill">10 min</span></div></div>
+  <div class="shead"><span class="sno">13 · SPEC, TESTS, BUGS</span><div class="dims"><span class="dim">Software Delivery</span></div></div>
   <h2>Write the contract first, then prove it with properties</h2>
   <p class="idea">Every project goes spec → contract → test → code. The first commit has <code>SPEC.md</code> and failing tests, and nothing else. Then the strongest tests are properties: rules that must hold for <i>any</i> input, checked on thousands of generated ones.</p>
 <pre><code>class Constraint(Protocol):                   <span class="c"># the contract, in tok/contracts.py</span>

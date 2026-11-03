@@ -281,11 +281,11 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day2" data-sec="day2">
-  <div class="shead"><span class="sno">DAY 2 · THE OBJECTIVE</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">Sys</span><span class="pill">~3 h</span></span></div>
+  <div class="shead"><span class="sno">DAY 2 · THE OBJECTIVE</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">Sys</span></span></div>
   <h2>What BPE optimizes, and how well</h2>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · length vs vocabulary vs learnability</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">ML · length vs vocabulary vs learnability</span></div>
     <p>The objective rewards a bigger vocabulary; learnability pulls the other way. A token's vector is learned from the places it appears, and like any average estimated from <var>n</var> samples, its noise shrinks only like 1/√<var>n</var>. A token seen 5 times has a vector that is mostly noise.</p>
     <p>Train on 90% of <em>Alice</em>'s documents, measure on the other 10%:</p>
     <div class="chart"><div class="t">Train on 90% of <em>Alice</em>, measure on the other 10%</div>
@@ -336,7 +336,7 @@ for v in (256, 500, 1000, 2000, 4000):
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · greedy, and when it fails</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Algorithms · greedy, and when it fails</span></div>
     <p><b>The gain identity.</b> Replacing a non-overlapping <code>a b</code> with <code>z</code> turns two tokens into one and changes nothing else, so a merge with <var>r</var> replacements shortens the corpus by exactly <var>r</var>. Merging the most frequent pair is therefore the exact best single step. A <b>greedy</b> algorithm takes the best immediate step and never revisits it; it is optimal only when the problem has the <em>greedy-choice property</em> (some optimal solution starts with the greedy choice).</p>
     <p><b>BPE doesn't have it.</b> Corpus <code>nan</code> ×2, <code>nab</code> ×2, <code>anan</code> ×3 (24 characters), budget 2 merges. Counts: <code>an</code> 8, <code>na</code> 7, <code>ab</code> 2.</p>
     <div class="dg"><div class="grid2">
@@ -410,7 +410,7 @@ def min_tokens(s, vocab):                          # 139 variation: fewest token
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · choosing the vocabulary budget</span><span class="pill">~1 h</span></div>
+    <div class="bh"><span class="kind">Design · choosing the vocabulary budget</span></div>
     <p>The vocabulary size is paid for twice in the model: an input table of <var>V</var> × <var>d</var> parameters, and an output layer that scores all <var>V</var> tokens at every step (about 2<var>Vd</var> operations per token).</p>
     <div class="chart"><div class="t">Share of parameters spent on the vocabulary</div>
       <div class="br"><span>GPT-2 small · 50,257 × 768, tied</span><span class="tr"><i style="width:31%"></i></span><span class="v">31%</span></div>
