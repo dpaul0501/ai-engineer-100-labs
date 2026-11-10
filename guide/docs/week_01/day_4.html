@@ -271,7 +271,7 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="rail-label">Week 1 · Tokenization</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
   <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The objective</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
   <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
   <a href="day_4.html" class="on" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
   <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
@@ -283,53 +283,313 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 <section class="s" id="day4" data-sec="day4">
   <div class="shead"><span class="sno">DAY 4 · FAST TRAINING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim del">Delivery</span></span></div>
   <h2>Count once, then update only what each merge changes</h2>
-  <p>The main-reading trainer recounts every pair after every merge: O(merges × corpus). Today you make it about 60× faster on <em>Alice</em> without changing a single output, and build the tests that prove it.</p>
+  <p>The main-reading trainer recounts every pair after every merge, so its cost is (number of merges) × (size of the corpus). Today you make it about 60× faster on <em>Alice</em> without changing a single output. Three ideas do it. The ML block shows that the trainer needs only the chunk counts, not the text. The Algorithms block teaches how to keep the maximum of a set whose values keep changing, and how to find the few chunks a merge touches. The Design block builds the tests that prove the fast trainer is the same trainer.</p>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · counts are sufficient statistics</span></div>
-    <p>A <b>sufficient statistic</b> is a summary of the data that loses nothing the estimator needs. The mean and count are sufficient for fitting a Gaussian's mean; n-gram counts are sufficient for fitting an n-gram model (you will use this in the next chapter). For BPE training, <b>the counter of unique chunks is sufficient</b>: every step of the trainer reads only <code>words</code> and <code>freqs</code>, never the order of the text.</p>
+    <div class="bh"><span class="kind">ML · sufficient statistics</span></div>
+    <h4>The question</h4>
+    <p><em>Alice</em> is 156,630 bytes. Does the trainer need all of it, in order? Or is there a smaller summary from which it would produce exactly the same merges?</p>
+    <h4>First attempt</h4>
+    <p>Keep the text and rescan it. Every merge then reads all 37,404 chunks again, most of them duplicates: the chunk <code>␣the</code> appears 1,477 times and is scanned 1,477 times per merge, always with the same result.</p>
+    <h4>Definitions</h4>
+    <p>A <b>statistic</b> is any function <var>T</var>(<var>D</var>) of the data <var>D</var>: its length, its mean, a table of counts. In statistics, <var>T</var> is <b>sufficient</b> for a parameter θ when, once you know <var>T</var>(<var>D</var>), the rest of <var>D</var> tells you nothing more about θ:</p>
+    <div class="eq">\[ P\big(D \mid T(D) = t;\ \theta\big)\ \text{does not depend on } \theta . \]</div>
+    <p>An equivalent test, the <b>Fisher–Neyman factorization</b>: <var>T</var> is sufficient exactly when the likelihood splits into a part that sees the data only through <var>T</var> and a part that does not see θ at all.</p>
+    <div class="eq">\[ p(D;\theta) = g\big(T(D),\,\theta\big)\; h(D). \]</div>
+    <p><b>Example.</b> Flip a coin with heads-probability θ, <var>n</var> times, and get <var>k</var> heads. The likelihood of one particular sequence is \( \theta^{k}(1-\theta)^{n-k} \). It depends on the sequence only through <var>k</var> (and <var>n</var>), so take \( g = \theta^k(1-\theta)^{n-k} \) and \( h = 1 \). The order of the flips carries no information about θ, and the best estimate \( \hat\theta = k/n \) uses only the count. In the same way, the sum and the count are sufficient for the mean of a Gaussian with known variance.</p>
+    <p>BPE training has no θ: it is a deterministic procedure <var>A</var>. The same idea applies in a simpler form. Call <var>T</var> <b>sufficient for <var>A</var></b> when \( A(D) = F(T(D)) \) for some function <var>F</var>: any two corpora with the same <var>T</var> produce the same output.</p>
+    <h4>The claim and its proof</h4>
+    <p><b>Claim.</b> Let <var>T</var>(<var>D</var>) be the counter of chunks: each distinct chunk produced by the split pattern, with the number of times it occurs. Then <var>T</var> is sufficient for BPE training.</p>
+    <p><b>Proof, by induction on the number of merges.</b> Write the trainer's state after <var>t</var> merges as \( S_t \): the list of unique chunks, each rewritten by the merges so far, with its frequency.</p>
+    <ul>
+      <li><b>Base.</b> \( S_0 \) is the chunk counter itself, so it is a function of <var>T</var>.</li>
+      <li><b>Step.</b> Suppose \( S_t \) is a function of <var>T</var>. The count of a pair <var>p</var> is \( \sum_w f_w \cdot \mathrm{occ}_p(w) \), a sum over unique chunks <var>w</var> of frequency × occurrences. Addition does not care about order, so the counts are a function of \( S_t \). The chosen pair is the largest count, ties broken by the smaller pair: a function of the counts, not of the order in which a dictionary lists them. Each chunk is then rewritten on its own by <code>merge</code>. So the next merge and \( S_{t+1} \) are functions of \( S_t \), hence of <var>T</var>.</li>
+    </ul>
+    <p>The proof needs one fact from the split: merges never cross chunk boundaries, so what sits between chunks, and in what order, never enters a count. ∎</p>
+    <h4>Cost</h4>
+    <p>Building the counter is one pass over the text: O(<var>N</var>) time for <var>N</var> bytes, O(<var>S</var>) space for <var>S</var> bytes of unique chunks. From then on every pass costs O(<var>S</var>) instead of O(<var>N</var>).</p>
+    <h4>Confirm by measuring</h4>
     <div class="dg"><div class="vflow">
       <div class="vbox"><b>156,630 bytes of text</b><span class="muted small">37,404 chunks, in order</span></div>
       <div class="varr">↓ count unique chunks (order discarded)</div>
       <div class="vbox" style="border-color:var(--accent)"><b>3,218 unique chunks × counts</b><span class="muted small">21,171 bytes: everything training needs</span></div>
       <div class="varr">↓ train</div>
       <div class="vbox"><b>the same merges</b></div>
-    </div><div class="cap">The 7.4× reduction is free: it loses nothing the trainer uses. On web-scale text the ratio is far larger.</div></div>
-    <p>Three consequences: deduplication is lossless for training; counting can be split across machines and summed (Day 5); and shuffling the corpus cannot change the tokenizer.</p>
+    </div><div class="cap">The 7.4× reduction is free: by the proof it loses nothing the trainer uses. On web-scale text the ratio is far larger, because common chunks repeat millions of times.</div></div>
+    <p>The shuffle test agrees: split <em>Alice</em> into its 723 documents, shuffle them, and train to vocabulary 2,000. The merges are identical to the unshuffled run.</p>
+    <h4>Where BPE uses it</h4>
+    <p><code>unique_chunks</code> is the first line of every trainer on this page, and every structure in the Algorithms block indexes unique chunks, not positions in the text. Three consequences follow from the proof. Replacing the text by its chunk counter loses nothing. Counting can be split across machines and the counters summed (Day 5). Shuffling the corpus cannot change the tokenizer. Note what the proof does <em>not</em> say: removing duplicate <em>documents</em> changes the counts, so it can change the merges.</p>
     <div class="part"><b>Practice</b><ul>
-      <li>Argue in a few lines that <code>train(texts)</code> depends on <code>texts</code> only through <code>unique_chunks(texts)</code>.</li>
+      <li>Write the induction above for your own trainer, line by line: which variable holds \( S_t \), and which line uses anything else?</li>
       <li>Test it: shuffle <code>alice.txt</code>'s documents, retrain, and compare merges.</li>
+      <li>Use the factorization to show that the count table of all (previous token, next token) pairs is sufficient for a bigram model's probabilities.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
       <li>Remove pre-tokenization (merges may cross words). Is the chunk counter still sufficient? What is?</li>
       <li>You train on a 10% sample. Which merges are most likely to change, and why?</li>
+      <li>Is the <em>set</em> of unique chunks, without counts, sufficient? Give a counterexample with two distinct chunks.</li>
     </ul></div>
     <details class="sol"><summary>Solution</summary><div>
-    <p><code>unique_chunks</code> is the only function that reads <code>texts</code>; everything after it reads <code>words</code> and <code>freqs</code>, and every count is a sum of <code>f</code> over chunks, which doesn't depend on order. Shuffling changes neither, so merges are identical (the dictionary's iteration order differs, but ties are broken by the pair, not by order). Without pre-tokenization each document is one long chunk; the counter of whole documents is still sufficient, but it is almost as large as the corpus, so the saving disappears. With a 10% sample, the late, low-count merges change first: their counts are small, so sampling noise (about √<var>n</var>) is large relative to the gaps between them.</p></div></details>
+    <p><code>unique_chunks</code> is the only function that reads <code>texts</code>; everything after it reads <code>words</code> and <code>freqs</code>, and every count is a sum of <code>f</code> over chunks, which does not depend on order. Shuffling changes neither, so the merges are identical (the dictionary's iteration order differs, but ties are broken by the pair, not by order).</p>
+    <p>Without pre-tokenization each document is one long chunk. The counter of whole documents is still sufficient, but it is almost as large as the corpus, so the saving disappears.</p>
+    <p>With a 10% sample, the late, low-count merges change first: their counts are small, so sampling noise (about \( \sqrt{n} \) for a count <var>n</var>) is large relative to the gaps between them.</p>
+    <p>The set without counts is not sufficient: the corpora <code>␣ab␣ab␣ab␣cd</code> and <code>␣ab␣cd␣cd␣cd</code> have the same set of chunks, {<code>␣ab</code>, <code>␣cd</code>}, but the first merge is <code>(␣, a)</code> in one and <code>(␣, c)</code> in the other. For the bigram model: the likelihood is \( \prod_{a,b} P(b\mid a)^{n_{ab}} \), which depends on the text only through the counts \( n_{ab} \), so take <var>h</var> = 1.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li><a href="https://en.wikipedia.org/wiki/Sufficient_statistic">Sufficient statistic</a> (Wikipedia)</li>
+      <li><a href="https://en.wikipedia.org/wiki/Sufficient_statistic">Sufficient statistic</a> (Wikipedia), including the factorization theorem</li>
+      <li>Casella and Berger, <em>Statistical Inference</em>, section 6.2 (sufficiency)</li>
     </ul></div>
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · heap, lazy deletion, inverted index</span></div>
-    <h4>The key observation: a merge only changes its neighbours</h4>
+    <div class="bh"><span class="kind">Algorithms · the maximum of a changing set</span></div>
+    <p>The fast trainer rests on one subproblem that appears all over computer science: keep the maximum of a set whose values keep changing. This block teaches it as a subject in its own right (the binary heap, four ways to change priorities, related problems), then adds the inverted index and puts the trainer together.</p>
+
+    <h4>1 · The question</h4>
+    <p>Keep a set of keys, each with a value. Support two operations, many times each, in any order:</p>
+    <ul>
+      <li><code>update(key, v)</code>: set the key's value (value 0 removes it);</li>
+      <li><code>max()</code>: return the key with the largest value; on a tie, the smallest key.</li>
+    </ul>
+    <p>In BPE the keys are pairs and the values are their counts. After merging <code>aa</code> in <code>aaabdaaabac</code>, the pair <code>(a, a)</code> drops from 4 to 0, <code>(aa, a)</code> appears with count 2, <code>(d, a)</code> drops to 0, and so on. Then we ask for the maximum again. On <em>Alice</em>, training to vocabulary 2,000 asks for the maximum 1,744 times and, after the initial 665 inserts, makes 15,419 updates, about 9 per merge.</p>
+    <h4>First attempts</h4>
+    <div class="tablewrap"><table>
+      <tr><th>Keep the set as</th><th class="num">max()</th><th class="num">update</th><th>Why</th></tr>
+      <tr><td>Hash map, scan for the max</td><td class="num">O(n)</td><td class="num">O(1)</td><td>Any key you skip could be the maximum, so you must look at all <var>n</var>. This is <code>min(counts, key=…)</code> in the main reading.</td></tr>
+      <tr><td>Array sorted by value</td><td class="num">O(1)</td><td class="num">O(n)</td><td>The max is at the end. But a changed value must move to its new place, and every element in between shifts by one.</td></tr>
+      <tr><td>Binary heap (below)</td><td class="num">O(1) peek, O(log n) pop</td><td class="num">O(log n) insert</td><td>Keeps only enough order to know the max, so repairs are cheap. Changing an existing key needs one more idea (part 3).</td></tr>
+    </table></div>
+    <p>The two simple structures sit at opposite ends: no order (cheap updates, slow max) and full order (fast max, slow updates). A heap keeps a <em>partial</em> order, which is enough to know the max and cheap to repair.</p>
+
+    <h4>2 · The binary heap, from first principles</h4>
+    <p><b>Shape.</b> A <b>complete binary tree</b> has every level full except possibly the last, and the last level is filled from the left. Number its nodes level by level, left to right, starting at 0, and store node <var>i</var> at <code>a[i]</code>. No pointers are needed:</p>
+    <div class="eq">\[ \text{children of } i:\ 2i+1,\ 2i+2 \qquad\qquad \text{parent of } i:\ \lfloor (i-1)/2 \rfloor . \]</div>
+    <p><b>Why these formulas hold.</b> Level <var>d</var> holds \( 2^d \) nodes, at indices \( 2^d-1 \) to \( 2^{d+1}-2 \). If node <var>i</var> is the <var>j</var>-th node on level <var>d</var>, so \( i = 2^d - 1 + j \), its children are the (2<var>j</var>)-th and (2<var>j</var>+1)-th nodes on level <var>d</var>+1, at index \( 2^{d+1} - 1 + 2j = 2i+1 \) and the one after it. The parent formula inverts this.</p>
+    <div class="dg"><pre>index:   0  1  2  3  4  5
+a:     [ 2, 5, 3, 9, 6, 8 ]
+
+              2 (0)
+            /       \
+         5 (1)       3 (2)
+        /    \       /
+     9 (3)  6 (4)  8 (5)</pre><div class="cap">A min-heap of six values. Each parent is ≤ its children. Siblings are not ordered: 5 is above 3's subtree but larger than 3.</div></div>
+    <p><b>The heap invariant</b> (for a min-heap): every node is at most each of its children, \( a[\lfloor (i-1)/2 \rfloor] \le a[i] \) for all <var>i</var> ≥ 1. Along any path from the root downwards the values never decrease, so <b>the root is the minimum</b>.</p>
+    <p><b>Height.</b> Levels 0 to <var>d</var>−1 hold \( 2^d - 1 \) nodes, so if level <var>d</var> is used then \( n \ge 2^d \). The height of a complete tree with <var>n</var> nodes is therefore \( \lfloor \log_2 n \rfloor \). Every operation below walks one path, so this bounds its cost.</p>
+
+    <p><b>Push: sift up.</b> Append the new value as the next leaf (the tree stays complete). It may be smaller than its parent. While it is, swap it with the parent.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">push 1</span><span class="seq"><span class="nd">2</span><span class="nd">5</span><span class="nd">3</span><span class="nd">9</span><span class="nd">6</span><span class="nd">8</span><span class="nd hot">1</span></span><span class="why">Append at index 6. Parent (6−1)//2 = 2 holds <b>3 &gt; 1</b> → swap.</span></div>
+      <div class="step"><span class="k">step 1</span><span class="seq"><span class="nd">2</span><span class="nd">5</span><span class="nd hot">1</span><span class="nd">9</span><span class="nd">6</span><span class="nd">8</span><span class="nd">3</span></span><span class="why">Now at index 2. Parent 0 holds <b>2 &gt; 1</b> → swap.</span></div>
+      <div class="step"><span class="k">step 2</span><span class="seq"><span class="nd hot">1</span><span class="nd">5</span><span class="nd">2</span><span class="nd">9</span><span class="nd">6</span><span class="nd">8</span><span class="nd">3</span></span><span class="why">At the root: stop. <b>2 swaps</b> = the height of a 7-node tree.</span></div>
+    </div><div class="cap">Filled = the value being moved. The array is the tree, read level by level.</div></div>
+    <p><b>Why sift-up is correct.</b> Invariant during the loop: every parent–child edge is in order except possibly the edge between the moving value <var>x</var> and its parent. It holds at the start, since only the new leaf's edge is new. Now let <var>x</var> &lt; its parent <var>p</var>, and swap them. <var>p</var> moves down into <var>x</var>'s old slot. Before the swap, <var>p</var> was ≤ everything in its subtree, which includes the children of that slot and <var>x</var>'s sibling. So <var>p</var> is in order with its new children, and <var>x</var> &lt; <var>p</var> ≤ sibling, so <var>x</var> is in order with its new children. The only edge that can still fail is <var>x</var> with its new parent: the invariant holds one level up. The loop stops at the root or when that edge is in order, and then every edge is in order.</p>
+
+    <p><b>Pop: sift down.</b> The minimum is <code>a[0]</code>. Swap it with the last leaf, remove it from the end (the tree stays complete), and repair the root: while the moving value is larger than its smaller child, swap it with that child.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">pop</span><span class="seq"><span class="nd hot">3</span><span class="nd">5</span><span class="nd">2</span><span class="nd">9</span><span class="nd">6</span><span class="nd">8</span></span><span class="why">Return 1; the last leaf 3 moves to the root. Children 5 and 2; the smaller is <b>2 &lt; 3</b> → swap.</span></div>
+      <div class="step"><span class="k">step 1</span><span class="seq"><span class="nd">2</span><span class="nd">5</span><span class="nd hot">3</span><span class="nd">9</span><span class="nd">6</span><span class="nd">8</span></span><span class="why">At index 2. Only child is index 5, holding <b>8 ≥ 3</b> → stop.</span></div>
+    </div></div>
+    <p><b>Why sift-down is correct.</b> Invariant: every edge is in order except possibly the edges from the moving value <var>x</var> down to its children. Let <var>c</var> be the smaller child and <var>x</var> &gt; <var>c</var>; swap them. Now <var>c</var> is the parent of <var>x</var> and of the other child <var>s</var>: <var>c</var> &lt; <var>x</var>, and <var>c</var> ≤ <var>s</var> because we picked the smaller child. <var>c</var>'s new parent is the value that sat in <var>x</var>'s slot before <var>x</var> arrived there; that value was <var>c</var>'s parent, so it is ≤ <var>c</var>. Only <var>x</var>'s edges to its new children can fail. Choosing the <em>smaller</em> child is what makes this work: swapping with the larger one would put it above a smaller sibling.</p>
+    <p><b>Cost.</b> Each swap moves one level, so sift-up makes at most \( \lfloor\log_2 n\rfloor \) swaps (one comparison each) and sift-down at most \( \lfloor\log_2 n\rfloor \) swaps (two comparisons each). Push and pop are O(log <var>n</var>) time and O(1) extra space. Peeking at the minimum is O(1).</p>
+
+    <p><b>Heapify: build a heap from <var>n</var> values in O(<var>n</var>).</b> Pushing <var>n</var> values one at a time costs up to \( \sum_{i\le n} \lfloor\log_2 i\rfloor = \Theta(n\log n) \) swaps in the worst case. Bottom-up is faster. Every leaf is already a one-node heap, and the leaves are the indices from \( \lfloor n/2 \rfloor \) on. Sift down each internal node, from index \( \lfloor n/2\rfloor - 1 \) back to 0. When node <var>i</var> is processed, both of its subtrees are already heaps (their roots have larger indices), which is exactly the situation sift-down repairs. Example, <code>[9, 6, 8, 2, 5, 3]</code>: index 2 swaps 8 with 3; index 1 swaps 6 with 2; index 0 swaps 9 with 2 and then with 5, giving <code>[2, 5, 3, 6, 9, 8]</code>.</p>
+    <p><b>Why heapify is O(<var>n</var>).</b> Sift-down from a node of height <var>h</var> (distance to the deepest leaf below it) makes at most <var>h</var> swaps. A complete tree has at most \( \lceil n/2^{h+1} \rceil \) nodes of height <var>h</var>: half the nodes are leaves, a quarter sit just above them, and so on. So the total number of swaps is</p>
+    <div class="eq">\[ \sum_{h=0}^{\lfloor \log_2 n\rfloor} \Big\lceil \frac{n}{2^{h+1}} \Big\rceil\, h \;\le\; \frac{n}{2}\sum_{h\ge 0}\frac{h}{2^{h}} \;+\; \sum_{h=0}^{\lfloor\log_2 n\rfloor} h \;=\; \frac{n}{2}\cdot 2 + O(\log^2 n) \;=\; n + O(\log^2 n). \]</div>
+    <p>The series comes from the geometric series: differentiate \( \sum_{h\ge0} x^h = \frac{1}{1-x} \) to get \( \sum h x^{h-1} = \frac{1}{(1-x)^2} \), multiply by <var>x</var>: \( \sum h x^h = \frac{x}{(1-x)^2} \), which is 2 at \( x = \tfrac12 \). The intuition: most nodes are near the bottom. Heapify gives those many nodes short walks (down to a nearby leaf); repeated pushing gives them the long walks (up to the root).</p>
+    <p><b>Confirm by measuring.</b> On 100,000 values, heapify makes 1.88 comparisons per value on random input and 2.00 on descending input. Repeated pushing makes 2.28 per value on random input (a random new value rarely climbs far) but 14.69 on descending input, where every new value climbs to the root.</p>
+    <div class="code"><div class="ch"><span>heap.py · a binary min-heap from scratch</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def sift_up(a, i):
+    while i &gt; 0:
+        parent = (i - 1) // 2
+        if not a[i] &lt; a[parent]:
+            return                                  # invariant restored
+        a[i], a[parent] = a[parent], a[i]
+        i = parent
+
+def sift_down(a, i):
+    n = len(a)
+    while True:
+        left, right, small = 2 * i + 1, 2 * i + 2, i
+        if left &lt; n and a[left] &lt; a[small]:
+            small = left
+        if right &lt; n and a[right] &lt; a[small]:
+            small = right
+        if small == i:
+            return                                  # both children are &gt;= a[i]
+        a[i], a[small] = a[small], a[i]
+        i = small
+
+def push(a, x):
+    a.append(x)                                     # new last leaf keeps the tree complete
+    sift_up(a, len(a) - 1)
+
+def pop(a):
+    a[0], a[-1] = a[-1], a[0]                       # move the minimum to the end
+    smallest = a.pop()
+    if a:
+        sift_down(a, 0)
+    return smallest
+
+def heapify(a):
+    for i in range(len(a) // 2 - 1, -1, -1):        # last internal node down to the root
+        sift_down(a, i)</code></pre></div>
+    <p><b>Python's <code>heapq</code></b> provides these functions (<code>heappush</code>, <code>heappop</code>, <code>heapify</code>) on a plain list, in C. It is a <b>min-heap</b> only. For a max-heap, store the negated priority. Entries can be tuples, which Python compares element by element: <code>(-count, pair)</code> puts the largest count first, and among equal counts the smaller pair, because the second element decides. That is exactly BPE's tie-break, and it holds no matter in which order the entries were pushed, so training is deterministic. For example, <code>(-2, (97, 98))</code> pops before <code>(-2, (98, 99))</code>. Two cautions: every element of the tuple must be comparable (a dict as the last element raises on a tie), and if you want ties broken by insertion order instead, put a running counter second: <code>(priority, seq, item)</code>.</p>
+
+    <h4>3 · Changing priorities: four designs</h4>
+    <p><b>The question.</b> A heap can change only the root or a new leaf. To change the count of some pair in the middle of the array, you first need to know where it is, and a plain heap does not know: finding it is an O(<var>n</var>) scan. There are four standard ways out. To compare them fairly, each is written below against the same interface, <code>update(key, v)</code> and <code>peek()</code>, which returns <code>(key, value)</code> of the maximum.</p>
+
+    <p><b>(a) Lazy deletion.</b> Do not find the old entry; push a new one with the new value, and leave the old one where it is. When you read the top, compare it with the current value: if they differ, the entry is <b>stale</b>; pop it and look again.</p>
+    <p><b>Invariant.</b> For every live key <var>k</var> with current value <var>v</var>(<var>k</var>) &gt; 0, the heap holds at least one entry \( (-v(k), k) \) with exactly that value. It holds after the initial build, and every <code>update</code> pushes the new value.</p>
+    <p><b>Why the first matching entry is the true maximum.</b> Let the top entry be \( (-v, k) \) with \( v = v(k) \), so it is not stale. Take any live key <var>j</var>. By the invariant the heap holds \( (-v(j), j) \), and the top is the smallest tuple in the heap, so \( (-v, k) \le (-v(j), j) \). That means \( v \ge v(j) \), and if \( v = v(j) \) then \( k \le j \). So <var>k</var> is the maximum, with the right tie-break. Discarding a stale entry is safe: its key either is dead or, by the invariant, has another entry with its current value. That same argument shows a common extra step is unnecessary: some implementations push the current value again when they discard a stale entry. The invariant says that entry already exists, so the re-push only adds a duplicate. On <em>Alice</em> it raises the total pushes from 11,198 to 16,128.</p>
+    <p><b>Cost.</b> Let <var>U</var> be the number of updates and <var>H</var> the heap's size. Each update is one push, O(log <var>H</var>). Each entry is popped at most once, so the stale pops, summed over the whole run, are at most the number of pushes: they add O(log <var>H</var>) per update, amortized. The price is memory: <var>H</var> grows to the initial size plus <var>U</var>, not to the number of live keys. If that matters, rebuild with <code>heapify</code> on the live entries whenever <var>H</var> exceeds twice the live count. The rebuild costs O(live), and at least that many pushes happened since the last one, so it adds O(1) per update.</p>
+    <p><b>Measured on <em>Alice</em></b> (vocabulary 2,000): 6,276 pops, of which 4,532 (72%) were stale. The heap grows from 665 entries to a peak of 6,338, while the number of live pairs at the start of a merge never exceeds 3,739.</p>
+    <div class="code"><div class="ch"><span>queues.py · (a) lazy deletion</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class LazyHeap:
+    """(a) Lazy deletion: push on every change, skip stale entries when reading."""
+    def __init__(self):
+        self.value, self.heap = {}, []
+    def update(self, key, v):
+        self.value[key] = v
+        if v &gt; 0:
+            heapq.heappush(self.heap, (-v, key))
+    def peek(self):
+        while self.heap:
+            neg, key = self.heap[0]
+            if self.value.get(key, 0) == -neg:
+                return key, -neg
+            heapq.heappop(self.heap)                # stale: drop it, never re-push
+        return None</code></pre></div>
+
+    <p><b>(b) Indexed heap.</b> Keep the heap of keys and also a <b>position map</b> <code>pos[key]</code> = the key's index in the array. Now <code>update</code> can go straight to the key, change its value, and sift it up (if it became better) or down (if it became worse). Invariant: <code>pos[keys[i]] == i</code> for every <var>i</var>, plus the heap order. Every swap must update <code>pos</code> for both keys, or the map goes out of date. Removing a key: swap it with the last leaf, drop it, and sift the moved key in whichever direction it needs.</p>
+    <p><b>Cost.</b> O(log <var>n</var>) per update and removal, where <var>n</var> is the number of <em>live</em> keys; O(1) peek; O(<var>n</var>) memory, and no stale entries ever. The price is more code and more work per swap (two dictionary writes). This is the "decrease-key" heap that textbook Dijkstra and Prim use. On <em>Alice</em> it holds at most 3,739 entries, against 6,338 for the lazy heap, and gives the same 1,744 merges.</p>
+    <div class="code"><div class="ch"><span>queues.py · (b) indexed max-heap</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class IndexedMaxHeap:
+    """(b) A heap of keys plus pos[key] = index, so any key can be found and moved."""
+    def __init__(self):
+        self.keys, self.pos, self.value = [], {}, {}
+    def _above(self, i, j):                         # should keys[i] sit above keys[j]?
+        a, b = self.keys[i], self.keys[j]
+        return (-self.value[a], a) &lt; (-self.value[b], b)   # larger value; ties: smaller key
+    def _swap(self, i, j):
+        ks = self.keys
+        ks[i], ks[j] = ks[j], ks[i]
+        self.pos[ks[i]], self.pos[ks[j]] = i, j
+    def _up(self, i):
+        while i &gt; 0 and self._above(i, (i - 1) // 2):
+            self._swap(i, (i - 1) // 2)
+            i = (i - 1) // 2
+    def _down(self, i):
+        n = len(self.keys)
+        while True:
+            best = i
+            for c in (2 * i + 1, 2 * i + 2):
+                if c &lt; n and self._above(c, best):
+                    best = c
+            if best == i:
+                return
+            self._swap(i, best)
+            i = best
+    def update(self, key, v):
+        if key in self.pos:
+            if v &lt;= 0:
+                self._remove(key)
+                return
+            self.value[key] = v
+            i = self.pos[key]
+            self._up(i)
+            self._down(self.pos[key])               # only one of the two moves it
+        elif v &gt; 0:
+            self.value[key] = v
+            self.keys.append(key)
+            self.pos[key] = len(self.keys) - 1
+            self._up(len(self.keys) - 1)
+    def _remove(self, key):
+        i, last = self.pos[key], len(self.keys) - 1
+        self._swap(i, last)
+        self.keys.pop()
+        del self.pos[key], self.value[key]
+        if i &lt; last:                                # the moved key may need to go either way
+            self._up(i)
+            self._down(self.pos[self.keys[i]])
+    def peek(self):
+        if not self.keys:
+            return None
+        k = self.keys[0]
+        return k, self.value[k]</code></pre></div>
+
+    <p><b>(c) A balanced search tree or sorted container.</b> Keep all <code>(-value, key)</code> tuples in sorted order, in a balanced binary search tree (AVL, red–black) or a sorted container. An update deletes the old tuple and inserts the new one, O(log <var>n</var>) each; the maximum is the first element. What you gain over a heap is <b>order</b>: the top <var>k</var>, the <var>k</var>-th largest, or "all pairs with count ≥ <var>c</var>" in O(log <var>n</var> + output). Python has no built-in balanced tree; the <code>sortedcontainers</code> package provides <code>SortedList</code>.</p>
+    <div class="code"><div class="ch"><span>queues.py · (c) sorted container</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class SortedQueue:
+    """(c) A sorted container of (-value, key): every operation O(log n), plus ordered iteration."""
+    def __init__(self):
+        from sortedcontainers import SortedList   # pip install sortedcontainers
+        self.items, self.value = SortedList(), {}
+    def update(self, key, v):
+        old = self.value.pop(key, 0)
+        if old &gt; 0:
+            self.items.remove((-old, key))
+        if v &gt; 0:
+            self.value[key] = v
+            self.items.add((-v, key))
+    def peek(self):
+        if not self.items:
+            return None
+        neg, key = self.items[0]
+        return key, -neg</code></pre></div>
+
+    <p><b>(d) Bucket queue.</b> When values are small non-negative integers, keep an array of buckets, <code>bucket[v]</code> = the set of keys with value <var>v</var>, and a pointer <code>top</code> to the highest non-empty bucket. An update moves a key between two sets in O(1). <code>peek</code> walks <code>top</code> down past empty buckets. In general the pointer can also move up, and its total movement is at most the largest value <var>C</var> plus the total size of the increases.</p>
+    <p><b>In BPE the maximum never rises</b>, so the pointer only moves down. Proof: let the merged pair (<var>a</var>, <var>b</var>) have count <var>c</var>, the current maximum. Pairs that do not contain the new token <var>Z</var> only lose occurrences. Every occurrence of a pair that contains <var>Z</var> contains one occurrence of <var>Z</var>, and there are at most <var>c</var> of those, so each such pair has count ≤ <var>c</var>. Every count after the merge is ≤ <var>c</var>. On <em>Alice</em> the maximum falls from 3,978 to 4, so the pointer moves fewer than 4,000 steps in the whole run. The catch is the tie-break: the smallest key in the top bucket takes a scan of the bucket, on average 42 keys and at most 287 on <em>Alice</em>. A min-heap or sorted set per bucket would remove the scan.</p>
+    <div class="code"><div class="ch"><span>queues.py · (d) bucket queue</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class BucketQueue:
+    """(d) value -&gt; set of keys, and a pointer to the highest non-empty bucket."""
+    def __init__(self):
+        self.bucket, self.value, self.top = defaultdict(set), {}, 0
+    def update(self, key, v):
+        old = self.value.pop(key, 0)
+        if old &gt; 0:
+            self.bucket[old].discard(key)
+        if v &gt; 0:
+            self.value[key] = v
+            self.bucket[v].add(key)
+            self.top = max(self.top, v)
+    def peek(self):
+        while self.top &gt; 0 and not self.bucket[self.top]:
+            self.top -= 1                           # in BPE the max never rises, so this pointer only falls
+        if self.top == 0:
+            return None
+        return min(self.bucket[self.top]), self.top # tie-break: smallest pair in the bucket</code></pre></div>
+
+    <div class="tablewrap"><table>
+      <tr><th>Design</th><th class="num">peek</th><th class="num">update</th><th class="num">memory</th><th>Wins when</th></tr>
+      <tr><td>(a) Lazy deletion</td><td class="num">O(log H) amortized</td><td class="num">O(log H)</td><td class="num">O(n + U)</td><td>You want the least code and memory is not tight. Python's <code>heapq</code> is in C, so it is often the fastest in practice.</td></tr>
+      <tr><td>(b) Indexed heap</td><td class="num">O(1)</td><td class="num">O(log n)</td><td class="num">O(n)</td><td>Memory is tight, keys are updated many times, or you need to remove keys (Dijkstra, Prim, schedulers).</td></tr>
+      <tr><td>(c) Balanced tree / sorted container</td><td class="num">O(log n)</td><td class="num">O(log n)</td><td class="num">O(n)</td><td>You need more than the maximum: top-<var>k</var>, ranks, ranges.</td></tr>
+      <tr><td>(d) Bucket queue</td><td class="num">O(1) amortized + tie scan</td><td class="num">O(1)</td><td class="num">O(n + C)</td><td>Values are small integers and the maximum moves one way (BPE counts, Dial's shortest paths).</td></tr>
+    </table></div>
+    <p class="small muted">n = live keys, U = updates, H = heap entries (live and stale), C = largest value.</p>
+    <p><b>Confirm by measuring.</b> All four queues plugged into the same training loop give the same 1,744 merges on <em>Alice</em>. In one run on a busy machine the whole training took 0.085 s with (a), 0.104 s with (b), 0.102 s with (c) and 0.083 s with (d). The queue is not the bottleneck: most of the time goes into rewriting chunks, which is the subject of part 4.</p>
+
+    <h4>4 · The inverted index: visit only what changes</h4>
+    <p><b>The question.</b> After choosing the pair (<var>a</var>, <var>b</var>), which chunks must change, and which counts?</p>
+    <p><b>First attempt.</b> Rewrite and recount all 3,218 unique chunks per merge. That is what the simple trainer does: 1,744 merges × 3,218 chunks = 5,612,192 chunk visits, almost all of which change nothing.</p>
+    <p><b>The key observation: a merge only changes its neighbours.</b></p>
     <div class="dg">
       <div class="seq"><span class="nd">x</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">y</span><span class="lk">&nbsp;&nbsp;→&nbsp;&nbsp;</span><span class="nd">x</span><span class="nd hot">Z</span><span class="nd">y</span></div>
       <div class="seq" style="margin-top:.6rem"><span class="small muted">removed:</span><span class="pp rm">(x, a)</span><span class="pp rm">(a, b)</span><span class="pp rm">(b, y)</span><span class="small muted">&nbsp;added:</span><span class="pp add">(x, Z)</span><span class="pp add">(Z, y)</span></div>
       <div class="cap">Every other pair in the chunk is untouched, and chunks without <code>(a, b)</code> are untouched entirely.</div>
     </div>
-    <p>So instead of recounting, keep four structures and update them locally:</p>
+    <p>So we need, for each pair, the list of chunks that contain it. An <b>inverted index</b> maps each item to the places where it occurs; a search engine maps each word to the documents that contain it. Here <code>where[p]</code> is the set of chunk ids that contain pair <var>p</var>. A merge visits only <code>where[(a, b)]</code>.</p>
+    <p><b>Invariant.</b> Chunk <var>w</var> is in <code>where[p]</code> exactly when <var>p</var> occurs in <var>w</var>'s current tokens. It holds after the initial pass. When a chunk is rewritten, the trainer removes it from <code>where</code> of every old pair and adds it to <code>where</code> of every new pair, which restores the invariant for that chunk. Chunks not rewritten did not change, so their entries stay correct.</p>
+    <p><b>Total work.</b> Let \( A_k \) be the number of chunks containing the <var>k</var>-th merged pair. A visited chunk contains the pair at least once, so the merge shortens it by at least one token. A chunk of \( \ell \) bytes can be shortened at most \( \ell - 1 \) times, so over the whole run</p>
+    <div class="eq">\[ \sum_k A_k \;\le\; \sum_{\text{unique chunks } w} (\ell_w - 1) \;=\; S - (\text{number of unique chunks}) \;=\; 21{,}171 - 3{,}218 \;=\; 17{,}953 . \]</div>
+    <p>No matter how many merges you ask for, the total number of chunk visits is bounded by the size of the unique chunks. Each visit costs O(<var>L</var>) for a chunk of length <var>L</var>, plus a queue update per changed pair.</p>
+    <p><b>Confirm by measuring.</b> The fast trainer visits 14,013 chunks in total, under the bound of 17,953 and 400× fewer than 5,612,192. The first five merges touch 164, 145, 74, 128 and 309 chunks; the last five touch 2, 1, 1, 1 and 2. That is Zipf again: frequent pairs live in many chunks, rare pairs in few.</p>
+
+    <h4>5 · Putting it together: the fast trainer</h4>
+    <p>The trainer keeps four structures and updates them locally:</p>
     <div class="dg"><div class="grid2">
       <div class="vbox"><b><code>counts</code> · hash map</b><span class="small muted">pair → total count. O(1) get and add</span></div>
       <div class="vbox"><b><code>where</code> · inverted index</b><span class="small muted">pair → chunks containing it. Visit only those</span></div>
-      <div class="vbox"><b><code>heap</code> · binary min-heap</b><span class="small muted">(−count, pair): the max in O(log H); ties pop the smaller pair</span></div>
+      <div class="vbox"><b><code>heap</code> · binary min-heap</b><span class="small muted">(−count, pair) with lazy deletion: the max in O(log H); ties pop the smaller pair</span></div>
       <div class="vbox"><b><code>words</code> · unique chunks</b><span class="small muted">each a list of ids, with its frequency</span></div>
     </div>
     <div class="vflow" style="margin-top:.8rem">
       <div class="vbox" style="border-color:var(--accent)"><b>loop</b> pop heap → stale? skip → merge the chunks in <code>where[pair]</code> → for each: remove old pairs, rewrite, add new pairs → push changed counts</div>
     </div></div>
-    <p><b>Lazy deletion.</b> A heap can't find and update an entry without an O(n) scan, so when a count changes we push a new entry and leave the old one. On pop, compare with <code>counts</code>: if they differ, the entry is stale; drop it and pop again. It is correct because every live pair always has one entry with its exact count.</p>
     <div class="code"><div class="ch"><span>bpe.py · fast trainer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import heapq
 from collections import Counter, defaultdict
 
@@ -371,14 +631,14 @@ def train(texts, vocab_size):
                     heapq.heappush(heap, (-counts[p], p))
         del counts[pair], where[pair]           # the merged pair can never occur again
     return merges</code></pre></div>
-    <p>Open the simulator in the main reading again: the <code>heap</code> panel shows stale entries struck through, and the highlighted chunks are the ones <code>where</code> sent the merge to.</p>
+    <p>The changes for each merge are collected in <code>delta</code> first and applied once, so a pair that loses an occurrence in one chunk and gains one in another gets one push, not two. Open the simulator in the main reading again: the <code>heap</code> panel shows stale entries struck through, and the highlighted chunks are the ones <code>where</code> sent the merge to.</p>
     <div class="chart"><div class="t">Measured on <em>Alice</em>, vocab 2,000 (same merges)</div>
       <div class="br"><span>chunk visits, simple</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">5,612,192</span></div>
       <div class="br"><span>chunk visits, fast</span><span class="tr"><i style="width:0.4%"></i></span><span class="v">14,013</span></div>
       <div class="br"><span>time, simple</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">3.74 s</span></div>
       <div class="br"><span>time, fast</span><span class="tr"><i style="width:1.6%"></i></span><span class="v">0.06 s</span></div>
-      <div class="br"><span>stale pops</span><span class="tr"><i style="width:82%;--c:var(--ai)"></i></span><span class="v">82%</span></div>
-      <div class="cap">The first five merges touch 164, 145, 74, 128 and 309 chunks; the last five touch 2, 1, 1, 1 and 2. That's Zipf again. The heap grows from 665 entries to 7,739: lazy deletion costs memory, not correctness.</div>
+      <div class="br"><span>stale pops</span><span class="tr"><i style="width:72%;--c:var(--ai)"></i></span><span class="v">72%</span></div>
+      <div class="cap">The heap grows from 665 entries to a peak of 6,338: lazy deletion costs memory, not correctness.</div>
     </div>
     <div class="tablewrap"><table>
       <tr><th>Phase</th><th class="num">Time</th><th class="num">Space</th></tr>
@@ -387,22 +647,71 @@ def train(texts, vocab_size):
       <tr><td>Merge loop (this version)</td><td class="num">O(Σ A<sub>k</sub> · L · log H)</td><td class="num">O(H)</td></tr>
       <tr><td>Merge loop, linked-list version (variation)</td><td class="num">O(S log S)</td><td class="num">O(S)</td></tr>
     </table></div>
-    <p class="small muted">N = bytes of text, S = bytes in unique chunks, L = chunk length, A<sub>k</sub> = chunks containing the k-th merged pair, H = heap size.</p>
+    <p class="small muted">N = bytes of text, S = bytes in unique chunks, L = chunk length, A<sub>k</sub> = chunks containing the k-th merged pair (Σ A<sub>k</sub> ≤ S), H = heap size.</p>
+    <p><b>Where BPE uses it.</b> Every merge asks for the most frequent pair (the maximum of a changing set, part 3) and then changes a few counts (the inverted index, part 4). Heapify builds the first heap in O(<var>P</var>) for <var>P</var> distinct pairs. The tuple <code>(-count, pair)</code> is the tie-break rule of the specification, written as a sort key.</p>
+
+    <h4>6 · The same pattern in other problems</h4>
+    <p><b>Kth largest in a stream</b> (<a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">703</a>). Values arrive one at a time; after each, report the <var>k</var>-th largest so far. Sorting each time is O(<var>n</var> log <var>n</var>) per value. Instead keep the <var>k</var> largest in a <em>min</em>-heap of size <var>k</var>. Invariant: the heap holds exactly the <var>k</var> largest values seen. When a value arrives, push it and, if the heap has <var>k</var>+1 entries, pop the smallest; whichever value leaves is not among the <var>k</var> largest. The root is the smallest of the <var>k</var> largest, which is the answer. O(log <var>k</var>) per value, O(<var>k</var>) space.</p>
+    <p><b>Median of a stream</b> (<a class="lc" href="https://leetcode.com/problems/find-median-from-data-stream/">295</a>). The median is in the middle, so no single heap exposes it. Keep the smaller half in a max-heap <code>lo</code> and the larger half in a min-heap <code>hi</code>, with two invariants: every value in <code>lo</code> is ≤ every value in <code>hi</code>, and <code>len(lo)</code> equals <code>len(hi)</code> or exceeds it by one. Then the median is the top of <code>lo</code>, or the average of both tops. To add <var>x</var>: push it into <code>lo</code>, move the largest of <code>lo</code> to <code>hi</code> (that keeps the ordering invariant, since the moved value is the largest of <code>lo</code> ∪ {<var>x</var>}), and if <code>hi</code> is now larger, move its smallest back. O(log <var>n</var>) per add, O(1) per median.</p>
+    <p><b>Sliding window maximum</b> (<a class="lc" href="https://leetcode.com/problems/sliding-window-maximum/">239</a>). Report the maximum of every window of <var>k</var> consecutive values. Rescanning each window is O(<var>nk</var>). A lazy heap works in O(<var>n</var> log <var>n</var>): entries whose index has left the window are stale. Better, a <b>monotonic deque</b>: keep the indices of values that could still become a window maximum, with values strictly decreasing from front to back. If an older value is ≤ a newer one, it can never be a maximum again, because the newer value is at least as large and stays in the window longer; so pop it from the back. The front is the current maximum; pop it from the front when it leaves the window. <b>Amortized proof:</b> each index is appended once and removed at most once, so the whole run makes at most 2<var>n</var> deque operations, O(<var>n</var>) in total and O(1) amortized per value, with O(<var>k</var>) space. The deque beats the heap here because values leave in arrival order; in BPE they leave in no particular order, so the heap is needed.</p>
+    <p><b>Stock price fluctuation</b> (<a class="lc" href="https://leetcode.com/problems/stock-price-fluctuation/">2034</a>). Prices arrive with timestamps and earlier prices may be corrected; report the latest, the maximum and the minimum. This is lazy deletion again, in two heaps: a corrected price leaves a stale entry, recognized because it no longer matches <code>price[timestamp]</code>. The invariant and proof are those of part 3.</p>
+    <p><b>Seat reservation manager</b> (<a class="lc" href="https://leetcode.com/problems/seat-reservation-manager/">1845</a>). Always hand out the smallest free seat: a plain min-heap of free seats. A sorted list is already a valid heap, so initialization needs no work.</p>
+
     <div class="part"><b>Practice</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/top-k-frequent-words/">692 Top K Frequent Words</a> (the same tie-break as BPE)</li>
-      <li><a class="lc" href="https://leetcode.com/problems/stock-price-fluctuation/">2034 Stock Price Fluctuation</a> (lazy deletion)</li>
-      <li>Stretch: <a class="lc" href="https://leetcode.com/problems/sliding-window-median/">480 Sliding Window Median</a> · <a class="lc" href="https://leetcode.com/problems/all-oone-data-structure/">432 All O`one Data Structure</a></li>
+      <li><a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">703 Kth Largest Element in a Stream</a> · <a class="lc" href="https://leetcode.com/problems/find-median-from-data-stream/">295 Find Median from Data Stream</a> · <a class="lc" href="https://leetcode.com/problems/sliding-window-maximum/">239 Sliding Window Maximum</a> · <a class="lc" href="https://leetcode.com/problems/stock-price-fluctuation/">2034 Stock Price Fluctuation</a></li>
+      <li><a class="lc" href="https://leetcode.com/problems/seat-reservation-manager/">1845 Seat Reservation Manager</a> · <a class="lc" href="https://leetcode.com/problems/top-k-frequent-words/">692 Top K Frequent Words</a> (the same tie-break as BPE) · <a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">23 Merge k Sorted Lists</a></li>
+      <li>Stretch: <a class="lc" href="https://leetcode.com/problems/sliding-window-median/">480 Sliding Window Median</a> (two heaps with lazy deletion) · <a class="lc" href="https://leetcode.com/problems/all-oone-data-structure/">432 All O`one Data Structure</a> (a bucket queue with O(1) everything) · <a class="lc" href="https://leetcode.com/problems/design-twitter/">355 Design Twitter</a></li>
+      <li>Implement <code>heap.py</code> from memory and test it against <code>heapq</code> on random lists, including duplicates.</li>
+      <li>Implement the indexed max-heap and check, after every operation, that <code>pos</code> agrees with the array and that no child is above its parent.</li>
+      <li>Plug all four queues into the training loop and check they give the same merges as the simple trainer on three corpora.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
       <li><b>Linked-list trainer:</b> store each chunk as a doubly linked list and index pair → <em>positions</em>, not chunks. Each merge then costs O(1) pointer edits per occurrence, and since every merge removes a node, total work is O(S log S). Implement it and keep the differential test green.</li>
-      <li><b>Bucket queue:</b> replace the heap with count → set of pairs (the All O`one idea). When is it faster?</li>
-      <li><b>Indexed heap</b> with decrease-key: no stale entries. Compare memory and time.</li>
-      <li>Prove the stale check never skips the true maximum.</li>
+      <li><b>Compaction:</b> add the "rebuild when <var>H</var> &gt; 2 × live" rule to <code>LazyHeap</code>. Measure the peak size on <em>Alice</em>.</li>
+      <li><b>d-ary heap:</b> give each node <var>d</var> children. What do push and pop cost? Which <var>d</var> suits a workload with many more updates than pops?</li>
+      <li><b>Bucket queue without the scan:</b> make each bucket a min-heap with lazy deletion. What is the cost of <code>peek</code> now?</li>
+      <li>Why does the lazy heap's tie-break still work when a pair has two entries with the same value?</li>
     </ul></div>
     <details class="sol"><summary>Solutions</summary><div>
-    <div class="code"><div class="ch"><span>692 · 2034</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topKFrequent(words, k):                      # 692: O(n log k)
+    <div class="code"><div class="ch"><span>streams.py · 692, 703, 295, 239, 2034, 1845</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topKFrequent(words, k):                      # 692: O(n log k)
     c = Counter(words)
     return [w for _, w in heapq.nsmallest(k, ((-n, w) for w, n in c.items()))]
+
+class KthLargest:                                # 703: size-k min-heap
+    def __init__(self, k, nums):
+        self.k, self.h = k, []
+        for x in nums:
+            self.add(x)
+    def add(self, val):
+        heapq.heappush(self.h, val)
+        if len(self.h) &gt; self.k:
+            heapq.heappop(self.h)                # drop the smallest; the k largest remain
+        return self.h[0]                         # the smallest of the k largest
+
+class MedianFinder:                              # 295: two heaps
+    def __init__(self):
+        self.lo, self.hi = [], []                # lo: max-heap (negated), hi: min-heap
+    def addNum(self, num):
+        heapq.heappush(self.lo, -num)
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))   # largest of lo moves up
+        if len(self.hi) &gt; len(self.lo):
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))
+    def findMedian(self):
+        if len(self.lo) &gt; len(self.hi):
+            return float(-self.lo[0])
+        return (-self.lo[0] + self.hi[0]) / 2
+
+def maxSlidingWindow(nums, k):                   # 239: monotonic deque, O(n)
+    dq, out = deque(), []                        # indices; their values strictly decrease
+    for i, x in enumerate(nums):
+        while dq and nums[dq[-1]] &lt;= x:
+            dq.pop()                             # can never be a maximum again
+        dq.append(i)
+        if dq[0] &lt;= i - k:
+            dq.popleft()                         # left the window
+        if i &gt;= k - 1:
+            out.append(nums[dq[0]])
+    return out
 
 class StockPrice:                                # 2034: lazy deletion, twice
     def __init__(self):
@@ -421,19 +730,73 @@ class StockPrice:                                # 2034: lazy deletion, twice
     def minimum(self):
         while self.mn[0][0] != self.price[self.mn[0][1]]:
             heapq.heappop(self.mn)
-        return self.mn[0][0]</code></pre></div>
-    <p><b>Stale check proof.</b> Invariant: for every pair with count <var>c</var> &gt; 0, the heap holds an entry (−<var>c</var>, pair). It holds after heapify, and every count change pushes the new value. A popped entry that matches <code>counts</code> has the smallest −count in the heap, and every live pair has an entry with its true count, so no live pair has a larger count. Ties go to the smaller pair because the tuples compare the pair next.</p></div></details>
+        return self.mn[0][0]
+
+class SeatManager:                               # 1845: the smallest free seat
+    def __init__(self, n):
+        self.free = list(range(1, n + 1))        # already a valid min-heap
+    def reserve(self):
+        return heapq.heappop(self.free)
+    def unreserve(self, seatNumber):
+        heapq.heappush(self.free, seatNumber)</code></pre></div>
+    <div class="code"><div class="ch"><span>train_pq · the fast trainer with any of the four queues</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def train_pq(texts, vocab_size, queue):
+    words, freqs = unique_chunks(texts)
+    counts, where = Counter(), defaultdict(set)
+    for wi, w in enumerate(words):
+        for pair in zip(w, w[1:]):
+            counts[pair] += freqs[wi]
+            where[pair].add(wi)
+    for p, c in counts.items():
+        queue.update(p, c)
+
+    merges = []
+    while 256 + len(merges) &lt; vocab_size:
+        top = queue.peek()
+        if top is None or top[1] &lt; 2:
+            break
+        pair, new_id = top[0], 256 + len(merges)
+        merges.append(pair)
+        delta = Counter()
+        for wi in list(where[pair]):
+            old, f = words[wi], freqs[wi]
+            new = merge(old, pair, new_id)
+            words[wi] = new
+            for p in zip(old, old[1:]):
+                delta[p] -= f
+                where[p].discard(wi)
+            for p in zip(new, new[1:]):
+                delta[p] += f
+                where[p].add(wi)
+        for p, d in delta.items():
+            if d:
+                counts[p] += d
+                queue.update(p, counts[p])          # counts[pair] reaches 0 here: removed
+        del counts[pair], where[pair]
+    return merges</code></pre></div>
+    <p><b>d-ary heap.</b> The height is \( \log_d n \). Push compares once per level: O(log<sub>d</sub> <var>n</var>). Pop compares with all <var>d</var> children per level: O(<var>d</var> log<sub>d</sub> <var>n</var>). With many more updates (pushes or sift-ups) than pops, a larger <var>d</var> such as 4 or 8 helps; this is why Dijkstra on dense graphs is sometimes run with a d-ary heap.</p>
+    <p><b>Per-bucket heaps.</b> Each peek pops stale keys from the top bucket's heap; each stale key is popped once, so <code>peek</code> is O(log <var>b</var>) amortized for bucket size <var>b</var>, and an update is an O(log <var>b</var>) push.</p>
+    <p><b>Duplicate entries.</b> Two identical tuples <code>(-v, k)</code> are both valid when <code>k</code>'s value is <var>v</var>. Whichever pops first is returned; after the merge the pair's count is 0, so the second becomes stale and is skipped.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>Python docs, <a href="https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes">heapq: priority queue implementation notes</a> (lazy deletion)</li>
-      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16837">A Formal Perspective on BPE</a>, section on a faster implementation</li>
-      <li><a href="https://en.wikipedia.org/wiki/Inverted_index">Inverted index</a> (Wikipedia); you build a full one in Week 3</li>
+      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>, chapter 6 (heaps, the O(<var>n</var>) build, priority queues)</li>
+      <li>Sedgewick and Wayne, <em>Algorithms</em>, <a href="https://algs4.cs.princeton.edu/24pq/">section 2.4, Priority Queues</a> (includes an indexed priority queue)</li>
+      <li>Python docs, <a href="https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes">heapq: priority queue implementation notes</a> (lazy deletion and the tie-break counter)</li>
+      <li>Wikipedia: <a href="https://en.wikipedia.org/wiki/Binary_heap">Binary heap</a>, <a href="https://en.wikipedia.org/wiki/Bucket_queue">Bucket queue</a>, <a href="https://en.wikipedia.org/wiki/Inverted_index">Inverted index</a> (you build a full one in Week 3)</li>
+      <li>Grant Jenks, <a href="https://grantjenks.com/docs/sortedcontainers/">sortedcontainers documentation</a></li>
+      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16837">A Formal Perspective on Byte-Pair Encoding</a>, section on a faster implementation</li>
     </ul></div>
   </div>
 
   <div class="blk des">
     <div class="bh"><span class="kind">Design · contracts and tests</span></div>
-    <p>Write the invariants before the code; each becomes a test that exists, and fails, before the implementation.</p>
-    <div class="code"><div class="ch"><span>contracts.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Tokenizer(Protocol):
+    <h4>The question</h4>
+    <p>The fast trainer is about 40 lines of bookkeeping. How do you know it is the same trainer as the simple one, on every input, and stays so as the code changes?</p>
+    <h4>First attempt</h4>
+    <p>Train on <em>Alice</em> and look at the first merges. That checks one input, and a bookkeeping bug that only fires when a chunk contains the merged pair twice, or when a count returns to an earlier value, can pass it.</p>
+    <h4>The key idea: every test needs an oracle</h4>
+    <p>A test compares the code's output with an <b>oracle</b>: something that tells you the right answer. Kinds of test differ in where the oracle comes from, and that decides which bugs each can see and which it is blind to. Write the invariants first; each becomes a test that exists, and fails, before the implementation.</p>
+    <div class="code"><div class="ch"><span>contracts.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from typing import Protocol, Sequence
+
+class Tokenizer(Protocol):
     vocab_size: int
     def encode(self, text: str) -&gt; list[int]: ...
     def decode(self, ids: Sequence[int]) -&gt; str: ...
@@ -444,16 +807,20 @@ class StockPrice:                                # 2034: lazy deletion, twice
 # I4  train(D, V) is identical across runs    (fixed tie-break)
 # I5  load(save(t)) encodes exactly like t</code></pre></div>
     <div class="tablewrap"><table>
-      <tr><th>Test</th><th>Checks</th><th>Catches</th></tr>
-      <tr><td><b>Golden</b></td><td><code>aaabdaaabac</code> → <code>[(97,97), (97,98), (256,257)]</code></td><td>Wrong tie-break, wrong order</td></tr>
-      <tr><td><b>Property</b></td><td>I1 on thousands of random Unicode strings</td><td>Per-token decoding, emoji, overlap bugs</td></tr>
-      <tr><td><b>Differential</b></td><td>Fast trainer == simple trainer</td><td>Any bookkeeping bug in the incremental update</td></tr>
-      <tr><td><b>Compatibility</b></td><td>Your encoder with GPT-2's merges == tiktoken</td><td>Pattern and rank-order differences</td></tr>
+      <tr><th>Test</th><th>Oracle</th><th>Checks</th><th>Catches</th><th>Blind to</th></tr>
+      <tr><td><b>Golden</b></td><td>Your hand calculation</td><td><code>aaabdaaabac</code> → <code>[(97,97), (97,98), (256,257)]</code></td><td>Misreading the specification: wrong tie-break, wrong order, overlapping merges</td><td>Anything outside the few examples you worked by hand</td></tr>
+      <tr><td><b>Property</b></td><td>An invariant (I1)</td><td>Round trip on thousands of random Unicode strings</td><td>Inputs you did not think of: a character split across tokens, emoji, empty strings</td><td>Wrong but consistent output: a tokenizer that returns raw bytes passes the round trip</td></tr>
+      <tr><td><b>Differential</b></td><td>A second, simple implementation</td><td>Fast trainer == simple trainer, on random text and vocab sizes</td><td>Any bookkeeping bug in the incremental update</td><td>A misreading shared by both implementations (the golden test covers that)</td></tr>
+      <tr><td><b>Compatibility</b></td><td>An external reference</td><td>Your encoder with GPT-2's merges == tiktoken</td><td>Pattern and rank-order differences from the real system</td><td>Bugs in code paths the reference does not have, such as your trainer</td></tr>
     </table></div>
-    <p>File format decisions: store <b>merges in order</b> (the vocabulary is derived from them), the <b>pattern</b> (same merges with another pattern give other tokens), a <b><code>format_version</code></b> (refuse unknown files instead of mis-encoding), and <b>integers</b>, not byte strings (they round-trip through JSON exactly). <b>Mutation testing</b> checks the tests: plant a bug and confirm some test fails.</p>
+    <p>The four kinds cover each other's blind spots, which is why you want all of them. <b>Mutation testing</b> checks the tests themselves: plant a bug and confirm that some test fails. If none does, a test is missing.</p>
+    <p><b>File format decisions</b> follow the same contracts. Store the <b>merges in order</b> (the vocabulary is derived from them), the <b>pattern</b> (the same merges with another pattern give other tokens, so I3 would break), a <b><code>format_version</code></b> (refuse unknown files instead of mis-encoding them, I5), and <b>integers</b>, not byte strings (they round-trip through JSON exactly).</p>
+    <h4>Where BPE uses it</h4>
+    <p>The differential test is what lets you optimize at all: every queue in the Algorithms block was accepted only after it produced the simple trainer's merges. The golden test pins the tie-break that the tuple <code>(-count, pair)</code> implements.</p>
     <div class="part"><b>Practice</b><ul>
       <li>Write the golden, property and differential tests with Hypothesis.</li>
       <li>Plant three bugs (merge overlapping pairs; decode each token separately; break ties the other way) and check each one is caught.</li>
+      <li>Add a differential test for the four queues of the Algorithms block.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
       <li>Fuzz <code>decode</code> with random id lists: what must it do with an unknown id?</li>
@@ -474,20 +841,32 @@ def test_round_trip_any_text(s):
 @settings(max_examples=200)
 @given(st.text(min_size=1), st.integers(257, 400))
 def test_fast_trainer_matches_simple(s, v):
-    assert train([s], v) == train_simple([s], v)</code></pre></div>
-    <p>"Decode each token separately" is caught by the round trip as soon as Hypothesis generates a non-ASCII character split across tokens. "Overlapping merge" is caught by the golden test (<code>aaa</code>). The reversed tie-break is caught by the golden test at step 2. For the regex upgrade: a golden <em>encoding</em> test on a fixed multilingual string.</p></div></details>
+    assert train([s], v) == train_simple([s], v)
+
+# the four queues must agree with the simple trainer
+@settings(max_examples=100)
+@given(st.text(min_size=1), st.integers(257, 400))
+def test_queues_agree(s, v):
+    want = train_simple([s], v)
+    for q in (LazyHeap(), IndexedMaxHeap(), SortedQueue(), BucketQueue()):
+        assert train_pq([s], v, q) == want</code></pre></div>
+    <p>"Decode each token separately" is caught by the round trip as soon as Hypothesis generates a non-ASCII character whose bytes land in different tokens (<code>é</code> is two bytes, and the 500 merges learned from <em>Alice</em> never join them). "Overlapping merge" (turning <code>aaa</code> into two merged tokens) is caught by the golden test. The reversed tie-break is caught by the golden test at step 2. For the regex upgrade: a golden <em>encoding</em> test on a fixed multilingual string. An unknown id must raise <code>ValueError</code>, never return text.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
       <li><a href="https://hypothesis.readthedocs.io/">Hypothesis documentation</a>: quick start</li>
+      <li>William McKeeman, "Differential Testing for Software", <em>Digital Technical Journal</em>, 1998</li>
     </ul></div>
   </div>
 
   <div class="check" data-check="day4">
     <div class="ch"><b>Checkpoint · Day 4</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="d4a" data-dim="ml"><span class="tx">Show the chunk counter is sufficient; confirm with a shuffle test.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d4b" data-dim="dsa"><span class="tx">Implement the fast trainer and match the simple one on three corpora.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d4c" data-dim="dsa"><span class="tx">Solve 692 and 2034; write the stale-check invariant.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d4d" data-dim="dsa"><span class="tx">Stretch: the linked-list trainer, O(S log S).</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d4e" data-dim="del"><span class="tx">Golden, property and differential tests; three planted bugs caught.</span><span class="dim del">Delivery</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4a" data-dim="ml"><span class="tx">Prove by induction that the chunk counter is sufficient; confirm with a shuffle test.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4b" data-dim="dsa"><span class="tx">Implement a binary heap from scratch; explain why sift-up and sift-down are correct and prove heapify is O(n).</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4c" data-dim="dsa"><span class="tx">State the lazy-deletion invariant, prove the first matching entry is the maximum, and measure the stale-pop rate.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4d" data-dim="dsa"><span class="tx">Implement the indexed max-heap with update(key, value); get the same merges as lazy deletion.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4e" data-dim="dsa"><span class="tx">Implement the fast trainer with the inverted index and match the simple one on three corpora.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4f" data-dim="dsa"><span class="tx">Solve 703, 295, 239 and 2034; give the invariant for each.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4g" data-dim="dsa"><span class="tx">Stretch: the linked-list trainer, O(S log S).</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4h" data-dim="del"><span class="tx">Golden, property and differential tests; three planted bugs caught.</span><span class="dim del">Delivery</span></label>
   </div>
 </section><div class="pager"><a class="btn" href="day_3.html">← Information</a><a class="btn pri" href="day_5.html">Encoding and serving →</a></div>
 <footer>
@@ -669,7 +1048,7 @@ simInit(); simRender();
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
 const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "ml", "page": "day_5.html"}, {"id": "d5c", "dim": "ai", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

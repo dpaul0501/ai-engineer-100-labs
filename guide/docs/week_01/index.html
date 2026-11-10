@@ -271,7 +271,7 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="rail-label">Week 1 · Tokenization</div>
   <a href="index.html" class="on" data-page="index.html"><span class="n">R</span>Week reading</a>
   <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The objective</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
   <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
   <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
   <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
@@ -310,11 +310,11 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="tablewrap"><table class="weekmap">
     <tr><th></th><th>Theme</th><th class="t-ml">ML</th><th class="t-dsa">Algorithms</th><th class="t-sys">Design</th></tr>
     <tr><td>R</td><td><b>Main reading</b></td><td colspan="3">The problem, the formulation, what BPE does, the algorithm, the code, a worked example</td></tr>
-    <tr><td>D1</td><td><a href="day_1.html">Text as data</a></td><td>Zipf's law and the long tail</td><td>UTF-8, hash maps, sliding windows</td><td>The pre-tokenization pattern</td></tr>
-    <tr><td>D2</td><td><a href="day_2.html">The objective</a></td><td>Length vs vocabulary vs learnability</td><td>Greedy, and when it fails</td><td>Choosing the vocabulary budget</td></tr>
-    <tr><td>D3</td><td><a href="day_3.html">Information</a></td><td>Entropy and bits per byte</td><td>Huffman: a greedy that is optimal</td><td>Evaluating a tokenizer</td></tr>
-    <tr><td>D4</td><td><a href="day_4.html">Fast training</a></td><td>Counts are sufficient statistics</td><td>Heap, lazy deletion, inverted index</td><td>Contracts and tests</td></tr>
-    <tr><td>D5</td><td><a href="day_5.html">Encoding and serving</a></td><td>Failure modes and alternatives</td><td>The fast encoder and caches</td><td>Training on terabytes, serving at scale</td></tr>
+    <tr><td>D1</td><td><a href="day_1.html">Text as data</a></td><td>Zipf's and Heaps' laws, fitted properly</td><td>Hashing, top-k four ways, sliding windows, UTF-8</td><td>The pre-tokenization pattern</td></tr>
+    <tr><td>D2</td><td><a href="day_2.html">Greedy and the objective</a></td><td>1/√n noise; vocabulary size as model selection</td><td>Greedy in full: proofs, matroids, failure, DP, approximation</td><td>Choosing the vocabulary budget</td></tr>
+    <tr><td>D3</td><td><a href="day_3.html">Information</a></td><td>Entropy from scratch, and estimating it</td><td>Prefix codes, Kraft, Huffman's optimality proof</td><td>Evaluating a tokenizer, with bootstrap error bars</td></tr>
+    <tr><td>D4</td><td><a href="day_4.html">Fast training</a></td><td>Counts are sufficient statistics</td><td>The max of a changing set: heaps, lazy deletion, indexed heaps</td><td>Contracts and tests</td></tr>
+    <tr><td>D5</td><td><a href="day_5.html">Encoding and serving</a></td><td>Failure modes and alternatives</td><td>Linked-list encoder, LRU; streams: heavy hitters, Count-Min, reservoir</td><td>Training on terabytes, serving at scale</td></tr>
     <tr><td>WE</td><td><a href="worksheet.html"><b>Weekend build</b></a></td><td colspan="3"><code>tok.bpe</code> with tests, a vocabulary sweep, and the token tax with error bars</td></tr>
   </table></div>
 
@@ -331,8 +331,81 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="shead"><span class="sno">MAIN READING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
   <h2>The problem, and the whole solution</h2>
 
-  <h3>R.1 · A model needs a fixed alphabet. Text doesn't have one.</h3>
-  <p>A language model is a function from a sequence of ids to a probability for the next id. Both ends are fixed when the model is built: the input looks up one learned vector per id, and the output scores every id in a list of size <var>V</var>. Text is open-ended: any language, typos, emoji, code, names no one has seen. The <b>tokenizer</b> turns arbitrary text into ids from a fixed list and back. It is chosen once, before training, and every model trained with it is stuck with it.</p>
+  <h3>R.1 · Foundations: what a model reads, and why we need a tokenizer</h3>
+  <p>Before any algorithm, two questions: what does a language model actually take as input and produce as output, and why does that force us to build a tokenizer at all? This section answers both from the ground up and ends with the objective that R.2 writes down precisely.</p>
+
+  <h4>1. What a language model reads and writes</h4>
+  <p><b>The question.</b> A model computes with numbers. Text is a string of characters. What exactly crosses the boundary between them?</p>
+  <p><b>The answer: integer ids.</b> Fix a list of <var>V</var> pieces of text, called <b>tokens</b>, and number them 0 to <var>V</var>−1. That list is the <b>vocabulary</b>. A model never sees text. It sees a list of ids, and it produces, for the next position, one probability for each of the <var>V</var> ids.</p>
+  <p>A toy example. Take a vocabulary of <var>V</var> = 6 tokens:</p>
+  <div class="tablewrap"><table>
+    <tr><th>id</th><td class="num">0</td><td class="num">1</td><td class="num">2</td><td class="num">3</td><td class="num">4</td><td class="num">5</td></tr>
+    <tr><th>token</th><td><code>The</code></td><td><code>&nbsp;cat</code></td><td><code>&nbsp;sat</code></td><td><code>&nbsp;on</code></td><td><code>&nbsp;the</code></td><td><code>&nbsp;mat</code></td></tr>
+  </table></div>
+  <p>The text <code>The cat sat</code> becomes the ids <code>[0, 1, 2]</code>. The model's job is to say which id comes next.</p>
+  <div class="dg"><div class="vflow">
+    <div class="vbox"><b>ids in: [0, 1, 2]</b><span class="muted small">"The", " cat", " sat"</span></div>
+    <div class="varr">↓ look up row 0, row 1, row 2 of the embedding table E (V × d)</div>
+    <div class="vbox"><b>three vectors of length d</b><span class="muted small">the only thing the network ever sees</span></div>
+    <div class="varr">↓ the network mixes them into one vector h for the next position</div>
+    <div class="vbox"><b>scores z = h · Wᵀ, one per id</b><span class="muted small">W is the output table, also V × d</span></div>
+    <div class="varr">↓ softmax</div>
+    <div class="vbox" style="border-color:var(--accent)"><b>V probabilities that sum to 1</b><span class="muted small">for example, " on" gets the highest</span></div>
+  </div><div class="cap">Both ends of the model are tables with one row per id. The middle never touches text.</div></div>
+  <p><b>The input end: the embedding table.</b> The model owns a matrix <var>E</var> with <var>V</var> rows and <var>d</var> columns (<var>d</var> is the model width, for example 768). Row <var>i</var> is a learned vector for token <var>i</var>. "Embedding id 2" just means "read row 2". It is a table lookup, not a computation.</p>
+  <p><b>The output end: a softmax over V ids.</b> The network turns its input into one vector <var>h</var> of length <var>d</var>. It scores every token by a dot product with that token's row of a second <var>V</var> × <var>d</var> table <var>W</var>: \(z_i = h \cdot W_i\). The softmax turns the <var>V</var> scores into probabilities:</p>
+  <div class="eq">\[ p(\text{next} = i) \;=\; \frac{e^{z_i}}{\sum_{j=0}^{V-1} e^{z_j}}, \qquad i = 0, \dots, V-1 \]</div>
+  <p>Worked by hand with <var>V</var> = 3 and scores <var>z</var> = (2, 1, 0): \(e^2 = 7.389\), \(e^1 = 2.718\), \(e^0 = 1\), sum 11.107, so the probabilities are 0.665, 0.245 and 0.090. Each is positive, and they add to 1 because every term is divided by the same sum.</p>
+  <p><b>Generating text</b> is this step in a loop: pick an id from the probabilities, append it to the input, repeat. At the end, the ids are turned back into text. So the model needs two functions it cannot learn by itself: text → ids before it runs, and ids → text after. Those two functions are the <b>tokenizer</b>.</p>
+
+  <h4>2. Why V must be fixed before training</h4>
+  <p><b>The question.</b> Why not let the vocabulary grow as new words show up?</p>
+  <p>Three reasons, each from the picture above.</p>
+  <ul>
+    <li><b>(a) Each id owns learned parameters.</b> Row <var>i</var> of <var>E</var> and row <var>i</var> of <var>W</var> are learned from the training examples in which token <var>i</var> appears. A token added after training has rows that no gradient ever touched: random numbers. The model has no idea what it means.</li>
+    <li><b>(b) The softmax needs a finite set to normalize over.</b> The denominator sums over all <var>V</var> ids. An id outside 0..<var>V</var>−1 has no score, so its probability is 0 and the model can never produce it. Adding an id also changes the denominator, so every probability the model learned shifts.</li>
+    <li><b>(c) V sets the parameter count.</b> The two tables each have one row per id, so their size in parameters is fixed by <var>V</var>:</li>
+  </ul>
+  <div class="eq">\[ \underbrace{V \cdot d}_{\text{input table } E} \;+\; \underbrace{V \cdot d}_{\text{output table } W} \;=\; 2\,V d \]</div>
+  <p>With <var>V</var> = 50,000 and <var>d</var> = 768 that is 76.8 million, chosen once, before training. (Some models share one table for both ends, called weight tying, which halves this.) Doubling <var>V</var> doubles these tables, so <var>V</var> is a budget decision, not a detail.</p>
+  <div class="idea">The ids mean something only to the model that was trained with them. Row 1 was learned as " cat". Change the tokenizer so that id 1 means " dog", or so that " cat" is split into two ids, and the trained rows no longer match what they are fed. Changing the tokenizer means retraining the model.</div>
+
+  <h4>3. Character, code point, grapheme, byte, subword</h4>
+  <p><b>The question.</b> If we must pick a fixed list of units, what units does text offer? "Character" sounds obvious, but it hides four different things. Definitions first:</p>
+  <ul>
+    <li><b>Code point.</b> Unicode gives every symbol a number, written U+ and hex: <code>a</code> is U+0061, <code>न</code> (Devanagari "na") is U+0928, 😀 is U+1F600. There are 1,114,112 possible code points, and about 150,000 are assigned. A Python <code>str</code> is a sequence of code points; <code>len(s)</code> counts them.</li>
+    <li><b>Mark.</b> Some code points do not stand alone: they modify the code point before them. U+0301 adds an acute accent; U+093F is the Devanagari vowel sign "i". Unicode classes these as marks (categories Mn, Mc).</li>
+    <li><b>Grapheme (cluster).</b> What a reader sees as one character: a base code point plus any marks or modifiers attached to it. Unicode defines the boundaries in UAX #29.</li>
+    <li><b>Byte.</b> To store or send code points, they are written as bytes (numbers 0–255). <b>UTF-8</b>, the encoding used almost everywhere, writes each code point as 1 to 4 bytes.</li>
+  </ul>
+  <p>The same visible text gives different counts at each level:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Text</th><th>Code points</th><th class="num">Code points</th><th class="num">Graphemes</th><th>UTF-8 bytes (hex)</th><th class="num">Bytes</th></tr>
+    <tr><td><code>a</code></td><td>U+0061</td><td class="num">1</td><td class="num">1</td><td><code>61</code></td><td class="num">1</td></tr>
+    <tr><td><code>é</code></td><td>U+00E9</td><td class="num">1</td><td class="num">1</td><td><code>c3 a9</code></td><td class="num">2</td></tr>
+    <tr class="hi"><td><code>é</code></td><td>U+0065 <code>e</code> + U+0301 accent mark</td><td class="num">2</td><td class="num">1</td><td><code>65 cc 81</code></td><td class="num">3</td></tr>
+    <tr><td><code>न</code></td><td>U+0928</td><td class="num">1</td><td class="num">1</td><td><code>e0 a4 a8</code></td><td class="num">3</td></tr>
+    <tr><td><code>नि</code></td><td>U+0928 + U+093F vowel sign (a mark)</td><td class="num">2</td><td class="num">1</td><td><code>e0 a4 a8 e0 a4 bf</code></td><td class="num">6</td></tr>
+    <tr><td>😀</td><td>U+1F600</td><td class="num">1</td><td class="num">1</td><td><code>f0 9f 98 80</code></td><td class="num">4</td></tr>
+    <tr><td>👍🏽</td><td>U+1F44D thumbs up + U+1F3FD skin tone</td><td class="num">2</td><td class="num">1</td><td><code>f0 9f 91 8d f0 9f 8f bd</code></td><td class="num">8</td></tr>
+    <tr><td><code>नमस्ते</code></td><td>6 code points, 2 of them marks</td><td class="num">6</td><td class="num">4*</td><td>3 bytes each</td><td class="num">18</td></tr>
+    <tr><td><code>hello</code></td><td>U+0068 … U+006F</td><td class="num">5</td><td class="num">5</td><td><code>68 65 6c 6c 6f</code></td><td class="num">5</td></tr>
+  </table></div>
+  <p class="small muted">Measured with Python 3 (Unicode 16.0) and the <code>regex</code> module's <code>\X</code>. *Grapheme counts for Hindi conjuncts depend on the Unicode version's rules; the code point and byte counts do not.</p>
+  <p>The two <code>é</code> rows look identical on screen but are different code points and different bytes. A tokenizer that works on bytes sees two different strings. (Unicode normalization, NFC, converts the second into the first; whether to apply it is a design choice.)</p>
+  <p><b>UTF-8 in one paragraph.</b> Code points below 128 (plain ASCII: English letters, digits, punctuation) take one byte, equal to the code point, so ASCII text is unchanged. Larger code points take 2, 3 or 4 bytes. The first byte's leading bits say how many bytes follow (<code>110…</code> two, <code>1110…</code> three, <code>11110…</code> four), and every following byte starts with <code>10</code>. That is why Devanagari letters are 3 bytes and emoji 4, and why you can always find where a character starts. Day 1 builds and validates UTF-8 bit by bit.</p>
+  <p><b>Why tokenizers start from bytes.</b> Bytes have two properties nothing else on the list has together:</p>
+  <ul>
+    <li><b>Finite and small:</b> exactly 256 symbols, fixed forever. New emoji, new scripts and new Unicode versions add code points, never bytes.</li>
+    <li><b>Total:</b> every string, in every language, with any typo, has a UTF-8 byte sequence, and the bytes give the exact string back. A vocabulary that contains all 256 bytes can write anything.</li>
+  </ul>
+  <p><b>What a subword token is.</b> A byte-level tokenizer starts with the 256 single bytes as tokens and adds longer tokens: each new token is a <em>byte string</em> chosen by training because it is frequent, such as <code>&nbsp;the</code> or <code>ing</code>. Nothing forces a token to stop at a character boundary. If <code>e0 a4</code> is frequent in Hindi text, it can become a token, holding two of the three bytes of <code>न</code>:</p>
+  <div class="toks"><span class="tk mk">e0 a4</span><span class="tk mk">a8</span><span class="tk">e0 a4 bf</span></div>
+  <p class="small muted">A possible split of <code>नि</code> into three tokens. Red: tokens that hold part of a character. Neither is valid UTF-8 on its own; joined, the bytes are.</p>
+  <p>This is why <code>decode</code> must join bytes first and decode UTF-8 once at the end (R.6).</p>
+
+  <h4>4. The units compared, and what we require</h4>
+  <p><b>The question.</b> Which unit should the vocabulary be made of? First write down what any tokenizer must do. It is a pair of functions plus a way to learn them:</p>
   <div class="code"><div class="ch"><span>the contract</span><button class="copy" type="button">Copy</button></div><pre><code>encode : str  → list[int]        <span class="c"># every id in 0 .. V-1</span>
 decode : list[int] → str
 train  : corpus, V → tokenizer     <span class="c"># learn the list of tokens from data</span></code></pre></div>
@@ -345,13 +418,141 @@ train  : corpus, V → tokenizer     <span class="c"># learn the list of tokens 
     <tr><td>R5</td><td><b>Learnable</b></td><td>Every token appears often in training data</td><td>A token's vector is only as good as its examples</td></tr>
     <tr><td>R6</td><td><b>Fast</b></td><td>Encoding keeps up with the model</td><td>It runs on every request and the whole corpus</td></tr>
   </table></div>
+  <p>Now try each unit against R2 (total), R4 (short) and R5 (learnable).</p>
+  <p><b>Whole words.</b> The first attempt: one token per word. Sequences are short. But the set of words has no end. <b>Heaps' law</b> says the number of distinct words in a text of <var>n</var> words grows like \(c\, n^{\beta}\) with β roughly 0.4–0.6: it keeps growing as you read more, without a ceiling (Day 1 measures it). Any fixed word list therefore misses words, and the classic fix is a special <code>&lt;UNK&gt;</code> ("unknown") id for every word not in the list, which breaks R1: the word is lost. On <em>Alice</em>, keeping every 10th document as held-out text, 4.8% of held-out words (135 of 2,810) never occur in the other 90% of the same book, for example <code>birthday</code> and <code>anywhere</code>. And 44% of the word types in the training part (1,071 of 2,435) occur exactly once, so their vectors would have one example each (fails R5).</p>
+  <p><b>Characters (code points).</b> About 150,000 assigned code points, and the number grows with each Unicode version, so it is not fixed. Most are rare: a Chinese character seen twice gets a poor vector. Sequences are as long as the text has characters.</p>
+  <p><b>Bytes.</b> 256 symbols, total, fixed. But sequences are long: one token per byte, so <code>&nbsp;the</code> is 4 steps and <code>नमस्ते</code> is 18.</p>
+  <p><b>Subwords.</b> Bytes plus a learned list of frequent byte strings. Frequent words get one token; rare words are spelled with smaller pieces, down to single bytes if needed. This keeps the totality of bytes and gets most of the shortness of words.</p>
   <div class="tablewrap"><table>
     <tr><th>Unit</th><th class="num">V</th><th>Total (R2)</th><th>Short (R4)</th><th>Learnable (R5)</th></tr>
-    <tr><td><b>Bytes</b></td><td class="num">256</td><td>yes: 256 bytes write anything</td><td>no: <code> the</code> is 4 steps</td><td>yes</td></tr>
-    <tr><td><b>Whole words</b></td><td class="num">millions</td><td>no: new words can't be written</td><td>yes</td><td>no: most words are rare</td></tr>
+    <tr><td><b>Bytes</b></td><td class="num">256</td><td>yes: 256 bytes write anything</td><td>no: <code>&nbsp;the</code> is 4 steps</td><td>yes</td></tr>
+    <tr><td><b>Code points</b></td><td class="num">~150k, growing</td><td>only with an unknown id</td><td>somewhat</td><td>no: most are rare</td></tr>
+    <tr><td><b>Whole words</b></td><td class="num">unbounded</td><td>no: new words need <code>&lt;UNK&gt;</code></td><td>yes</td><td>no: most words are rare</td></tr>
     <tr class="hi"><td><b>Subwords (BPE)</b></td><td class="num">30k–200k</td><td>yes: falls back to bytes</td><td>mostly</td><td>mostly, by construction</td></tr>
   </table></div>
-  <p><b>Why the details matter.</b> <em>"The children went to the market to buy fresh vegetables for dinner."</em> is 13 tokens in English with GPT-2, GPT-4's <code>cl100k_base</code> and GPT-4o's <code>o200k_base</code>. Its Hindi translation is 90, 65 and 22 tokens: Hindi users paid up to 6.9× the price and got 6.9× less context, purely because of the tokenizer. By the end of the week you can explain each number.</p>
+  <p><b>Why the details matter.</b> <em>"The children went to the market to buy fresh vegetables for dinner."</em> is 13 tokens in English with GPT-2, GPT-4's <code>cl100k_base</code> and GPT-4o's <code>o200k_base</code>. Its Hindi translation is 90, 65 and 22 tokens: Hindi users paid up to 6.9× the price and got 6.9× less context, purely because of the tokenizer. Every one of these is a byte-level subword tokenizer; they differ in which byte strings training gave identity to. By the end of the week you can explain each number.</p>
+
+  <h4>5. Why a bigger vocabulary gives shorter sequences</h4>
+  <p><b>The question.</b> We want short sequences (R4). How short can text get with <var>V</var> tokens, and why does a bigger <var>V</var> help?</p>
+  <p><b>The analogy: number bases.</b> Write one million in different bases. Base 2 needs 20 digits (11110100001001000000). Base 10 needs 7 (1000000). Base 1000 needs 3, and you already use it: the commas in 1,000,000 mark base-1000 digits.</p>
+  <div class="toks"><span class="tk">1</span><span class="tk">000</span><span class="tk">000</span></div>
+  <p class="small muted">One million as three base-1000 digits. Each box is one "token" from an alphabet of 1,000 symbols (000 to 999).</p>
+  <p>A bigger alphabet means fewer symbols for the same value. How many fewer is a counting argument.</p>
+  <p><b>The bound, derived.</b> With <var>k</var> digits in base <var>b</var> you can write \(b^k\) different values, no more: each position has <var>b</var> choices, and the choices multiply. To name any one of <var>N</var> values you need \(b^k \ge N\), so</p>
+  <div class="eq">\[ k \;\ge\; \log_b N \;=\; \frac{\log_2 N}{\log_2 b}. \]</div>
+  <p>\(\log_2 N\) is the number of bits needed to pick one value out of <var>N</var>, and \(\log_2 b\) is the number of bits one digit can carry. For one million, \(\log_2 10^6 = 19.93\): base 2 carries 1 bit per digit (20 digits), base 10 carries 3.32 (7 digits), base 1000 carries 9.97 (3 digits).</p>
+  <p>Tokens work the same way. A sequence of <var>n</var> tokens from a vocabulary of <var>V</var> can take at most \(V^n\) different values, so one token carries <b>at most \(\log_2 V\) bits</b>. Say a text carries <var>H</var> bits of information, meaning that even the best lossless code needs <var>H</var> bits to tell it apart from the alternatives (Day 3 defines this exactly as entropy). Because <code>encode</code> is lossless, its tokens must carry all <var>H</var> bits, so</p>
+  <div class="eq">\[ n \cdot \log_2 V \;\ge\; H \qquad\Longrightarrow\qquad n \;\ge\; \frac{H}{\log_2 V}. \]</div>
+  <p>Example: a passage carrying <var>H</var> = 2,000 bits needs at least 2,000 / 8 = 250 tokens with <var>V</var> = 256, and at least 2,000 / 16 = 125 with <var>V</var> = 65,536. The floor falls only like \(1 / \log_2 V\): squaring the vocabulary halves it.</p>
+  <p><b>Where the analogy stops.</b> In a number base every digit string is used, and all digits are equally likely. Text is not like that, in two ways.</p>
+  <ul>
+    <li><b>Tokens are not used equally.</b> A token carries the full \(\log_2 V\) bits only if all <var>V</var> tokens are equally likely in every position. In real text <code>&nbsp;the</code> is far more common than <code>&nbsp;quadrille</code>, so each token carries less, and real sequences are longer than the floor.</li>
+    <li><b>Bytes are a wasteful starting point.</b> A byte could carry 8 bits, but English uses a few dozen byte values, mostly in predictable orders, so each byte carries much less. A pure change of base from 256 to <var>V</var> = 3,208 symbols would shorten text by \(\log_2 3208 / 8 = 1.46\times\). Merging frequent byte strings removes the predictability as well, so the measured gain is much larger.</li>
+  </ul>
+  <p><b>Confirm by measuring.</b> BPE trained on 90% of <em>Alice</em>'s documents, measured on the other 10%:</p>
+  <div class="chart"><div class="t">Bytes per token on held-out <em>Alice</em> (higher = shorter sequences)</div>
+    <div class="br"><span>vocab 256</span><span class="tr"><i style="width:27%"></i></span><span class="v">1.00</span></div>
+    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:61%"></i></span><span class="v">2.26</span></div>
+    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:79%"></i></span><span class="v">2.94</span></div>
+    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:92%"></i></span><span class="v">3.45</span></div>
+    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%"></i></span><span class="v">3.73</span></div>
+  </div>
+  <p>Sequences get shorter as <var>V</var> grows, with diminishing returns, as the \(1/\log_2 V\) shape predicts. The gain at 3,208 is 3.73×, not the 1.46× a change of base gives, for the second reason above. (3,208 is the largest vocabulary this text supports: after that no pair occurs twice.)</p>
+
+  <h4>6. Why a bigger vocabulary can hurt: sharing vs identity</h4>
+  <p><b>The question.</b> If bigger <var>V</var> means shorter sequences, why not make every frequent word its own token?</p>
+  <p>Because of (a) in part 2: a token's vector is learned only from the examples that contain it. Compare two vocabularies for three related words:</p>
+  <div class="grid2">
+    <div><b>Sharing</b> (small V)
+      <div class="toks"><span class="tk">happ</span><span class="tk">y</span></div>
+      <div class="toks"><span class="tk">un</span><span class="tk">happ</span><span class="tk">y</span></div>
+      <div class="toks"><span class="tk">happ</span><span class="tk">iness</span></div>
+      <p class="small">One vector for <code>happ</code>, trained by every occurrence of all three words. An unseen word like <code>happily</code> still reuses it.</p></div>
+    <div><b>Identity</b> (large V)
+      <div class="toks"><span class="tk new">happy</span></div>
+      <div class="toks"><span class="tk new">unhappy</span></div>
+      <div class="toks"><span class="tk new">happiness</span></div>
+      <p class="small">Three independent vectors, each starting random and trained only by its own occurrences. Nothing tells the model they are related.</p></div>
+  </div>
+  <p>Shared pieces give <b>generalization</b>: many examples per vector, and new words built from known parts. Identity gives shorter sequences and a dedicated vector, but if the token is rare its vector stays close to its random start: the model ends up <b>memorizing</b> the few contexts it saw rather than learning what the token means. Day 2 derives how fast a vector's noise shrinks with its number of examples.</p>
+  <p><b>Confirm by measuring.</b> Same split as above. As <var>V</var> grows, most new tokens become rare, and the gap between how well a model fits the training text and the held-out text (in bits per token; set-up on Day 2) widens:</p>
+  <div class="chart"><div class="t">The cost of identity, on <em>Alice</em></div>
+    <div class="sub">New tokens used fewer than 10 times</div>
+    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:3%;--c:var(--bad)"></i></span><span class="v">3%</span></div>
+    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:11%;--c:var(--bad)"></i></span><span class="v">11%</span></div>
+    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:68%;--c:var(--bad)"></i></span><span class="v">68%</span></div>
+    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:86%;--c:var(--bad)"></i></span><span class="v">86%</span></div>
+    <div class="sub">Train → test gap, bits per token (higher = more memorization)</div>
+    <div class="br"><span>vocab 256</span><span class="tr"><i style="width:18%;--c:var(--ai)"></i></span><span class="v">0.06</span></div>
+    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:15%;--c:var(--ai)"></i></span><span class="v">0.05</span></div>
+    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:24%;--c:var(--ai)"></i></span><span class="v">0.08</span></div>
+    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:50%;--c:var(--ai)"></i></span><span class="v">0.17</span></div>
+    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%;--c:var(--ai)"></i></span><span class="v">0.34</span></div>
+  </div>
+  <p>So there is a best <var>V</var> in between, and it depends on how much data and how big a model you have. On 130 KB of text it is small. At large scale, Tao et al. (2024) fit scaling laws for vocabulary size and find that the best <var>V</var> grows with model size: larger models should use larger vocabularies.</p>
+
+  <h4>7. The design objective, derived</h4>
+  <p><b>The question.</b> What exactly should a tokenizer optimize?</p>
+  <p><b>The real goal.</b> A tokenizer is good if the model trained with it is good. Measure the model in <b>bits per byte</b>: how many bits, on average, the model needs to predict each byte of held-out text (Day 3 explains why this is fair across tokenizers, whose tokens have different lengths). Compare tokenizers at a fixed compute budget <var>C</var>, since a shorter sequence also means less compute per byte. Then the goal is</p>
+  <div class="eq">\[
+\begin{aligned}
+\min_{T}\quad & \mathrm{BPB}\bigl(\text{model trained with tokenizer } T \text{ under compute } C\bigr)\\
+\text{s.t.}\quad & T \text{ is lossless (R1), total (R2) and deterministic (R3).}
+\end{aligned}
+\]</div>
+  <p><b>Why we cannot optimize it directly.</b> Evaluating one candidate <var>T</var> means training a whole model. The search space of vocabularies is astronomically large. So we optimize a <b>proxy</b> that is cheap to compute from the training text alone and that tracks the parts of the real goal we understand:</p>
+  <ul>
+    <li><b>Fewest tokens</b> stands for compute and context: fewer tokens per byte means each unit of compute covers more text (part 5).</li>
+    <li><b>A budget <var>K</var> on new tokens</b> stands for learnability and parameter cost: it caps the \(2Vd\) table size (part 2) and stops the vocabulary from filling with rare tokens (part 6).</li>
+    <li><b>Starting from the 256 bytes</b> gives R1 and R2 for free (part 3).</li>
+  </ul>
+  <p>R.2 states this proxy precisely: minimize the total number of tokens over the training corpus, with at most 256 + <var>K</var> tokens, each frequent enough to learn.</p>
+
+  <div class="code"><div class="ch"><span>foundations.py · check the numbers in this section</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import math
+
+def softmax(z):
+    m = max(z)                                   # subtract the max: same result, no overflow
+    e = [math.exp(x - m) for x in z]
+    s = sum(e)
+    return [x / s for x in e]
+
+def min_tokens(h_bits, V):
+    return h_bits / math.log2(V)                 # n &gt;= H / log2 V
+
+def show(s):
+    b = s.encode("utf-8")
+    return f"{s!r}: {len(s)} code points, {len(b)} bytes: {b.hex(' ')}"
+
+print([round(p, 3) for p in softmax([2, 1, 0])])   # [0.665, 0.245, 0.09]
+print(min_tokens(2000, 256), min_tokens(2000, 65536))   # 250.0 125.0
+for s in ["a", "é", "é", "नि", "\U0001F600", "नमस्ते"]:
+    print(show(s))</code></pre></div>
+
+  <div class="part"><b>Practice</b><ul>
+    <li>Run <code>foundations.py</code>. Then predict, before running, the code points and bytes of <code>ñ</code>, <code>中</code> and 🇮🇳 (a flag), and check.</li>
+    <li>A model has <var>d</var> = 4,096 and separate input and output tables. How many parameters does moving from <var>V</var> = 50,000 to <var>V</var> = 100,000 add?</li>
+    <li>Using the bound, how many tokens at least does a 2,000-bit passage need with <var>V</var> = 1,024? With <var>V</var> = 2<sup>20</sup>?</li>
+    <li>Give a byte string that cannot be decoded as UTF-8 on its own but can be a BPE token. Why does <code>decode</code> still return the right text?</li>
+  </ul></div>
+  <div class="part"><b>Problem variations</b><ul>
+    <li>Make the model's vocabulary grow after training: what would a new token's rows have to be initialized to, and what would its probability be before any further training?</li>
+    <li>Instead of bytes, use code points as the base alphabet with an <code>&lt;UNK&gt;</code> fallback. Which of R1–R3 break, and on what inputs?</li>
+    <li>The bound uses \(\log_2 V\) bits per token. If tokens occur with probabilities \(p_i\) and are otherwise unpredictable, the average information per token is the entropy \(-\sum_i p_i \log_2 p_i\). Check on a small example that this is at most \(\log_2 V\), with equality only when all \(p_i = 1/V\) (Day 3 proves it).</li>
+  </ul></div>
+  <details class="sol"><summary>Solution</summary><div>
+    <p><b>Bytes.</b> <code>ñ</code> is U+00F1, bytes <code>c3 b1</code>. <code>中</code> is U+4E2D, <code>e4 b8 ad</code>. 🇮🇳 is two code points, the regional indicators U+1F1EE and U+1F1F3, 8 bytes, one grapheme.</p>
+    <p><b>Parameters.</b> \(2 \cdot (100{,}000 - 50{,}000) \cdot 4{,}096 = 409{,}600{,}000\): 409.6 million new parameters, all of which need training data.</p>
+    <p><b>Bound.</b> \(2000 / \log_2 1024 = 2000/10 = 200\) tokens; \(2000 / 20 = 100\) tokens. A vocabulary 1,024 times larger only halves the floor.</p>
+    <p><b>Partial characters.</b> <code>e0 a4</code> (the first two bytes of <code>न</code>) is not valid UTF-8 alone. <code>decode</code> joins the bytes of all tokens first, so the full 3-byte sequence is back together before UTF-8 decoding.</p>
+  </div></details>
+  <div class="part"><b>Further reading</b><ul>
+    <li>Wikipedia, <a href="https://en.wikipedia.org/wiki/UTF-8">UTF-8</a> (the byte layout table) and <a href="https://en.wikipedia.org/wiki/Heaps%27_law">Heaps' law</a>.</li>
+    <li>Unicode Standard Annex #29, <a href="https://www.unicode.org/reports/tr29/">Unicode Text Segmentation</a>: the official grapheme cluster rules.</li>
+    <li>Joel Spolsky, <a href="https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses/">The Absolute Minimum Every Software Developer Absolutely, Positively Must Know About Unicode and Character Sets</a> (blog).</li>
+    <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (2016): the paper that brought BPE to language models, motivated by the unknown-word problem.</li>
+    <li>Tao et al., <a href="https://arxiv.org/abs/2407.13623">Scaling Laws with Vocabulary: Larger Models Deserve Larger Vocabularies</a> (2024).</li>
+    <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video).</li>
+  </ul></div>
 
   <h3>R.2 · State it precisely</h3>
   <p>Name the objects, the objective and the constraints before any algorithm.</p>
@@ -533,6 +734,8 @@ assert decode(encode(text, train([text], 300)), train([text], 300)) == text</cod
 
   <div class="check" data-check="reading">
     <div class="ch"><b>Checkpoint · main reading</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="r6" data-dim="ml"><span class="tx">Explain why <var>V</var> must be fixed before training (one row per id, the softmax needs a finite set, 2·<var>V</var>·<var>d</var> parameters), and why changing the tokenizer means retraining.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r7" data-dim="ml"><span class="tx">Derive tokens ≥ <var>H</var> / log₂<var>V</var> from the number-base argument, say where the analogy stops, and explain sharing vs identity with <code>[un][happ][y]</code> vs <code>[unhappy]</code>.</span><span class="dim ml">ML</span></label>
     <label class="ck"><input type="checkbox" data-id="r1" data-dim="ml"><span class="tx">Write the objective and both constraints from memory, and say which requirement each encodes.</span><span class="dim ml">ML</span></label>
     <label class="ck"><input type="checkbox" data-id="r2" data-dim="dsa"><span class="tx">Train <code>aaabdaaabac</code> by hand to vocab 259, then check with the simulator.</span><span class="dim dsa">DSA</span></label>
     <label class="ck"><input type="checkbox" data-id="r3" data-dim="dsa"><span class="tx">Type the 50 lines of R.6 yourself (no pasting) and make both asserts pass.</span><span class="dim dsa">DSA</span></label>
@@ -540,7 +743,7 @@ assert decode(encode(text, train([text], 300)), train([text], 300)) == text</cod
     <label class="ck"><input type="checkbox" data-id="r5" data-dim="ai"><span class="tx">Explain to a friend why encoding uses merge order and not frequency, using the <code>abaa</code> example.</span><span class="dim ai">AI</span></label>
     <div class="next"><b>Watch or read next</b><ul>
       <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video, 2 h) and his <a href="https://github.com/karpathy/minbpe">minbpe</a> code</li>
-      <li>Hugging Face LLM course, <a href="https://huggingface.co/learn/llm-course/chapter6/5">Byte-Pair Encoding tokenization</a> (tutorial, 20 min)</li>
+      <li>Hugging Face LLM course, <a href="https://huggingface.co/learn/llm-course/chapter6/5">Byte-Pair Encoding tokenization</a> (tutorial)</li>
       <li>Imad Dabbura, <a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">Byte Pair Encoding from Scratch</a> (blog)</li>
       <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (paper, sections 1–3)</li>
     </ul></div>
@@ -550,11 +753,11 @@ assert decode(encode(text, train([text], 300)), train([text], 300)) == text</cod
   <div class="shead"><span class="sno">THE REST OF THE WEEK</span></div>
   <h2>Now go deeper, one day at a time</h2>
   <div class="daycards">
-    <a class="daycard" href="day_1.html"><b>Day 1 · Text as data</b><span>Zipf's law · UTF-8, hash maps, sliding windows · the split pattern</span></a>
-    <a class="daycard" href="day_2.html"><b>Day 2 · The objective</b><span>The trade-off · greedy and when it fails · the vocabulary budget</span></a>
-    <a class="daycard" href="day_3.html"><b>Day 3 · Information</b><span>Entropy and bits per byte · Huffman · evaluating a tokenizer</span></a>
-    <a class="daycard" href="day_4.html"><b>Day 4 · Fast training</b><span>Sufficient statistics · heap, lazy deletion, index · tests</span></a>
-    <a class="daycard" href="day_5.html"><b>Day 5 · Encoding and serving</b><span>Failure modes · the fast encoder · training on terabytes</span></a>
+    <a class="daycard" href="day_1.html"><b>Day 1 · Text as data</b><span>Zipf and Heaps' laws · hashing, top-k four ways, sliding windows, UTF-8 · the split pattern</span></a>
+    <a class="daycard" href="day_2.html"><b>Day 2 · Greedy and the objective</b><span>1/√n and model selection · greedy in full: proofs, matroids, when it fails, DP, approximation · the vocabulary budget</span></a>
+    <a class="daycard" href="day_3.html"><b>Day 3 · Information</b><span>Entropy from scratch and its estimation · Kraft and Huffman's proof · error bars with the bootstrap</span></a>
+    <a class="daycard" href="day_4.html"><b>Day 4 · Fast training</b><span>Sufficient statistics · the max of a changing set: heaps, lazy deletion, indexed heaps, streams · tests</span></a>
+    <a class="daycard" href="day_5.html"><b>Day 5 · Encoding and serving</b><span>Failure modes · linked-list encoder, LRU · heavy hitters, Count-Min, reservoir sampling · training on terabytes</span></a>
     <a class="daycard hi" href="worksheet.html"><b>Weekend · Worksheet and learning checks</b><span>Build <code>tok.bpe</code>, measure the token tax, check yourself</span></a>
   </div>
 </section>
@@ -738,7 +941,7 @@ simInit(); simRender();
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
 const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "ml", "page": "day_5.html"}, {"id": "d5c", "dim": "ai", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

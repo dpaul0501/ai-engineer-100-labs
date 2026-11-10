@@ -271,7 +271,7 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="rail-label">Week 1 · Tokenization</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
   <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The objective</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
   <a href="day_3.html" class="on" data-page="day_3.html"><span class="n">D3</span>Information</a>
   <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
   <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
@@ -282,18 +282,73 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 <main><div class="page">
 <section class="s" id="day3" data-sec="day3">
   <div class="shead"><span class="sno">DAY 3 · INFORMATION</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
-  <h2>Tokenization moves information around; it never creates or destroys it</h2>
+  <h2>How many bits does text need, and how close can a code get?</h2>
+  <p>A tokenizer is a code: it rewrites bytes as a sequence of ids, and the model then pays some number of bits for each id. Today answers three questions in order. How much information is in a piece of text (entropy, and how to estimate it from a sample)? What is the shortest code a symbol-by-symbol scheme can reach, and how do you build it (prefix codes and Huffman's algorithm, with a full proof)? And when you compare two tokenizers on a test set, how sure can you be of the difference (the bootstrap)?</p>
 
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · entropy and bits per byte</span></div>
-    <p>An event of probability <var>p</var> carries −log₂ <var>p</var> bits of surprise. <b>Entropy</b> is the average surprise (left, below): largest (log₂ <var>V</var>) when all outcomes are equally likely, 0 when one is certain. Shannon's source coding theorem says no lossless code averages fewer than <var>H</var> bits per symbol, and the best codes give each symbol about −log₂ <var>p</var> bits: <b>frequent things get short codes</b>. BPE follows that rule with substrings: frequent strings become one token.</p>
-    <p>Because tokenizing is lossless, it can't change how much information text contains. It only moves it:</p>
+    <div class="bh"><span class="kind">ML · information from first principles</span></div>
+
+    <h4>1 · Surprise: how much does one outcome tell you?</h4>
+    <p><b>The question.</b> A friend rolls a fair 8-sided die and tells you the result. Another flips a fair coin and tells you the result. The first message tells you more. How much more, as a number?</p>
+    <p><b>First attempt.</b> Measure information by the number of possible outcomes: 8 for the die, 2 for the coin. This breaks as soon as you combine messages. The coin and the die together have 2 × 8 = 16 outcomes, but hearing two independent messages should give you the information of the first <em>plus</em> the information of the second, not their product. A measure of information should add, and counting outcomes multiplies.</p>
+    <p><b>The key idea, derived.</b> Write <var>I</var>(<var>p</var>) for the information (the <b>surprise</b>) of learning that an event of probability <var>p</var> happened. We ask for three properties:</p>
+    <ul>
+      <li>Rarer events are more surprising: <var>I</var> decreases as <var>p</var> grows, and a certain event (<var>p</var> = 1) carries none: <var>I</var>(1) = 0.</li>
+      <li>Independent events add. If <var>A</var> and <var>B</var> are independent, P(<var>A</var> and <var>B</var>) = <var>p</var><var>q</var>, so we need \( I(pq) = I(p) + I(q) \).</li>
+      <li>A unit: a fair coin flip carries 1 <b>bit</b>, \( I(1/2) = 1 \).</li>
+    </ul>
+    <p>The second property is the important one. A function that turns products into sums is a logarithm: set \( g(t) = I(2^{-t}) \); then \( g(s + t) = I(2^{-s}2^{-t}) = g(s) + g(t) \), so <var>g</var> is additive, and an additive function that is monotone must be linear, \( g(t) = c\,t \). The unit fixes \( c = g(1) = I(1/2) = 1 \). So \( I(2^{-t}) = t \), that is:</p>
+    <div class="eq">\[ I(p) = -\log_2 p = \log_2 \frac{1}{p} \ \text{bits} \]</div>
+    <p>Check it on the examples. The coin: \( -\log_2 \tfrac12 = 1 \) bit. One face of the 8-sided die: \( -\log_2 \tfrac18 = 3 \) bits. Both together: \( -\log_2 \tfrac1{16} = 4 = 1 + 3 \). A bit has a concrete meaning: it is one yes/no question that halves the possibilities. Finding one face out of 8 takes exactly three halvings:</p>
+    <div class="dg"><div class="seq"><span class="nd">8 faces</span><span class="lk">→ "is it 1–4?" →</span><span class="nd">4 left</span><span class="lk">→ "is it 1–2?" →</span><span class="nd">2 left</span><span class="lk">→ "is it 1?" →</span><span class="nd hot">1 face</span></div>
+      <div class="cap">Three yes/no answers identify one of 8 equally likely outcomes, so the outcome carries 3 bits. An outcome of probability <var>p</var> carries log₂(1/<var>p</var>) bits, also when that number is not a whole number.</div></div>
+
+    <h4>2 · Entropy: the average surprise</h4>
+    <p><b>The question.</b> A source emits symbols <var>x</var> with probabilities <var>p</var>(<var>x</var>), such as letters of English. How much information does one symbol carry <em>on average</em>?</p>
+    <p><b>The key idea.</b> Average the surprise over the outcomes, weighting each by how often it happens. That average is the <b>entropy</b>:</p>
+    <div class="eq">\[ H(p) = \sum_x p(x)\, I(p(x)) = -\sum_x p(x)\log_2 p(x) \qquad (0 \log 0 = 0) \]</div>
+    <p>Two dice, worked by hand. A fair six-sided die: every face has surprise log₂ 6, so <var>H</var> = log₂ 6 = <b>2.585</b> bits. A loaded die with probabilities ½, ⅒, ⅒, ⅒, ⅒, ⅒: the likely face carries 1 bit, each rare face log₂ 10 = 3.32 bits, so <var>H</var> = ½ · 1 + 5 · ⅒ · 3.32 = <b>2.161</b> bits. The loaded die is more predictable, so it carries less information per roll.</p>
+    <p><b>Why the uniform distribution has the most entropy, two outcomes first.</b> With probabilities <var>p</var> and 1 − <var>p</var>,</p>
+    <div class="eq">\[ h(p) = -p\log_2 p - (1-p)\log_2(1-p), \qquad h'(p) = \log_2\frac{1-p}{p}, \qquad h''(p) = -\frac{1}{p(1-p)\ln 2} &lt; 0 . \]</div>
+    <p>The derivative is zero only at <var>p</var> = ½, and the second derivative is negative everywhere, so <var>h</var> is concave with its single maximum <var>h</var>(½) = 1 bit. At the ends <var>h</var>(0) = <var>h</var>(1) = 0: a certain outcome tells you nothing.</p>
+    <p><b>The general bound.</b> With <var>n</var> possible outcomes, \( 0 \le H(p) \le \log_2 n \), with equality on the right exactly when <var>p</var> is uniform. The proof uses Gibbs' inequality, derived in part 4 below.</p>
+
+    <h4>3 · Shannon's source coding theorem: entropy is the price of a lossless code</h4>
+    <p><b>The question.</b> You must send a long stream of symbols as bits and the receiver must recover it exactly. Give each symbol a binary codeword. What is the smallest possible average number of bits per symbol?</p>
+    <p><b>Statement.</b> For a source with entropy <var>H</var>:</p>
+    <ul>
+      <li><b>Lower bound.</b> No uniquely decodable code has average length below <var>H</var> bits per symbol.</li>
+      <li><b>Achievability.</b> There is a prefix code with average length below <var>H</var> + 1. Coding blocks of <var>k</var> symbols at a time brings the cost per symbol below <var>H</var> + 1/<var>k</var>, because a block of <var>k</var> independent symbols has entropy <var>kH</var>, so its code costs below <var>kH</var> + 1 bits.</li>
+    </ul>
+    <p><b>Intuition.</b> The ideal codeword for <var>x</var> has length −log₂ <var>p</var>(<var>x</var>), its surprise: frequent symbols get short codewords, rare ones long codewords, and the average of the ideal lengths is exactly <var>H</var>. You cannot make every codeword short, because short codewords are scarce: there are only two codewords of length 1, four of length 2, and using one of them rules out every longer codeword that starts with it. The Algorithms block below turns this scarcity into an inequality (Kraft) and proves both halves of the theorem.</p>
+    <p>BPE follows the same rule with a twist: instead of shorter codewords for frequent symbols, it makes frequent strings into single symbols.</p>
+
+    <h4>4 · Cross-entropy: what a model's loss measures</h4>
+    <p><b>The question.</b> We never know the true distribution <var>p</var> of text. A model gives its own estimate <var>q</var>. If we build the code from <var>q</var> and use it on text that really comes from <var>p</var>, what does it cost?</p>
+    <p><b>The key idea.</b> The ideal code for <var>q</var> spends −log₂ <var>q</var>(<var>x</var>) bits on <var>x</var>. Averaged over what actually occurs:</p>
+    <div class="eq">\[ H(p, q) = -\sum_x p(x)\log_2 q(x) = H(p) + \underbrace{\sum_x p(x)\log_2\frac{p(x)}{q(x)}}_{D(p\,\|\,q)} \]</div>
+    <p>The extra term <var>D</var>(<var>p</var>‖<var>q</var>) is the <b>Kullback–Leibler divergence</b>: the bits wasted per symbol because the model is wrong.</p>
+    <p><b>Why it is never negative (Gibbs' inequality).</b> Use \( \ln t \le t - 1 \) for every <var>t</var> &gt; 0 (the line <var>t</var> − 1 is tangent to the concave ln at <var>t</var> = 1), with equality only at <var>t</var> = 1. Summing over the <var>x</var> with <var>p</var>(<var>x</var>) &gt; 0:</p>
+    <div class="eq">\[ -D(p\,\|\,q)\ln 2 = \sum_x p(x)\ln\frac{q(x)}{p(x)} \le \sum_x p(x)\Big(\frac{q(x)}{p(x)} - 1\Big) = \sum_x q(x) - 1 \le 0 . \]</div>
+    <p>So \( H(p, q) \ge H(p) \), with equality only when <var>q</var> = <var>p</var>. Taking <var>q</var> uniform over the <var>n</var> outcomes gives \( H(p, q) = \log_2 n \), so \( H(p) \le \log_2 n \): the general bound from part 2.</p>
+    <p><b>Why a model's loss is a code length.</b> A language model is trained to minimise the average of −ln <var>q</var>(next token | context) over the training tokens. That is a cross-entropy in nats (natural log); divide by ln 2 to get bits. An arithmetic coder driven by the model compresses text to within a couple of bits of the total −log₂ <var>q</var>, so <b>a lower loss is literally a shorter file</b>. Perplexity is the same number on another scale: 2 to the power of the cross-entropy in bits, the size of a uniform choice that would be equally surprising.</p>
+
+    <h4>5 · Bits per byte: the number that survives a change of tokenizer</h4>
+    <p><b>The question.</b> Model A uses a byte-level tokenizer; model B uses BPE with 2,000 tokens. Both are tested on the same text. Which predicts the text better?</p>
+    <p><b>First attempt: compare per-token perplexity.</b> This is wrong, because the two models predict different things. A predicts one byte at a time; B predicts tokens that hold about 3.4 bytes each. A larger token is harder to guess, so B's per-token loss is higher even if B is the better model.</p>
+    <p><b>The key idea, derived.</b> Let the test text have <var>N</var> bytes. A tokenizer turns it into <var>T</var> tokens, and the model pays a total of <var>B</var> = Σ −log₂ <var>q</var>(token) bits. Tokenization is lossless (the bytes can be recovered from the tokens), so those <var>B</var> bits are a code for the bytes themselves. Any two tokenizers' totals are therefore code lengths for <em>the same object</em>, and can be compared. Divide by the bytes, which do not depend on the tokenizer, and factor through the tokens:</p>
     <div class="eq">\[
-H(p) = -\sum_x p(x)\log_2 p(x)
-\qquad\qquad
-\underbrace{\frac{\text{bits}}{\text{byte}}}_{\text{invariant}} \;=\; \underbrace{\frac{\text{bits}}{\text{token}}}_{\uparrow\ \text{as } V \uparrow} \times \underbrace{\frac{\text{tokens}}{\text{byte}}}_{\downarrow\ \text{as } V \uparrow}
+\underbrace{\frac{B}{N}}_{\text{bits/byte: comparable}} \;=\; \underbrace{\frac{B}{T}}_{\text{bits/token}\ \uparrow\ \text{as } V \uparrow} \times \underbrace{\frac{T}{N}}_{\text{tokens/byte}\ \downarrow\ \text{as } V \uparrow}
 \]</div>
-    <p>So <b>never compare tokenizers, or models with different tokenizers, by per-token perplexity</b>; compare <b>bits per byte</b>: total −log₂ <var>q</var> over the text, divided by its bytes.</p>
+    <p>The tokens cancel. Per-token numbers move with the tokenizer; their product does not depend on how the text was cut up, only on how well the text was predicted.</p>
+    <p><b>Worked example, measured.</b> A unigram model (each token's probability is its training frequency, add-one smoothed; no context at all) on held-out <em>Alice</em> (every 10th document held out, the split used in the Design block):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Tokenizer</th><th class="num">Bits per token</th><th class="num">Tokens per byte</th><th class="num">Bits per byte</th><th class="num">Per-token perplexity</th><th class="num">Per-byte perplexity</th></tr>
+      <tr><td>bytes (<var>V</var> = 256)</td><td class="num">4.676</td><td class="num">1.0000</td><td class="num">4.676</td><td class="num">25.6</td><td class="num">25.6</td></tr>
+      <tr class="hi"><td>BPE, <var>V</var> = 2,000</td><td class="num">8.890</td><td class="num">0.2928</td><td class="num">2.602</td><td class="num">474.3</td><td class="num">6.07</td></tr>
+    </table></div>
+    <p>Per-token perplexity says the byte model is about 18 times better (25.6 against 474.3). Bits per byte says the opposite: the BPE model needs 2.60 bits for each byte of text, the byte model 4.68. The second is the right answer, because it is the length of the compressed file. <b>Never compare tokenizers, or models with different tokenizers, by per-token perplexity</b>; compare bits per byte.</p>
+    <p>The same measurement across vocabulary sizes, from the week's earlier held-out split (it differs from the split above in the second decimal), together with real compressors run on the same book:</p>
     <div class="chart"><div class="t">Bits per byte on held-out <em>Alice</em> (lower is better)</div>
       <div class="br"><span>unigram on bytes</span><span class="tr"><i style="width:100%;--c:var(--muted)"></i></span><span class="v">4.66</span></div>
       <div class="br"><span>unigram, BPE 1,000</span><span class="tr"><i style="width:62%"></i></span><span class="v">2.90</span></div>
@@ -311,55 +366,204 @@ H(p) = -\sum_x p(x)\log_2 p(x)
       <tr><td class="num">2,000</td><td class="num">8.77</td><td class="num">10.97</td><td class="num">0.80</td><td class="num">2.59</td></tr>
       <tr><td class="num">3,208</td><td class="num">8.79</td><td class="num">11.65</td><td class="num">0.75</td><td class="num">2.45</td></tr>
     </table></div>
-    <p>A unigram model ignores context, yet with bigger tokens it needs barely half the bits per byte (4.66 → 2.45), and at 2.45 it beats <code>gzip</code> (2.61) on the same book. A token like <code> Alice</code> already contains the dependencies between its letters: <b>tokenization moves modeling work into the vocabulary</b>. Efficiency (entropy ÷ log₂ <var>V</var>) peaks in the middle and falls once the vocabulary fills with rare tokens.</p>
-    <p>The <b>minimum description length</b> view adds the missing term: total cost = bits for the text + bits to write down the vocabulary. BPE replaces the second term with a hard budget; the Unigram LM tokenizer (SentencePiece) comes closer, pruning tokens that hurt likelihood least.</p>
+    <p>A unigram model ignores context, yet with bigger tokens it needs barely half the bits per byte (4.66 → 2.45), and at 2.45 it beats <code>gzip</code> (2.61) on the same book. A token like <code> Alice</code> already contains the dependencies between its letters: <b>tokenization moves modeling work into the vocabulary</b>. <b>Efficiency</b> is token entropy ÷ log₂ <var>V</var>, the fraction of the maximum entropy (part 2) the token distribution reaches. It peaks in the middle and falls once the vocabulary fills with rare tokens.</p>
+    <p>The <b>minimum description length</b> (MDL) view adds the missing term: total cost = bits for the text + bits to write down the vocabulary. BPE replaces the second term with a hard budget; the Unigram LM tokenizer (SentencePiece) comes closer, pruning tokens that hurt likelihood least.</p>
+
+    <h4>6 · Estimating entropy from a sample</h4>
+    <p><b>The question.</b> You have <var>N</var> characters of text and want the entropy of the letter distribution that produced them. You never see <var>p</var>, only counts.</p>
+    <p><b>First attempt: the plug-in estimator.</b> Estimate each probability by its frequency in the sample, \( \hat p(x) = n_x / N \) (this is the maximum-likelihood estimate), and plug it into the formula: \( \hat H = H(\hat p) \). It is consistent (correct as <var>N</var> → ∞) but on small samples it is <b>biased low</b>: on average it reports less entropy than there is. Two reasons:</p>
+    <ul>
+      <li><b>Unseen symbols.</b> A symbol that never appears in the sample gets \( \hat p = 0 \) and contributes nothing, although its true surprise is large.</li>
+      <li><b>The sample fits itself.</b> By Gibbs' inequality (part 4), the sample's own frequencies \( \hat p \) give the shortest code for the sample: \( H(\hat p) \le H(\hat p, p) \). The right-hand side is linear in \( \hat p \) and \( \mathbb{E}[\hat p] = p \), so \( \mathbb{E}[H(\hat p, p)] = H(p) \). Taking expectations, \( \mathbb{E}[\hat H] \le H(p) \). (The same conclusion follows from Jensen's inequality, since <var>H</var> is concave.) The estimator learns the noise in the sample and mistakes it for structure.</li>
+    </ul>
+    <p><b>The key idea: estimate the bias and add it back.</b> Work in nats (natural log) and write \( \hat p_x = p_x + \delta_x \), where \( \delta_x \) is the sampling error. Expand \( f(t) = -t \ln t \) to second order around each \( p_x \): \( f'(t) = -\ln t - 1 \), \( f''(t) = -1/t \), so</p>
+    <div class="eq">\[ H(\hat p) \approx H(p) + \sum_x f'(p_x)\,\delta_x - \sum_x \frac{\delta_x^2}{2p_x} . \]</div>
+    <p>The linear term has mean zero, because \( \mathbb{E}[\delta_x] = 0 \). The count \( n_x \) is binomial, so \( \mathbb{E}[\delta_x^2] = \operatorname{Var}(\hat p_x) = p_x(1-p_x)/N \). Over the <var>m</var> symbols with \( p_x &gt; 0 \):</p>
+    <div class="eq">\[ \mathbb{E}[H(\hat p)] - H(p) \approx -\sum_x \frac{p_x(1-p_x)}{2Np_x} = -\frac{\sum_x (1-p_x)}{2N} = -\frac{m-1}{2N}\ \text{nats} = -\frac{m-1}{2N\ln 2}\ \text{bits}. \]</div>
+    <p>The <b>Miller–Madow</b> estimator adds this back, using the number of <em>observed</em> symbols for <var>m</var> because the true number is unknown:</p>
+    <div class="eq">\[ \hat H_{\text{MM}} = \hat H_{\text{plug-in}} + \frac{m - 1}{2N} \ \text{nats} \;=\; \hat H_{\text{plug-in, bits}} + \frac{m - 1}{2N \ln 2}\ \text{bits}. \]</div>
+    <p>Take care with the units: the correction is in nats, so dividing by ln 2 (multiplying by 1.443) converts it to bits. Forgetting this under-corrects by about 30%.</p>
+    <p><b>Cost.</b> Both estimators count the sample once, O(<var>N</var>) time, and sum over the distinct symbols, O(<var>m</var>) time and space.</p>
+    <p><b>Confirm by measuring.</b> <em>Alice</em>'s letters and spaces, lowercased (28 symbols: 26 letters, the space, and one accented letter that occurs once), have entropy 4.088 bits over the full 137,958 characters. Draw random samples of size <var>N</var> from the text and average each estimator over 2,000 samples:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num"><var>N</var></th><th class="num">Plug-in (mean)</th><th class="num">Bias</th><th class="num">Miller–Madow (mean)</th><th class="num">Bias</th><th class="num">Symbols seen</th><th class="num">Predicted bias (<var>m</var> = 28)</th></tr>
+      <tr><td class="num">100</td><td class="num">3.896</td><td class="num">−0.192</td><td class="num">4.039</td><td class="num">−0.049</td><td class="num">20.8</td><td class="num">−0.195</td></tr>
+      <tr><td class="num">1,000</td><td class="num">4.068</td><td class="num">−0.020</td><td class="num">4.086</td><td class="num">−0.002</td><td class="num">25.9</td><td class="num">−0.019</td></tr>
+      <tr><td class="num">10,000</td><td class="num">4.086</td><td class="num">−0.002</td><td class="num">4.088</td><td class="num">0.000</td><td class="num">27.1</td><td class="num">−0.002</td></tr>
+      <tr class="hi"><td class="num">137,958 (all)</td><td class="num" colspan="6">4.088 bits: the target</td></tr>
+    </table></div>
+    <p>The derivation predicts the plug-in bias almost exactly (−0.195 predicted, −0.192 measured at <var>N</var> = 100), and the bias shrinks like 1/<var>N</var>. Miller–Madow removes most of it, but not all at <var>N</var> = 100: it can only use the 20.8 symbols it saw, not the true 28. For comparison, the spread of the plug-in estimate from sample to sample at <var>N</var> = 100 is 0.128 bits (standard deviation), smaller than the bias. Averaging more samples of the same size does not remove a bias.</p>
+    <p><b>Where BPE uses it.</b> Every count-based number about a tokenizer is a plug-in estimate. The token-entropy column above is computed from token counts; at a large vocabulary many tokens are seen only a few times, so that column (and the efficiency built on it) is biased low, and the bias grows with <var>V</var> for a fixed amount of text. The same effect makes rare tokens look better estimated than they are (Day 2).</p>
+
     <div class="part"><b>Practice</b><ul>
-      <li>Compute the entropy of a fair die and of a die with probabilities ½, ⅒, ⅒, ⅒, ⅒, ⅒.</li>
-      <li>Prove bits per byte = (bits per token) × (tokens per byte).</li>
-      <li>Reproduce the unigram bits-per-byte column with add-one smoothing.</li>
+      <li>Compute the entropy of a fair die and of a die with probabilities ½, ⅒, ⅒, ⅒, ⅒, ⅒, by hand, then with <code>entropy()</code>.</li>
+      <li>Show that \( I(p) = -\log_2 p \) is the only function with the three properties of part 1, assuming it is monotone.</li>
+      <li>Prove bits per byte = (bits per token) × (tokens per byte), then reproduce the unigram rows of the worked example.</li>
+      <li>Compute <var>D</var>(<var>p</var>‖<var>q</var>) and <var>D</var>(<var>q</var>‖<var>p</var>) for <var>p</var> = (½, ¼, ¼), <var>q</var> = (0.7, 0.2, 0.1). Is KL divergence symmetric? What does each direction mean as wasted bits?</li>
+      <li>Reproduce the estimator table: plug-in and Miller–Madow on 2,000 random samples of each size.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>A bigram model over tokens: how much lower does bits per byte go?</li>
+      <li>A bigram model over tokens: how much lower does bits per byte go? Why does its plug-in estimate need far more data than the unigram's?</li>
       <li>Compare with <code>gzip</code>, <code>bz2</code> and <code>xz</code> on the same file. Why is the comparison not quite fair to the compressors, or to BPE?</li>
       <li>Two hosted models report perplexity 8 and 12 with different tokenizers. What do you need to know before ranking them?</li>
+      <li>Apply Miller–Madow to the token distribution of BPE 3,208. Does the efficiency curve still fall at large <var>V</var>?</li>
+      <li>Samples of <em>contiguous</em> text instead of random characters: is the plug-in bias larger or smaller? (Neighbouring letters are not independent.)</li>
     </ul></div>
     <details class="sol"><summary>Solutions</summary><div>
 <div class="code"><div class="ch"><span>entropy.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import math
+from collections import Counter
+
 def entropy(counts):
+    """Entropy in bits of the distribution given by a list of counts."""
     n = sum(counts)
     return -sum(c / n * math.log2(c / n) for c in counts if c)
-entropy([1] * 6)             # 2.585 bits (= log2 6)
-entropy([5, 1, 1, 1, 1, 1])  # 2.161 bits
 
-def unigram_bits_per_byte(train_txt, test_txt, merges):
+def cross_entropy(p, q):
+    """Average code length in bits when data from p is coded with a code built for q."""
+    return -sum(p[x] * math.log2(q[x]) for x in p if p[x])
+
+entropy([1] * 6)             # 2.585 bits (= log2 6)
+entropy([5, 1, 1, 1, 1, 1])  # 2.161 bits</code></pre></div>
+<div class="code"><div class="ch"><span>unigram.py · uses encode() from the week reading R.6</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def unigram_bits_per_byte(train_txt, test_txt, merges):
     tr, te = encode(train_txt, merges), encode(test_txt, merges)
     c, n, V = Counter(tr), len(tr), 256 + len(merges)
     bits = -sum(math.log2((c[t] + 1) / (n + V)) for t in te)   # add-one smoothing
-    return bits / len(test_txt.encode())</code></pre></div>
-    <p>Proof: bits/byte = (bits/token) · (tokens/byte), because tokens cancel. On <em>Alice</em>, <code>gzip</code> 2.61, <code>xz</code> 2.32, <code>bz2</code> 2.05 bits per byte. The comparison favours BPE slightly, because the compressors pay to store their dictionary inside the output and the unigram model's vocabulary is not counted: exactly the term MDL adds back. For the hosted models you need bits per byte, or at least tokens per byte for each tokenizer on the same text.</p></div></details>
+    bits_per_token = bits / len(te)
+    tokens_per_byte = len(te) / len(test_txt.encode())
+    return bits_per_token * tokens_per_byte                     # = bits / bytes</code></pre></div>
+<div class="code"><div class="ch"><span>estimators.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def plugin_entropy(sample):
+    """Maximum-likelihood ("plug-in") estimate in bits: entropy of the sample's own frequencies."""
+    return entropy(list(Counter(sample).values()))
+
+def miller_madow(sample):
+    """Plug-in plus the first-order bias correction (m - 1) / (2N) nats, converted to bits."""
+    m, N = len(set(sample)), len(sample)
+    return plugin_entropy(sample) + (m - 1) / (2 * N * math.log(2))</code></pre></div>
+    <p>Bits per byte: \( \frac{B}{N} = \frac{B}{T}\cdot\frac{T}{N} \) because <var>T</var> cancels; it is an identity, true for any tokenizer. For the divergences, <var>D</var>(<var>p</var>‖<var>q</var>) = <var>H</var>(<var>p</var>, <var>q</var>) − <var>H</var>(<var>p</var>) = 0.168 bits and <var>D</var>(<var>q</var>‖<var>p</var>) = 0.143 bits: not symmetric. The first is the waste when text from <var>p</var> is coded with <var>q</var>'s code, the second the reverse. On <em>Alice</em>, <code>gzip</code> 2.61, <code>xz</code> 2.32, <code>bz2</code> 2.05 bits per byte. The comparison favours BPE slightly, because the compressors pay to store their dictionary inside the output and the unigram model's vocabulary is not counted: exactly the term MDL adds back. For the hosted models you need bits per byte, or at least tokens per byte for each tokenizer on the same text.</p></div></details>
     <div class="part"><b>Further reading and watching</b><ul>
+      <li>Chris Olah, <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> (blog): surprise, entropy, cross-entropy and KL drawn as code lengths</li>
       <li>3Blue1Brown, <a href="https://www.youtube.com/watch?v=v68zYyaEmEA">Solving Wordle using information theory</a> (video)</li>
-      <li>Chris Olah, <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> (blog)</li>
-      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16842">Tokenization and the Noiseless Channel</a> (paper): efficiency and Rényi entropy</li>
-      <li>Shannon, <a href="https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf">A Mathematical Theory of Communication</a> (PDF, sections 1–9) · <a href="https://en.wikipedia.org/wiki/Minimum_description_length">Minimum description length</a></li>
+      <li>Shannon, <a href="https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf">A Mathematical Theory of Communication</a> (PDF, sections 1–9)</li>
+      <li>David MacKay, <a href="http://www.inference.org.uk/itprnn/book.pdf">Information Theory, Inference, and Learning Algorithms</a> (free book), chapters 2, 4 and 5</li>
+      <li>Cover and Thomas, <em>Elements of Information Theory</em>, chapters 2 (entropy, KL, Jensen) and 5 (data compression)</li>
+      <li>Paninski, <em>Estimation of Entropy and Mutual Information</em> (Neural Computation, 2003): the bias of the plug-in estimator and its corrections</li>
+      <li>Delétang et al., <a href="https://arxiv.org/abs/2309.10668">Language Modeling Is Compression</a> (paper)</li>
+      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16842">Tokenization and the Noiseless Channel</a> (paper): efficiency and Rényi entropy · <a href="https://en.wikipedia.org/wiki/Minimum_description_length">Minimum description length</a></li>
     </ul></div>
   </div>
 
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · Huffman, a greedy that is optimal</span></div>
-    <p>Yesterday greedy failed. Huffman coding is the classic case where it provably works. Put every symbol in a min-heap by frequency; repeatedly pop the two rarest, join them under a new node whose frequency is their sum, and push it back. The path from the root to a symbol (0 = left, 1 = right) is its codeword.</p>
-    <p><b>Why greedy is optimal here:</b> an exchange argument. In some optimal tree the two rarest symbols are siblings at the deepest level (if not, swap them there; the average length can't go up). Merging them reduces the problem to one fewer symbol with the same structure, so by induction greedy is optimal.</p>
-    <p><b>BPE versus Huffman.</b> Both exploit frequency. Huffman keeps the symbols fixed and gives frequent ones <em>shorter codewords</em>; BPE keeps codewords fixed-size (one id each) and gives frequent strings <em>bigger symbols</em>.</p>
+    <div class="bh"><span class="kind">Algorithms · optimal prefix codes</span></div>
+
+    <h4>1 · Prefix codes: decoding without separators</h4>
+    <p><b>The question.</b> Give each symbol a binary codeword so that the concatenation of codewords, with no separators, can be split back into symbols in exactly one way, and the average length is small.</p>
+    <p><b>First attempt.</b> A fixed-length code: with <var>n</var> symbols, every codeword has ⌈log₂ <var>n</var>⌉ bits. Decoding is easy (cut every 5 bits for 28 symbols), but frequent and rare symbols cost the same. So try variable lengths, say <code>a</code> = 0, <code>b</code> = 01, <code>c</code> = 10. The string <code>010</code> now reads as <code>a c</code> (0 | 10) or as <code>b a</code> (01 | 0). Variable lengths alone are ambiguous.</p>
+    <p><b>The key idea.</b> A <b>prefix code</b> (also called prefix-free) is one in which no codeword is a prefix of another. Draw the codewords as paths in a binary tree, 0 = left, 1 = right: the <b>code tree</b>. Prefix-free means every codeword ends at a leaf, never at a node that lies on the way to another codeword. Decoding is then a walk: start at the root, follow one edge per bit, and when you reach a leaf, output its symbol and jump back to the root. At a leaf there is no choice to make, so the split is unique, and the decoder never needs to look ahead.</p>
+    <p>In the bad example, <code>0</code> (<code>a</code>) is a prefix of <code>01</code> (<code>b</code>), so <code>a</code> sits on the path to <code>b</code>. The cost of a code for symbol counts <var>f</var><sub><var>i</var></sub> and codeword lengths ℓ<sub><var>i</var></sub> is the total number of bits, \( L = \sum_i f_i \ell_i \), which is the sum of <var>f</var> × depth over the leaves of its code tree.</p>
+
+    <h4>2 · The Kraft inequality: short codewords are scarce</h4>
+    <p><b>The question.</b> Which lists of lengths ℓ<sub>1</sub>, …, ℓ<sub><var>n</var></sub> can be the codeword lengths of a prefix code? Lengths 1, 1, 2 cannot: the two length-1 codewords <code>0</code> and <code>1</code> leave no room for a third.</p>
+    <p><b>Statement.</b> A prefix code with lengths ℓ<sub><var>i</var></sub> exists if and only if</p>
+    <div class="eq">\[ \sum_{i=1}^{n} 2^{-\ell_i} \le 1 . \]</div>
+    <p><b>Proof (only if).</b> Let <var>L</var> = max ℓ<sub><var>i</var></sub> and picture the complete binary tree of depth <var>L</var>, which has 2<sup><var>L</var></sup> leaves at the bottom. A codeword at depth ℓ<sub><var>i</var></sub> is the root of a subtree containing 2<sup><var>L</var>−ℓ<sub><var>i</var></sub></sup> of those bottom leaves: all the length-<var>L</var> strings that start with it. Because the code is prefix-free, no codeword lies inside another's subtree, so these sets of bottom leaves are disjoint. Disjoint subsets of 2<sup><var>L</var></sup> leaves have sizes summing to at most 2<sup><var>L</var></sup>:</p>
+    <div class="eq">\[ \sum_i 2^{L-\ell_i} \le 2^L \quad\Longrightarrow\quad \sum_i 2^{-\ell_i} \le 1 . \]</div>
+    <p><b>Proof (if).</b> Sort the lengths ascending and give codewords out in order, each time taking the leftmost free node at the required depth and marking its whole subtree used. Before placing codeword <var>j</var>, the used part of the bottom level is \( \sum_{i&lt;j} 2^{L-\ell_i} &lt; 2^L \) (strictly, because codeword <var>j</var>'s own share is still unspent). Each earlier codeword is no deeper than ℓ<sub><var>j</var></sub>, so it covers a whole number of depth-ℓ<sub><var>j</var></sub> subtrees, and taking leftmost nodes keeps the used region a left-aligned block of them. So a free node exists at depth ℓ<sub><var>j</var></sub>. This construction is exactly <b>canonical Huffman</b> coding (below): it needs only the lengths.</p>
+    <p>Example: lengths 1, 2, 3, 4, 4 give ½ + ¼ + ⅛ + 1⁄16 + 1⁄16 = 1, so the tree is full (every internal node has two children). Lengths 1, 1, 2 give 1¼ &gt; 1: impossible, as seen above.</p>
+
+    <h4>3 · Both halves of the source coding theorem</h4>
+    <p><b>Lower bound: every prefix code has \( L/N \ge H \).</b> Let <var>p</var><sub><var>i</var></sub> = <var>f</var><sub><var>i</var></sub>/<var>N</var> and define \( K = \sum_i 2^{-\ell_i} \le 1 \) (Kraft) and the distribution \( q_i = 2^{-\ell_i}/K \). Then \( \ell_i = -\log_2 q_i - \log_2 K \), and the average length is</p>
+    <div class="eq">\[ \bar\ell = \sum_i p_i \ell_i = H(p, q) - \log_2 K \;\ge\; H(p) - \log_2 K \;\ge\; H(p), \]</div>
+    <p>using Gibbs' inequality (ML block, part 4) for the first step and \( K \le 1 \) for the second.</p>
+    <p><b>Upper bound: some prefix code has \( \bar\ell &lt; H + 1 \).</b> Use the <b>Shannon code lengths</b> \( \ell_i = \lceil -\log_2 p_i \rceil \), the surprise rounded up. They satisfy Kraft, because \( \ell_i \ge -\log_2 p_i \) means \( 2^{-\ell_i} \le p_i \), and \( \sum_i p_i = 1 \). So a prefix code with these lengths exists, and since \( \lceil t \rceil &lt; t + 1 \),</p>
+    <div class="eq">\[ \bar\ell = \sum_i p_i \lceil -\log_2 p_i \rceil &lt; \sum_i p_i(-\log_2 p_i + 1) = H + 1 . \]</div>
+    <p>The best prefix code is at least as good as the Shannon code, so it too lands in [<var>H</var>, <var>H</var> + 1). Shannon's code is not optimal itself, as the example below shows. Huffman's algorithm finds the optimum.</p>
+
+    <h4>4 · Huffman's algorithm</h4>
+    <p><b>The question.</b> Given counts <var>f</var><sub>1</sub>, …, <var>f</var><sub><var>n</var></sub>, find the prefix code (the code tree) that minimises \( L = \sum_i f_i \ell_i \).</p>
+    <p><b>First attempts.</b> Trying every tree is hopeless: the number of full binary trees with <var>n</var> labelled leaves grows faster than exponentially. Rounding surprises up (Shannon's code) is fast but can waste close to a bit per symbol.</p>
+    <p><b>The key idea.</b> The two rarest symbols should be the two deepest leaves, side by side. Once they are siblings, they behave like one symbol whose count is their sum. So: <b>repeatedly take the two smallest counts, join them under a new node whose count is their sum, and put that node back.</b> When one node is left, it is the root. Keep the counts in a min-heap so "take the smallest" is fast.</p>
+    <p><b>Worked by hand.</b> A message of 25 symbols with counts <code>a</code> 10, <code>b</code> 6, <code>c</code> 4, <code>d</code> 3, <code>e</code> 2. Highlighted nodes are the two popped; outlined nodes were just created.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">start</span><span class="seq"><span class="nd hot">e 2</span><span class="nd hot">d 3</span><span class="nd">c 4</span><span class="nd">b 6</span><span class="nd">a 10</span></span><span class="why"><b>Pop e, d.</b> Merge into a node of count 2 + 3 = 5. This merge costs 5 bits: every e and d gains one bit.</span></div>
+      <div class="step"><span class="k">merge 1</span><span class="seq"><span class="nd hot">c 4</span><span class="nd new hot">de 5</span><span class="nd">b 6</span><span class="nd">a 10</span></span><span class="why"><b>Pop c, de.</b> New node of count 9.</span></div>
+      <div class="step"><span class="k">merge 2</span><span class="seq"><span class="nd hot">b 6</span><span class="nd new hot">cde 9</span><span class="nd">a 10</span></span><span class="why"><b>Pop b, cde.</b> New node of count 15.</span></div>
+      <div class="step"><span class="k">merge 3</span><span class="seq"><span class="nd hot">a 10</span><span class="nd new hot">bcde 15</span></span><span class="why"><b>Pop a, bcde.</b> New node of count 25: the root.</span></div>
+      <div class="step"><span class="k">done</span><span class="seq"><span class="nd new">abcde 25</span></span><span class="why"><b>Total cost</b> = 5 + 9 + 15 + 25 = <b>54 bits</b>: the sum of the merged counts.</span></div>
+    </div>
+<pre>            (25)
+          0/    \1
+        a 10    (15)
+              0/    \1
+            b 6     (9)
+                  0/   \1
+                c 4    (5)
+                     0/   \1
+                    e 2   d 3</pre>
+      <div class="cap">The code tree. The first node popped in each merge goes left (0). Reading the path to each leaf gives its codeword.</div></div>
+    <p>Why the sum of merged counts equals the cost: each merge puts every leaf below the new node one level deeper, adding one bit per occurrence of each of those symbols. A symbol at depth ℓ is below exactly ℓ merged nodes, so it is counted ℓ times: \( \sum_{\text{merges}} (\text{merged count}) = \sum_i f_i \ell_i \).</p>
+    <div class="tablewrap"><table>
+      <tr><th>Symbol</th><th class="num">Count</th><th>Huffman code</th><th class="num">Length</th><th class="num">Shannon length ⌈−log₂ p⌉</th></tr>
+      <tr><td><code>a</code></td><td class="num">10</td><td><code>0</code></td><td class="num">1</td><td class="num">2</td></tr>
+      <tr><td><code>b</code></td><td class="num">6</td><td><code>10</code></td><td class="num">2</td><td class="num">3</td></tr>
+      <tr><td><code>c</code></td><td class="num">4</td><td><code>110</code></td><td class="num">3</td><td class="num">3</td></tr>
+      <tr><td><code>d</code></td><td class="num">3</td><td><code>1111</code></td><td class="num">4</td><td class="num">4</td></tr>
+      <tr><td><code>e</code></td><td class="num">2</td><td><code>1110</code></td><td class="num">4</td><td class="num">4</td></tr>
+      <tr class="hi"><td>bits per symbol</td><td class="num">25</td><td>Huffman 54 / 25</td><td class="num">2.16</td><td class="num">70 / 25 = 2.80</td></tr>
+    </table></div>
+    <p>The entropy of these counts is 2.104 bits per symbol and a fixed-length code needs 3. Huffman (2.16) sits within the [<var>H</var>, <var>H</var> + 1) window and well below the Shannon code (2.80).</p>
+
+    <h4>5 · Why Huffman is optimal</h4>
+    <p>The proof has the two parts every greedy proof needs (Day 2): the greedy choice is safe (Lemma 1), and after making it, what remains is a smaller copy of the same problem (Lemma 2). Then induction.</p>
+    <p><b>A fact first.</b> In an optimal tree every internal node has two children. If a node had one child, you could delete it and lift its subtree up a level, shortening every codeword below it and keeping the code prefix-free. So the deepest leaf of an optimal tree always has a sibling, which is also a leaf.</p>
+    <p><b>Lemma 1 (the rarest two can be deepest siblings).</b> Let <var>x</var> and <var>y</var> be the two symbols with the smallest counts. Some optimal tree has <var>x</var> and <var>y</var> as sibling leaves at the maximum depth.</p>
+    <p><em>Proof, by exchange.</em> Take any optimal tree <var>T</var>, and let <var>b</var>, <var>c</var> be sibling leaves at the maximum depth (they exist by the fact above). Then \( f_x \le f_b \) (<var>x</var> is a rarest symbol) and \( d_x \le d_b \) (<var>b</var> is at the maximum depth). Swap the positions of <var>x</var> and <var>b</var>. Only those two terms of the cost change:</p>
+    <div class="eq">\[ L(T_{\text{swap}}) - L(T) = \big(f_x d_b + f_b d_x\big) - \big(f_x d_x + f_b d_b\big) = -\,(f_b - f_x)(d_b - d_x) \;\le\; 0, \]</div>
+    <p>because both brackets are non-negative. The swap does not increase the cost, and <var>T</var> was optimal, so the new tree is optimal too. Swap <var>y</var> with <var>c</var> the same way (\( f_y \le f_c \), \( d_y \le d_c \)). The result is an optimal tree with <var>x</var> and <var>y</var> as deepest siblings. ∎</p>
+    <p><b>Lemma 2 (merging gives the same problem, one symbol smaller).</b> Replace <var>x</var> and <var>y</var> by one new symbol <var>z</var> with \( f_z = f_x + f_y \). For any tree <var>T</var>′ on the new alphabet, expanding the leaf <var>z</var> into an internal node with children <var>x</var> and <var>y</var> gives a tree <var>T</var> on the original alphabet, and conversely collapsing sibling leaves <var>x</var>, <var>y</var> of a tree <var>T</var> gives <var>T</var>′. In both directions</p>
+    <div class="eq">\[ L(T) = L(T') + f_x + f_y , \]</div>
+    <p>because <var>x</var> and <var>y</var> sit at depth \( d_z + 1 \): \( f_x(d_z + 1) + f_y(d_z + 1) = f_z d_z + f_x + f_y \), and every other leaf keeps its depth. In the example, merging <code>d</code> and <code>e</code> into <code>z</code> (count 5) leaves counts 10, 6, 4, 5, whose Huffman tree costs 49 bits, and 49 + 3 + 2 = 54.</p>
+    <p><b>Theorem.</b> Huffman's tree is optimal, by induction on the number of symbols <var>n</var>.</p>
+    <ul>
+      <li><b>Base, <var>n</var> = 2.</b> Each symbol gets one bit, and no prefix code can do better (a 0-bit codeword cannot distinguish two symbols).</li>
+      <li><b>Step.</b> Huffman merges the rarest <var>x</var>, <var>y</var> into <var>z</var> and then runs on the <var>n</var> − 1 symbols, building <var>H</var>′, which is optimal for the smaller problem by the induction hypothesis. Its final tree is <var>H</var>′ with <var>z</var> expanded, so \( L(H) = L(H') + f_x + f_y \) (Lemma 2). Take the optimal tree <var>T</var>* from Lemma 1, where <var>x</var>, <var>y</var> are siblings, and collapse them: \( L(T^*) = L(T^{*\prime}) + f_x + f_y \ge L(H') + f_x + f_y = L(H) \), since <var>H</var>′ is optimal and <var>T</var>*′ is just some tree on the same <var>n</var> − 1 symbols. So <var>H</var> costs no more than an optimal tree: it is optimal. ∎</li>
+    </ul>
+    <p>Combined with part 3: \( H \le \bar\ell_{\text{Huffman}} &lt; H + 1 \), where <var>H</var> is the entropy of the counts. The lower bound holds for every prefix code; the upper bound holds because Huffman is at least as good as Shannon's code.</p>
+
+    <h4>6 · Cost</h4>
+    <ul>
+      <li><b>With a heap: O(<var>n</var> log <var>n</var>) time.</b> Building the heap from <var>n</var> counts is O(<var>n</var>) (Day 4 proves it). Each of the <var>n</var> − 1 merges does two pops and one push, each O(log <var>n</var>) because the heap holds at most <var>n</var> items. Computing every depth afterwards is one pass over the 2<var>n</var> − 1 nodes, O(<var>n</var>). Space: O(<var>n</var>) for the nodes.</li>
+      <li><b>Writing codewords out</b> costs O(Σ ℓ<sub><var>i</var></sub>) extra, the total length of the strings. That is O(<var>n</var> log <var>n</var>) for balanced counts but O(<var>n</var>²) when the counts grow like Fibonacci numbers, which make the tree a long chain. The dictionary-merging <code>huffman()</code> in the solution pays this cost; <code>huffman_lengths()</code> does not.</li>
+      <li><b>Already-sorted counts: O(<var>n</var>), no heap.</b> Keep two FIFO queues: the sorted leaves, and the merged nodes in the order they are created. The merged counts come out in non-decreasing order. Proof: at merge <var>k</var> + 1, every item in the pool either was in the pool at merge <var>k</var> and was not popped, so it is at least as large as both items popped then, or is the node created at merge <var>k</var>, which is their sum and also at least as large. So both items popped at merge <var>k</var> + 1 are at least as large as those popped at merge <var>k</var>, and so is their sum. Each queue therefore stays sorted, the smallest item is at the front of one of the two queues, and each pop is O(1). Total O(<var>n</var>) after sorting, O(<var>n</var> log <var>n</var>) including the sort.</li>
+    </ul>
+
+    <h4>7 · Confirm by measuring</h4>
+    <div class="metrics">
+      <div class="metric"><div class="v">4.134</div><div class="l">Huffman, bits per symbol: <em>Alice</em>'s 28 letters and space</div></div>
+      <div class="metric"><div class="v">4.088</div><div class="l">entropy of the same counts: the floor no code beats</div></div>
+      <div class="metric"><div class="v">5</div><div class="l">fixed-length code: ⌈log₂ 28⌉ bits</div></div>
+    </div>
+    <p>Huffman is 0.046 bits above the entropy, far inside the 1-bit window, and 17% shorter than the fixed-length code. Its code lengths satisfy Kraft with equality (the sum is exactly 1), as every full tree does. The heap version, the two-queue version and the sticks cost agree on the total.</p>
+
+    <h4>8 · Where BPE uses it, and where BPE differs</h4>
+    <p>Both exploit frequency, in opposite directions. Huffman keeps the symbols fixed and gives frequent ones <em>shorter codewords</em>; BPE keeps codewords fixed-size (one id each) and gives frequent strings <em>bigger symbols</em>. The model then plays the Huffman role: a well-trained model spends about −log₂ <var>q</var> bits per token, which is what bits per byte measures.</p>
+    <p>The proof is also where the two part ways. Huffman's merges <b>do not interact</b>: joining <var>x</var> and <var>y</var> leaves every other count unchanged, so the remaining problem is the same problem with one symbol fewer (Lemma 2), and the exchange in Lemma 1 touches only two terms of the cost. BPE's merges <b>do interact</b>: merging the pair (<code>a</code>, <code>b</code>) consumes occurrences of (<code>b</code>, <code>c</code>) and creates new pairs such as (<code>ab</code>, <code>c</code>), so after a merge the remaining problem has different counts, and the best first merge can make later merges worse. There is no Lemma 2 for BPE, which is why its greedy is not optimal (Day 2's counterexample).</p>
+
     <div class="part"><b>Practice</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/last-stone-weight/">1046 Last Stone Weight</a> (heap warm-up: pop two, push one)</li>
-      <li>Implement Huffman with <code>heapq</code>; build a code for the letters and spaces of <code>alice.txt</code>; compare the average codeword length with the entropy and with a fixed-length code.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/last-stone-weight/">1046 Last Stone Weight</a>: a heap warm-up with the same loop shape as Huffman (pop two, push one), but with a max-heap.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/minimum-cost-to-connect-sticks/">1167 Minimum Cost to Connect Sticks</a> (premium). In our words: you have sticks with positive integer lengths. Joining two sticks of lengths <var>x</var> and <var>y</var> makes one stick of length <var>x</var> + <var>y</var> and costs <var>x</var> + <var>y</var>. Join them all into one stick at minimum total cost. This is Huffman's cost exactly (the sum of merged counts), so the same proof shows that always joining the two shortest is optimal.</li>
+      <li>Implement Huffman with <code>heapq</code>; build a code for the letters and spaces of <code>alice.txt</code>; check the average length against 4.134, the entropy 4.088, and the fixed-length 5.</li>
+      <li>Implement canonical Huffman: from the code lengths alone, rebuild codewords, then encode and decode a slice of <em>Alice</em>.</li>
+      <li>Check Kraft for the lengths your Huffman code produced. Prove that a Huffman tree always meets it with equality.</li>
+      <li>Find counts for 6 symbols that make Huffman's tree a chain (depths 1, 2, 3, 4, 5, 5). What pattern do they follow?</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
       <li>Ties: make the code deterministic (needed to decode on another machine). What extra field goes in the heap tuple?</li>
-      <li>Canonical Huffman: store only the code lengths, and rebuild the codes from them.</li>
-      <li>Huffman-code BPE's tokens instead of letters. Bits per byte now?</li>
+      <li>Length-limited Huffman: no codeword may exceed <var>L</var> bits (hardware decoders need this). Greedy no longer works; look up the package-merge algorithm (Larmore and Hirschberg).</li>
+      <li><var>k</var>-ary Huffman (codewords over <var>k</var> digits): merge <var>k</var> at a time. Why must you first add zero-count dummy symbols until (<var>n</var> − 1) is divisible by (<var>k</var> − 1)?</li>
+      <li>Huffman-code BPE's tokens instead of letters. Bits per byte now? Compare with the unigram column.</li>
+      <li>The counts change while you code (adaptive Huffman). What has to be updated, and how often?</li>
     </ul></div>
-    <details class="sol"><summary>Solution</summary><div>
+    <details class="sol"><summary>Solutions</summary><div>
 <div class="code"><div class="ch"><span>huffman.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import heapq
 def huffman(freqs):
     if len(freqs) == 1:
@@ -371,31 +575,182 @@ def huffman(freqs):
         merged = {s: "0" + c for s, c in a.items()} | {s: "1" + c for s, c in b.items()}
         heapq.heappush(heap, (f1 + f2, i, merged)); i += 1
     return heap[0][2]</code></pre></div>
-    <p>On <em>Alice</em>'s letters and spaces (28 symbols): Huffman averages <b>4.134</b> bits per symbol, the entropy is <b>4.088</b>, and a fixed-length code needs <b>5</b>. Huffman is always within 1 bit of the entropy. The counter <code>i</code> in the tuple is the tie-break: without it, two equal frequencies would compare the dictionaries and fail.</p></div></details>
+    <p>On <em>Alice</em>'s letters and spaces (28 symbols): Huffman averages <b>4.134</b> bits per symbol, the entropy is <b>4.088</b>, and a fixed-length code needs <b>5</b>. The counter <code>i</code> in the tuple is the tie-break: without it, two equal counts would compare the dictionaries and fail. This version copies dictionaries at every merge, so it does O(Σ ℓ<sub><var>i</var></sub>) extra work. The next version records parents instead and stays O(<var>n</var> log <var>n</var>), with an O(<var>n</var>) two-queue variant for sorted counts.</p>
+<div class="code"><div class="ch"><span>huffman_lengths.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def depths(parent):
+    """Node i's parent is parent[i] &gt; i; the last node is the root. Returns every node's depth."""
+    d = [0] * len(parent)
+    for i in range(len(parent) - 2, -1, -1):    # parents before children
+        d[i] = d[parent[i]] + 1
+    return d
+
+def huffman_lengths(freqs):
+    """Code length per symbol. O(n log n): n - 1 rounds of two pops and one push."""
+    syms = list(freqs)
+    if len(syms) == 1:
+        return {syms[0]: 1}
+    heap = [(f, i) for i, f in enumerate(freqs.values())]
+    heapq.heapify(heap)                          # O(n)
+    parent = [None] * len(syms)
+    while len(heap) &gt; 1:
+        f1, a = heapq.heappop(heap)
+        f2, b = heapq.heappop(heap)
+        parent.append(None)                      # new internal node
+        parent[a] = parent[b] = len(parent) - 1
+        heapq.heappush(heap, (f1 + f2, len(parent) - 1))
+    d = depths(parent)
+    return {s: d[i] for i, s in enumerate(syms)}
+
+def huffman_lengths_sorted(fs):
+    """Same lengths in O(n) when fs is already sorted ascending: two FIFO queues, no heap."""
+    if len(fs) == 1:
+        return [1]
+    leaves = deque((f, i) for i, f in enumerate(fs))
+    merged = deque()                             # merged weights arrive in ascending order
+    parent = [None] * len(fs)
+    def pop_min():
+        if not merged or (leaves and leaves[0][0] &lt;= merged[0][0]):
+            return leaves.popleft()
+        return merged.popleft()
+    while len(leaves) + len(merged) &gt; 1:
+        f1, a = pop_min()
+        f2, b = pop_min()
+        parent.append(None)
+        parent[a] = parent[b] = len(parent) - 1
+        merged.append((f1 + f2, len(parent) - 1))
+    return depths(parent)[:len(fs)]</code></pre></div>
+<div class="code"><div class="ch"><span>canonical.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def canonical_codes(lengths):
+    """Rebuild a prefix code from code lengths alone (the decoder needs only the lengths)."""
+    assert sum(2 ** -l for l in lengths.values()) &lt;= 1, "lengths violate Kraft"
+    code, prev, out = 0, 0, {}
+    for s, l in sorted(lengths.items(), key=lambda kv: (kv[1], kv[0])):
+        code &lt;&lt;= l - prev                        # move down to depth l in the code tree
+        out[s] = format(code, f"0{l}b")
+        code += 1                                # next free node at this depth
+        prev = l
+    return out
+
+def decode(bits, codes):
+    back, out, cur = {c: s for s, c in codes.items()}, [], ""
+    for b in bits:
+        cur += b
+        if cur in back:                          # prefix-free: the first match is the only one
+            out.append(back[cur]); cur = ""
+    assert cur == "", "trailing bits"
+    return out</code></pre></div>
+    <p>Canonical Huffman sorts symbols by (length, symbol) and counts upward in binary, appending a 0 each time the length grows. That is the "if" half of the Kraft proof: each codeword takes the leftmost free node at its depth. A decoder needs only the 28 lengths, not the tree. For the chain question, Fibonacci-like counts (1, 1, 2, 3, 5, 8) do it: each merged node is no larger than the count two places further on, so it is picked again in the very next merge.</p>
+<div class="code"><div class="ch"><span>leetcode_1046_1167.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def last_stone_weight(stones):                   # LeetCode 1046
+    heap = [-s for s in stones]                  # heapq is a min-heap: negate for max
+    heapq.heapify(heap)
+    while len(heap) &gt; 1:
+        y = -heapq.heappop(heap)                 # heaviest
+        x = -heapq.heappop(heap)                 # second heaviest
+        if y != x:
+            heapq.heappush(heap, -(y - x))
+    return -heap[0] if heap else 0
+
+def connect_sticks(sticks):                      # LeetCode 1167: this is Huffman's cost
+    heap = list(sticks)
+    heapq.heapify(heap)
+    cost = 0
+    while len(heap) &gt; 1:
+        a = heapq.heappop(heap)
+        b = heapq.heappop(heap)
+        cost += a + b                            # every merge pays the merged weight
+        heapq.heappush(heap, a + b)
+    return cost</code></pre></div>
+    <p>For 1167, every merged stick's length is added once per merge above it, so the total cost is Σ (length × depth) of the merge tree: Huffman's objective. Both run in O(<var>n</var> log <var>n</var>).</p></div></details>
     <div class="part"><b>Further reading and watching</b><ul>
-      <li>Tom Scott, <a href="https://www.youtube.com/watch?v=JsTptu56GM8">How Computers Compress Text: Huffman Coding</a> (video, 10 min)</li>
-      <li><a href="https://en.wikipedia.org/wiki/Huffman_coding">Huffman coding</a> (Wikipedia), including the optimality proof</li>
+      <li>Tom Scott, <a href="https://www.youtube.com/watch?v=JsTptu56GM8">How Computers Compress Text: Huffman Coding</a> (video)</li>
+      <li><a href="https://en.wikipedia.org/wiki/Huffman_coding">Huffman coding</a>, <a href="https://en.wikipedia.org/wiki/Kraft%E2%80%93McMillan_inequality">Kraft–McMillan inequality</a> and <a href="https://en.wikipedia.org/wiki/Canonical_Huffman_code">Canonical Huffman code</a> (Wikipedia)</li>
+      <li>D. A. Huffman, <em>A Method for the Construction of Minimum-Redundancy Codes</em> (Proceedings of the IRE, 1952): the original paper</li>
+      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>: the Huffman codes section of the greedy algorithms chapter</li>
+      <li>MacKay, <a href="http://www.inference.org.uk/itprnn/book.pdf">Information Theory, Inference, and Learning Algorithms</a>, chapter 5 (symbol codes)</li>
     </ul></div>
   </div>
 
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · evaluating a tokenizer</span></div>
+    <div class="bh"><span class="kind">Design · evaluating a tokenizer, with error bars</span></div>
+
+    <h4>1 · What to measure</h4>
     <p>An evaluation plan decides which tokenizer ships. It needs:</p>
     <ul>
-      <li><b>Fertility</b>: tokens per word (or per byte) for every language and domain you serve. Report the worst case, not just the average.</li>
-      <li><b>Paired comparisons</b>: the same sentences in each language (a parallel set like FLORES+), with ratios per sentence and a bootstrap interval.</li>
-      <li><b>Held-out text</b> the tokenizer never saw.</li>
+      <li><b>Fertility</b>: tokens per word (or its inverse, bytes per token) for every language and domain you serve. A language with high fertility costs more per request and fits less text in the context window. Report the worst case, not just the average.</li>
+      <li><b>Held-out text</b> the tokenizer never saw. Measuring on training text flatters the tokenizer, because its merges were chosen to fit that text (Day 2).</li>
+      <li><b>Bits per byte</b> of a small model trained with each tokenizer (ML block, part 5), plus tasks known to be sensitive: arithmetic, spelling, code.</li>
+      <li><b>Paired comparisons</b>: the same sentences in each language (a parallel set like FLORES+), and the same documents for each tokenizer.</li>
       <li><b>Under-trained tokens</b>: how many appear fewer than <var>τ</var> times in the <em>model's</em> training data.</li>
-      <li><b>Bits per byte</b> of a small model trained with each tokenizer, plus tasks known to be sensitive: arithmetic, spelling, code.</li>
+      <li><b>Error bars</b> on every number. The rest of this block builds them.</li>
     </ul>
+
+    <h4>2 · Error bars: the question</h4>
+    <p><b>The question.</b> Hold out every 10th document of <em>Alice</em> (73 documents, 16,362 bytes) and train BPE with 1,000 tokens on the other 650. On the held-out documents it packs 2.913 bytes into each token. With a different 73 documents, the number would change. By how much? Without that, "2.913" cannot be compared with anything.</p>
+    <p><b>First attempt: treat every token as an independent sample.</b> The held-out set has 5,616 tokens; compute the spread of bytes per token across them and divide by √5,616. This interval is too narrow. Tokens inside one document are not independent: a document about the Queen repeats <code> Queen</code>, a chapter of dialogue is full of short tokens, a poem has its own rhythm. Ten more tokens from the same document tell you much less than ten tokens from a new document. The unit that is (roughly) independent is the <b>document</b>.</p>
+
+    <h4>3 · The bootstrap, from first principles</h4>
+    <p><b>Definitions.</b> We have a sample of <var>D</var> documents, assumed drawn independently from the population of text we care about, and a <b>statistic</b> computed from them, here \( \theta = \sum_d \text{bytes}_d \,/\, \sum_d \text{tokens}_d \) (total bytes over total tokens). Its <b>sampling distribution</b> is the spread of θ over many independent samples of <var>D</var> documents. We cannot draw new samples. The bootstrap's idea is to <b>use the sample as a stand-in for the population</b>:</p>
+    <div class="dg"><div class="vflow">
+      <div class="vbox"><b>73 held-out documents</b><span class="muted small">each reduced to (bytes, tokens): tokenize once</span></div>
+      <div class="varr">↓ draw 73 documents <em>with replacement</em> (some twice, some not at all)</div>
+      <div class="vbox"><b>one resample → θ*</b><span class="muted small">Σ bytes ÷ Σ tokens over the drawn documents</span></div>
+      <div class="varr">↓ repeat <var>B</var> = 10,000 times</div>
+      <div class="vbox" style="border-color:var(--accent)"><b>10,000 values of θ*</b><span class="muted small">sort them; the 2.5th and 97.5th percentiles bound the 95% interval</span></div>
+    </div></div>
+    <p><b>Why it works.</b> If the documents are independent draws, the sample's empirical distribution (each document with probability 1/<var>D</var>) approximates the true distribution of documents, and better as <var>D</var> grows. Drawing <var>D</var> documents with replacement from it is a simulation of "collect a new sample of <var>D</var> documents", so the spread of θ* around θ approximates the spread of θ around the true value. The <b>percentile interval</b> takes the middle 95% of the sorted θ*. Two conditions matter: the resampled units must be independent (hence documents, not tokens), and the statistic should be smooth in the data (sums and ratios of sums are; a maximum is not).</p>
+    <p><b>Why resampling tokens is wrong, measured.</b> A bootstrap over the 5,616 individual tokens gives a 95% interval of width 0.084 bytes per token. The document bootstrap gives 0.235, 2.8 times wider. The token-level interval treats correlated tokens as fresh information and claims a precision the data do not have.</p>
+    <p><b>Cost.</b> Tokenize each held-out document once and store (bytes, tokens): O(total text). Each resample then costs O(<var>D</var>), so the bootstrap is O(<var>B</var> · <var>D</var>) time and O(<var>B</var>) space for the replicates (sorted in O(<var>B</var> log <var>B</var>)). Never re-tokenize inside the loop.</p>
+
+    <h4>4 · Paired comparison of two tokenizers</h4>
+    <p><b>The question.</b> BPE with 2,000 tokens packs 3.416 bytes per token on the same held-out documents. Is it really more compact than BPE 1,000 at 2.913, and by how much?</p>
+    <p><b>First attempt: two separate intervals.</b> Bootstrap each tokenizer independently and subtract. That treats the two numbers as if they came from different documents. But they come from the <em>same</em> documents, and documents differ a lot (per-document bytes per token ranges from 1.57 to 3.73 for BPE 1,000): a resample heavy in long-worded documents raises <em>both</em> numbers. Independent resampling counts this shared variation twice.</p>
+    <p><b>The key idea.</b> Resample document indices once per round, compute both statistics on that same resample, and record the difference \( \theta^*_B - \theta^*_A \). The interval of the differences is the paired interval. Why it is narrower:</p>
+    <div class="eq">\[ \operatorname{Var}(\theta_B - \theta_A) = \operatorname{Var}(\theta_A) + \operatorname{Var}(\theta_B) - 2\operatorname{Cov}(\theta_A, \theta_B) . \]</div>
+    <p>When the two tokenizers move together across documents, the covariance is large and cancels most of the variance. Independent resampling sets that covariance to zero.</p>
+    <p><b>Confirm by measuring.</b> 73 held-out documents (every 10th of 723), BPE trained on the other 650 at 1,000 and 2,000 tokens, <var>B</var> = 10,000 resamples, percentile 95% intervals:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Quantity</th><th class="num">Point estimate</th><th class="num">95% interval</th><th class="num">Width</th></tr>
+      <tr><td>bytes per token, BPE 1,000</td><td class="num">2.913</td><td class="num">[2.784, 3.019]</td><td class="num">0.235</td></tr>
+      <tr><td>bytes per token, BPE 2,000</td><td class="num">3.416</td><td class="num">[3.225, 3.558]</td><td class="num">0.333</td></tr>
+      <tr class="hi"><td>difference, paired bootstrap</td><td class="num">0.502</td><td class="num">[0.429, 0.564]</td><td class="num">0.135</td></tr>
+      <tr><td>difference, independent resamples (wrong)</td><td class="num">0.502</td><td class="num">[0.282, 0.697]</td><td class="num">0.415</td></tr>
+    </table></div>
+    <p>The two tokenizers' bootstrap replicates have correlation 0.954, so pairing makes the interval for the difference about three times narrower. The paired interval excludes 0 by a wide margin, and BPE 2,000 packs more bytes per token on 71 of the 73 documents. Conclusion: on this kind of text the 2,000-token vocabulary is about 0.50 bytes per token (17%) more compact, and we are confident of that to within about ±0.07.</p>
+    <p>Two cautions. The interval describes variation over documents <em>like these</em> (one English novel); it says nothing about other languages or domains, which need their own held-out sets. And more bytes per token is not automatically better: Day 2 explains what a larger vocabulary costs.</p>
+    <p><b>Where BPE uses it.</b> Every tokenizer decision in this week is a comparison of two numbers measured on the same text: two vocabulary sizes, two split patterns, two tokenizers for a new language. Pair them, resample documents, and report the interval for the difference.</p>
+
     <div class="part"><b>Practice</b><ul>
+      <li>Reproduce the table: hold out every 10th document, train BPE at 1,000 and 2,000, store (bytes, tokens) per document, run the paired bootstrap with 10,000 resamples.</li>
+      <li>Repeat with 1,000 and 100 resamples. Which digits of the interval are stable?</li>
       <li>Write a one-page plan to choose between <code>cl100k_base</code> and <code>o200k_base</code> for a product used in English, Hindi and Tamil.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
       <li>The budget allows training only one small model. Which measurements do you drop?</li>
       <li>Code-heavy traffic: which extra test set and metric do you add?</li>
+      <li>Bootstrap the <em>bits per byte</em> of the unigram model instead of bytes per token. What do you store per document?</li>
+      <li>Documents come in chapters and chapters are correlated too. What do you resample now?</li>
     </ul></div>
-    <details class="sol"><summary>Solution outline</summary><div>
+    <details class="sol"><summary>Solution and outline</summary><div>
+<div class="code"><div class="ch"><span>bootstrap.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import random
+
+def paired_bootstrap(rows, B=10_000, seed=0):
+    """rows: one (bytes, tokens_A, tokens_B) per held-out document.
+    Resamples documents, never tokens. Returns sorted replicates of
+    bytes/token for A, for B, and of the paired difference B - A."""
+    rng, D = random.Random(seed), len(rows)
+    ra, rb, rd = [], [], []
+    for _ in range(B):
+        s = [rows[rng.randrange(D)] for _ in range(D)]   # D documents, with replacement
+        nbytes = sum(r[0] for r in s)
+        a = nbytes / sum(r[1] for r in s)
+        b = nbytes / sum(r[2] for r in s)                # same documents for both tokenizers
+        ra.append(a); rb.append(b); rd.append(b - a)
+    return sorted(ra), sorted(rb), sorted(rd)
+
+def percentile_ci(reps, level=0.95):
+    """Percentile interval from sorted bootstrap replicates."""
+    k = int(len(reps) * (1 - level) / 2)
+    return reps[k], reps[len(reps) - 1 - k]</code></pre></div>
+    <p>The statistic is total bytes over total tokens of the resampled documents, so long documents count in proportion to their length. Rerunning with 20 different seeds, the lower end of the paired interval ranges from 0.415 to 0.451 with 100 resamples, from 0.426 to 0.442 with 1,000, and from 0.428 to 0.433 with 10,000: use thousands of resamples before trusting the second decimal. For bits per byte, store (bytes, bits) per document. For chapters, resample whole chapters: always resample the largest unit that is independent.</p>
+    <p>Plan outline for <code>cl100k_base</code> against <code>o200k_base</code>:</p>
     <ol>
       <li><b>Data:</b> FLORES+ <code>devtest</code> for the three languages (same 1,012 sentences each), plus a sample of real product traffic, held out.</li>
       <li><b>Fertility:</b> tokens per sentence for each tokenizer and language; the ratio to English per sentence, with a bootstrap 95% interval; the paired difference between the two tokenizers, bootstrapped per sentence.</li>
@@ -404,6 +759,11 @@ def huffman(freqs):
     </ol>
     <p>Why paired: the sentences differ hugely in length, and pairing removes that variation, so the interval reflects the tokenizers rather than the sentences.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
+      <li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)">Bootstrapping (statistics)</a> (Wikipedia)</li>
+      <li>Efron and Tibshirani, <em>An Introduction to the Bootstrap</em> (book): the percentile interval and when it fails</li>
+      <li>Koehn, <a href="https://aclanthology.org/W04-3250/">Statistical Significance Tests for Machine Translation Evaluation</a> (EMNLP 2004): the paired bootstrap in NLP</li>
+      <li>Rust et al., <em>How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models</em> (ACL 2021): fertility</li>
+      <li>Petrov et al., <em>Language Model Tokenizers Introduce Unfairness Between Languages</em> (NeurIPS 2023)</li>
       <li><a href="https://github.com/openlanguagedata/flores">FLORES+</a> (Open Language Data Initiative)</li>
       <li>Land and Bartolo, <a href="https://arxiv.org/abs/2405.05417">Fishing for Magikarp</a>: finding under-trained tokens</li>
     </ul></div>
@@ -411,13 +771,17 @@ def huffman(freqs):
 
   <div class="check" data-check="day3">
     <div class="ch"><b>Checkpoint · Day 3</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="d3a" data-dim="ml"><span class="tx">Compute both dice entropies and prove the bits-per-byte identity.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3b" data-dim="ml"><span class="tx">Reproduce the unigram bits-per-byte column and compare with <code>gzip</code>.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3c" data-dim="dsa"><span class="tx">Implement Huffman with a heap and match the 4.134-bit average.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3d" data-dim="dsa"><span class="tx">Write the exchange argument for Huffman's optimality, and say which step fails for BPE.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3e" data-dim="ai"><span class="tx">Write the one-page tokenizer evaluation plan.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3a" data-dim="ml"><span class="tx">Derive −log₂ <var>p</var> from additivity, compute both dice entropies, and prove <var>H</var> ≤ log₂ <var>n</var> with Gibbs' inequality.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3b" data-dim="ml"><span class="tx">Prove the bits-per-byte identity and explain, with the worked example, why per-token perplexity misleads.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3c" data-dim="ml"><span class="tx">Derive the Miller–Madow correction in nats and bits, and reproduce the estimator table on <em>Alice</em>.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3d" data-dim="dsa"><span class="tx">Prove the Kraft inequality and both halves of <var>H</var> ≤ average length &lt; <var>H</var> + 1.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3e" data-dim="dsa"><span class="tx">Run Huffman by hand on the 5-symbol example, then implement it with a heap and match the 4.134-bit average on <em>Alice</em>.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3f" data-dim="dsa"><span class="tx">Write the full optimality proof (Lemma 1 by exchange, Lemma 2's cost relation, induction), and say which step fails for BPE.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3g" data-dim="dsa"><span class="tx">Solve 1046 and 1167, and implement canonical Huffman and the two-queue O(<var>n</var>) version.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3h" data-dim="ai"><span class="tx">Run the paired document bootstrap for BPE 1,000 against 2,000 and explain why tokens are the wrong unit.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3i" data-dim="ai"><span class="tx">Write the one-page tokenizer evaluation plan, with paired intervals.</span><span class="dim ai">AI</span></label>
   </div>
-</section><div class="pager"><a class="btn" href="day_2.html">← The objective</a><a class="btn pri" href="day_4.html">Fast training →</a></div>
+</section><div class="pager"><a class="btn" href="day_2.html">← Greedy and the objective</a><a class="btn pri" href="day_4.html">Fast training →</a></div>
 <footer>
   <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
   <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
@@ -597,7 +961,7 @@ simInit(); simRender();
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
 const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "ml", "page": "day_5.html"}, {"id": "d5c", "dim": "ai", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
