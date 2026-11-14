@@ -1,21 +1,38 @@
 # Software Delivery
 
-Spec → contract → test → code, every week. Each week adds one technique: properties, golden tests, planted bugs, CI, release, security, operations.
+Spec → contract → test → code, every week: function contracts, golden, property and differential tests, and the lab's acceptance tests.
 
-## Week 1 · Tokens and Decoding
+## Week 1: People You May Know
 
-**[Spec, contracts, tests](../weeks/week_01.md#software-delivery-spec-contracts-tests)**
+- **[Week reading](../week_01/index.html):** checkpoint
+    - Write and run the differential test: suggest against the masked row of A² on 100 random small graphs.
+- **[Day 1: Graphs and counting](../week_01/day_1.html):** the contract and its tests
+    - The question
+    - First attempt
+    - The key idea: a contract, then one test per kind of oracle
+    - Why it works: plant bugs and see which tests fail
+    - Cost
+    - Confirm by measuring
+    - Where PYMK uses it
+- **[Day 1: Graphs and counting](../week_01/day_1.html):** checkpoint
+    - Write the contract and the golden, property and differential tests for the exact baseline; catch all four planted bugs.
+- **[Worksheet and learning checks](../week_01/worksheet.html):** checkpoint
+    - WI-1 Spec and failing tests
+    - WI-7 Serving: the final filter and the cache
+    - 12. Why does the eligibility filter run on every response, and why must the ranker be tested on a temporal split rather than a random one? (Days 3 and 5)
 
-Study sources:
+## Week 3: Tokenization
 
-- [Hypothesis](https://hypothesis.readthedocs.io/en/latest/quickstart.html) quickstart: property-based testing.
-- [typing.Protocol](https://docs.python.org/3/library/typing.html#typing.Protocol) and [PEP 544](https://peps.python.org/pep-0544/): structural contracts.
-- [Packaging Python Projects](https://packaging.python.org/en/latest/tutorials/packaging-projects/), including TestPyPI.
-- [Building and testing Python](https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-python) with GitHub Actions.
-
-| Unit | Study |
-|---|---|
-| [Practice 1: spec first, tests red](../weeks/week_01.md#practice-1-spec-first-tests-red) | |
-| [Practice 2: properties, not examples](../weeks/week_01.md#practice-2-properties-not-examples) | |
-| [Practice 3: planted bugs](../weeks/week_01.md#practice-3-planted-bugs) | |
-| [Practice 4: package, CLI, CI](../weeks/week_01.md#practice-4-package-cli-ci) | |
+- **[Week reading](../week_03/index.html):** checkpoint
+    - Train on alice.txt at vocab 1,000 and check decode(encode(x)) == x on every line.
+- **[Day 4: Fast training](../week_03/day_4.html):** contracts and tests
+    - The question
+    - First attempt
+    - The key idea: every test needs an oracle
+    - Where BPE uses it
+- **[Day 4: Fast training](../week_03/day_4.html):** checkpoint
+    - Golden, property and differential tests; three planted bugs caught.
+- **[Worksheet and learning checks](../week_03/worksheet.html):** checkpoint
+    - WI-1 Spec and failing tests
+    - WI-4 Encode, decode, save, load
+    - Name four kinds of test for a tokenizer and the bug each catches. (Day 4)

@@ -1,90 +1,95 @@
-"""Write one page per dimension: its study sources and units, week by week.
+"""Write one page per dimension: what each released week teaches in it, day by day.
 
-Generated from the weekly pages (guide/docs/weeks/week_NN.md), so it stays in
-sync. Run after editing a weekly page:
+Generated from the week pages (guide/docs/week_NN/*.html), in the order of WEEKS in
+write_nav.py, so it stays in sync. Run after changing a week:
 
     python scripts/write_tracks.py
 """
 
+import html
 import re
+import sys
 from pathlib import Path
 
-from markdown.extensions.toc import slugify
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from write_nav import WEEKS  # noqa: E402
 
-GUIDE = Path(__file__).resolve().parent.parent / "guide"
-LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+DOCS = Path(__file__).resolve().parent.parent / "guide" / "docs"
 
 DIMENSIONS = {
-    "dsa": ("DSA", "Every LeetCode pattern, each placed in the week whose project uses it. Each problem: try it first, code it yourself, solve 1–2 variations, and write tests and corner cases."),
-    "ml": ("ML", "Statistics and core ML: probability, linear algebra, calculus, optimization and measurement, each learned where the build needs it. Each unit: derive it, check it numerically, and vary it."),
-    "ai": ("AI", "LLMs from the inside out: tokens and decoding, prompts, context and memory, retrieval, agents and skills, then the models themselves. Each unit: study it, build it, vary it, test it, and cover its corner cases."),
-    "system-design": ("System Design", "Two design reps a week (◆ = timed mock) covering the Google and Meta product, infrastructure, ML and LLM rounds. Each one: requirements with numbers, estimates, API, data model, deep dives, bottlenecks."),
-    "software-delivery": ("Software Delivery", "Spec → contract → test → code, every week. Each week adds one technique: properties, golden tests, planted bugs, CI, release, security, operations."),
+    "dsa": ("DSA", "Algorithms and data structures taught as subjects: each one posed as a question, derived, proved, costed, then practised on LeetCode problems and variations, in the week whose design problem needs it."),
+    "ml": ("ML", "Statistics and core ML: each idea derived from first principles, checked by measuring it on the week's data, then tied back to the week's design problem."),
+    "ai": ("AI", "Every week is built around one design problem of the kind top companies ask. These are the problems, and the AI-specific skills each week checks."),
+    "system-design": ("System Design", "Each week's design problem taken to production: estimates with stated assumptions, storage and sharding, caching, tail latency, and the serving architecture."),
+    "software-delivery": ("Software Delivery", "Spec → contract → test → code, every week: function contracts, golden, property and differential tests, and the lab's acceptance tests."),
 }
+DELIVERY = re.compile(r"contract|test", re.I)
 
 
-def anchor(heading: str) -> str:
-    return slugify(LINK.sub(r"\1", heading).replace("`", ""), "-")
+def text(fragment: str) -> str:
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", "", fragment)).split())
 
 
-def sections(text: str) -> dict[str, list[str]]:
-    """Split a weekly page into its '## ' sections."""
-    out, current = {}, None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = line[3:]
-            out[current] = []
-        elif current:
-            out[current].append(line)
-    return out
+def blocks(page: str):
+    """Yield (class, kind, sub-topics, LeetCode links) for each block on a page."""
+    starts = list(re.finditer(r'<div class="blk (\w+)"[^>]*>\s*<div class="bh"><span class="kind">(.*?)</span>', page, re.S))
+    for i, m in enumerate(starts):
+        end = starts[i + 1].start() if i + 1 < len(starts) else page.find('<div class="check"', m.end())
+        body = page[m.end():end] if end > 0 else page[m.end():]
+        subs = [text(h) for h in re.findall(r"<h4[^>]*>(.*?)</h4>", body, re.S)]
+        problems = {}
+        for href, label in re.findall(r'<a [^>]*href="(https://leetcode\.com/problems/[^"]+)"[^>]*>(.*?)</a>', body, re.S):
+            problems.setdefault(href, text(label))
+        yield m.group(1), text(m.group(2)), subs, problems
+
+
+def checks(page: str, dim: str) -> list[str]:
+    return [text(t) for t in re.findall(r'data-dim="%s"><span class="tx">(.*?)</span>' % dim, page, re.S)]
 
 
 def main() -> None:
-    weeks = sorted((GUIDE / "docs" / "weeks").glob("week_*.md"))
-    for slug, (name, intro) in DIMENSIONS.items():
-        page = [f"# {name}", "", intro, ""]
-        for week in weeks:
-            text = week.read_text(encoding="utf-8")
-            title = text.splitlines()[0].lstrip("# ")
-            heading, body = next(((h, b) for h, b in sections(text).items() if h.startswith(f"{name}: ")), (None, None))
-            if heading is None:
-                continue
-            link = f"../weeks/{week.name}"
-            topic = heading[len(name) + 2:]
-            page += [f"## {title}", "", f"**[{topic[:1].upper() + topic[1:]}]({link}#{anchor(heading)})**", ""]
+    pages = {slug: [f"# {name}", "", intro, ""] for slug, (name, intro) in DIMENSIONS.items()}
+    for week_title, entries in WEEKS:
+        days = []
+        for entry in entries:
+            (label, path), = entry.items()
+            f = DOCS / path
+            if f.exists() and "talk" not in f.name:
+                days.append((label, path, f.read_text(encoding="utf-8")))
+        start = {slug: len(lines) for slug, lines in pages.items()}
+        for slug in pages:
+            pages[slug] += [f"## {week_title}", ""]
+        reading = next((d for d in days if d[0] == "Week reading"), None)
+        if reading:
+            h1 = re.search(r"<h1[^>]*>(.*?)</h1>", reading[2], re.S)
+            pages["ai"] += [f"**The problem:** [{text(h1.group(1)) if h1 else week_title}](../{reading[1]})", ""]
+        for label, path, page in days:
+            link = f"../{path}"
+            for cls, kind, subs, problems in blocks(page):
+                slug = {"alg": "dsa", "ml": "ml", "des": "system-design"}.get(cls)
+                if cls == "des" and DELIVERY.search(kind):
+                    slug = "software-delivery"
+                if not slug:
+                    continue
+                topic = kind.split("·", 1)[-1].strip()
+                pages[slug].append(f"- **[{label}]({link}):** {topic}")
+                pages[slug] += [f"    - {s}" for s in subs]
+                if problems:
+                    pages[slug].append("    - Practice: " + " · ".join(f"[{t}]({h})" for h, t in problems.items()))
+            for slug, dim in (("ai", "ai"), ("software-delivery", "del")):
+                items = checks(page, dim)
+                if items:
+                    pages[slug].append(f"- **[{label}]({link}):** checkpoint")
+                    pages[slug] += [f"    - {c}" for c in items]
+        for slug, lines in pages.items():
+            if len(lines) == start[slug] + 2:
+                lines.append("The pages for this week are still being written.")
+            lines.append("")
 
-            sources, in_sources = [], False
-            for line in body:
-                if line.startswith("**Study sources this week:**"):
-                    in_sources = True
-                elif in_sources and line.startswith("- "):
-                    sources.append(line)
-                elif in_sources and line.strip() and not line.startswith("- "):
-                    break
-            if sources:
-                page += ["Study sources:", "", *sources, ""]
-
-            if not any(line.startswith("### ") for line in body):
-                table = [line for line in body if line.startswith("|")]
-                page += [*table, ""] if table else []
-                continue
-            page += ["| Unit | Study |", "|---|---|"]
-            unit = None
-            for line in body:
-                if line.startswith("### "):
-                    unit = line[4:]
-                    label = LINK.sub(r"\1", unit)
-                    page.append(f"| [{label}]({link}#{anchor(unit)}) | |")
-                elif unit and line.startswith("- **Study:**"):
-                    study = line[len("- **Study:** "):]
-                    page[-1] = page[-1][:-3] + f"| {study[:1].upper() + study[1:]} |"
-                    unit = None
-            page.append("")
-
-        out = GUIDE / "docs" / "tracks" / f"{slug}.md"
-        out.parent.mkdir(exist_ok=True)
-        out.write_text("\n".join(page), encoding="utf-8")
-        print(f"{out.name}: {len(weeks)} weeks")
+    for slug, lines in pages.items():
+        out = DOCS / "tracks" / f"{slug}.md"
+        out.write_text("\n".join(lines), encoding="utf-8")
+        print(f"{out.name}: {sum(l.startswith('- ') for l in lines)} entries")
 
 
 if __name__ == "__main__":

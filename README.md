@@ -40,9 +40,8 @@ Then open `http://127.0.0.1:8000`.
 
 | Path | What it holds |
 |---|---|
-| `guide/docs/weeks/` | One page per week |
 | `guide/docs/week_NN/` | A week's own pages: the week reading (landing page), one page per day, and the worksheet |
-| `guide/docs/tutorials/` | The lecture tutorial for each week (HTML, with live demos) |
+| `archive/` | Retired pages (the earlier tokens-and-decoding Week 1), kept for reference, not published |
 | `guide/docs/tracks/` | One page per dimension, generated from the weekly pages |
 | `week_NN/` | The lab for each weekly build: spec, contracts, acceptance tests, and starter code |
 | `scripts/` | `write_tracks.py` and `write_nav.py`, which regenerate the dimension pages and the nav |

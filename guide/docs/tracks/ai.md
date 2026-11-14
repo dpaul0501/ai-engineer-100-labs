@@ -1,22 +1,27 @@
 # AI
 
-LLMs from the inside out: tokens and decoding, prompts, context and memory, retrieval, agents and skills, then the models themselves. Each unit: study it, build it, vary it, test it, and cover its corner cases.
+Every week is built around one design problem of the kind top companies ask. These are the problems, and the AI-specific skills each week checks.
 
-## Week 1 · Tokens and Decoding
+## Week 1: People You May Know
 
-**[Tokens and decoding](../weeks/week_01.md#ai-tokens-and-decoding)**
+**The problem:** [People You May Know: from two hops to a billion users](../week_01/index.html)
 
-Study sources:
 
-- Andrej Karpathy, [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE) (video) and [minbpe](https://github.com/karpathy/minbpe) (code).
-- Imad Dabbura, [Byte Pair Encoding from Scratch](https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html): a short, code-first walkthrough.
-- Patrick von Platen, [How to generate text](https://huggingface.co/blog/how-to-generate) (Hugging Face blog): greedy, beam, top-k, top-p, side by side.
-- Chip Huyen, [Generation configurations: temperature, top-k, top-p, and test time compute](https://huyenchip.com/2024/01/16/sampling.html), including structured outputs.
-- MLC, [Structured generation with XGrammar](https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar): pushdown automata and why most of a mask can be precomputed.
-- Papers: Sennrich et al., [BPE for NMT](https://arxiv.org/abs/1508.07909); Holtzman et al., [The Curious Case of Neural Text Degeneration](https://arxiv.org/abs/1904.09751) (top-p); Willard and Louf, [Efficient Guided Generation](https://arxiv.org/abs/2307.09702) (Outlines).
+## Week 3: Tokenization
 
-| Unit | Study |
-|---|---|
-| [1. Bytes, UTF-8, and BPE](../weeks/week_01.md#1-bytes-utf-8-and-bpe) | How UTF-8 encodes a code point in 1–4 bytes; the merge loop in minbpe's `basic.py`; why encoding applies merges by **rank**, not frequency. |
-| [2. From logits to one token](../weeks/week_01.md#2-from-logits-to-one-token) | The Hugging Face and Chip Huyen posts above. |
-| [3. Structured output by construction](../weeks/week_01.md#3-structured-output-by-construction) | The XGrammar post; [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), sections 2–7 (JSON's grammar is two pages); llama.cpp's [GBNF grammars](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md). |
+**The problem:** [Byte pair encoding, from first principles](../week_03/index.html)
+
+- **[Week reading](../week_03/index.html):** checkpoint
+    - Explain to a friend why encoding uses merge order and not frequency, using the abaa example.
+- **[Day 1: Text as data](../week_03/day_1.html):** checkpoint
+    - Write the Hindi-safe pattern, and explain the 90-vs-22 gap partly in terms of it.
+- **[Day 3: Information](../week_03/day_3.html):** checkpoint
+    - Run the paired document bootstrap for BPE 1,000 against 2,000 and explain why tokens are the wrong unit.
+    - Write the one-page tokenizer evaluation plan, with paired intervals.
+- **[Day 5: Encoding and serving](../week_03/day_5.html):** checkpoint
+    - Explain the mechanism of three tokenizer-caused failures (for example token tax, glitch tokens, streaming �), one example each.
+- **[Worksheet and learning checks](../week_03/worksheet.html):** checkpoint
+    - WI-7 The token tax, with error bars
+    - WI-8 Stretch: match tiktoken
+    - Why does encoding replay merges by rank instead of using frequencies or longest match? (Reading, Day 5)
+    - Why does GPT-2 cut most Hindi words in two, and what fixes it? (Day 1)
