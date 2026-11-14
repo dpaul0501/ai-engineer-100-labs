@@ -35,6 +35,20 @@ Statistics and core ML: each idea derived from first principles, checked by meas
     - 7 · Hub capping as a bias–variance trade-off
     - 8 · Confirm by measuring
     - 9 · Where PYMK uses it
+- **[Day 5: Ranking with ML](../week_01/day_5.html):** link prediction, from first principles
+    - 1 · The question: predicting friendships that do not exist yet
+    - 2 · The key idea: two time cuts, and a precise population
+    - 3 · Negatives, and their bias
+    - 4 · Features: four ways to score a mutual friend
+    - 5 · Why a mutual friend with many friends is weak evidence
+    - 6 · The other features, and one that hurts
+    - 7 · Logistic regression, derived
+    - 8 · Evaluation 1: AUC is the Mann–Whitney statistic
+    - 9 · Evaluation 2: what the user sees, recall@10, and error bars over users
+    - 10 · The measured comparison
+    - 11 · Calibration: is a 2% prediction really 2%?
+    - 12 · Feedback loops and exposure bias
+    - 13 · Privacy and fairness are constraints, not features
 
 ## Week 3: Tokenization
 

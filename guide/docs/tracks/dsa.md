@@ -37,6 +37,14 @@ Algorithms and data structures taught as subjects: each one posed as a question,
     - 5 · Personalized PageRank: a third candidate source
     - 6 · Three small structures behind sampling and filtering
     - Practice: [380 Insert Delete GetRandom O(1)](https://leetcode.com/problems/insert-delete-getrandom-o1/) · [528 Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) · [705 Design HashSet](https://leetcode.com/problems/design-hashset/) · [381 Insert Delete GetRandom O(1) - Duplicates allowed](https://leetcode.com/problems/insert-delete-getrandom-o1-duplicates-allowed/) · [706 Design HashMap](https://leetcode.com/problems/design-hashmap/)
+- **[Day 5: Ranking with ML](../week_01/day_5.html):** merging ranked lists with a heap
+    - 1 · The question
+    - 2 · The key idea: a heap of heads
+    - 3 · Why it is correct
+    - 4 · Cost
+    - 5 · Confirm by measuring: shards, then sources
+    - 6 · Top-k relatives
+    - Practice: [973](https://leetcode.com/problems/k-closest-points-to-origin/) · [373](https://leetcode.com/problems/find-k-pairs-with-smallest-sums/) · [632](https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/) · [23](https://leetcode.com/problems/merge-k-sorted-lists/) · [378](https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/) · [88](https://leetcode.com/problems/merge-sorted-array/)
 
 ## Week 3: Tokenization
 

@@ -23,6 +23,11 @@ Spec → contract → test → code, every week: function contracts, golden, pro
     - What is approximate and what must stay exact
     - Confirm by measuring
     - Where PYMK uses it
+- **[Day 5: Ranking with ML](../week_01/day_5.html):** the full architecture, and testing it on users
+    - 1 · The question: what is the whole system?
+    - 2 · Training–serving skew, and point-in-time features
+    - 3 · Online experiments: A/B testing a new ranker
+    - 4 · Week 2 teaser: from hand-made features to learned representations
 - **[Worksheet and learning checks](../week_01/worksheet.html):** checkpoint
     - WI-1 Spec and failing tests
     - WI-7 Serving: the final filter and the cache
