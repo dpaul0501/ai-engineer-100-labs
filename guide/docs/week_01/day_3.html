@@ -1,6 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
-<title>BPE Week · Information</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+</style>
+<title>People You May Know · The distributed graph</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -265,526 +268,653 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
-  <div class="rail-label">Week 1 · Tokenization</div>
+  <div class="rail-label">Week 1 · People You May Know</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
-  <a href="day_3.html" class="on" data-page="day_3.html"><span class="n">D3</span>Information</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
-  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Graphs and counting</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Scale and skew</a>
+  <a href="day_3.html" class="on" data-page="day_3.html"><span class="n">D3</span>The distributed graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Approximation and candidates</a>
+  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Ranking with ML</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
 <main><div class="page">
 <section class="s" id="day3" data-sec="day3">
-  <div class="shead"><span class="sno">DAY 3 · INFORMATION</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
-  <h2>How many bits does text need, and how close can a code get?</h2>
-  <p>A tokenizer is a code: it rewrites bytes as a sequence of ids, and the model then pays some number of bits for each id. Today answers three questions in order. How much information is in a piece of text (entropy, and how to estimate it from a sample)? What is the shortest code a symbol-by-symbol scheme can reach, and how do you build it (prefix codes and Huffman's algorithm, with a full proof)? And when you compare two tokenizers on a test set, how sure can you be of the difference (the bootstrap)?</p>
+  <div class="shead"><span class="sno">DAY 3 · THE DISTRIBUTED GRAPH</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">System Design</span></span></div>
+  <h2>Split the graph across machines, then keep it fresh</h2>
+  <p><b>Where we are in the design.</b> Days 1 and 2 ran People You May Know on one machine: read your friends' adjacency lists, count mutual friends, keep the top 10. At a billion users the adjacency lists alone are about 1.6 TB (the back-of-envelope estimate in R.6), so they cannot live on one machine. Today builds the box under <b>candidate generation</b> in the architecture of R.7: the <b>graph store</b> that holds the friend lists across many machines, and the <b>candidate store</b> that holds precomputed suggestions and is updated as friendships form.</p>
+  <p>Three blocks. The ML block teaches how to measure latency honestly: percentiles from samples, and a confidence interval for p99. The Algorithms block teaches how to split keys across machines (hashing, consistent hashing, rendezvous hashing), what one request then costs in shards touched, how to place friends near each other, and how to cache hot lists. The Design block puts the store together: precompute versus compute on request, exactly which suggestions change when two people connect, and why every response is checked again before it is shown.</p>
 
+  <!-- ===================================================================== ML -->
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · information from first principles</span></div>
+    <div class="bh"><span class="kind">ML · measuring latency: percentiles and a confidence interval for p99</span></div>
 
-    <h4>1 · Surprise: how much does one outcome tell you?</h4>
-    <p><b>The question.</b> A friend rolls a fair 8-sided die and tells you the result. Another flips a fair coin and tells you the result. The first message tells you more. How much more, as a number?</p>
-    <p><b>First attempt.</b> Measure information by the number of possible outcomes: 8 for the die, 2 for the coin. This breaks as soon as you combine messages. The coin and the die together have 2 × 8 = 16 outcomes, but hearing two independent messages should give you the information of the first <em>plus</em> the information of the second, not their product. A measure of information should add, and counting outcomes multiplies.</p>
-    <p><b>The key idea, derived.</b> Write <var>I</var>(<var>p</var>) for the information (the <b>surprise</b>) of learning that an event of probability <var>p</var> happened. We ask for three properties:</p>
-    <ul>
-      <li>Rarer events are more surprising: <var>I</var> decreases as <var>p</var> grows, and a certain event (<var>p</var> = 1) carries none: <var>I</var>(1) = 0.</li>
-      <li>Independent events add. If <var>A</var> and <var>B</var> are independent, P(<var>A</var> and <var>B</var>) = <var>p</var><var>q</var>, so we need \( I(pq) = I(p) + I(q) \).</li>
-      <li>A unit: a fair coin flip carries 1 <b>bit</b>, \( I(1/2) = 1 \).</li>
-    </ul>
-    <p>The second property is the important one. A function that turns products into sums is a logarithm: set \( g(t) = I(2^{-t}) \); then \( g(s + t) = I(2^{-s}2^{-t}) = g(s) + g(t) \), so <var>g</var> is additive, and an additive function that is monotone must be linear, \( g(t) = c\,t \). The unit fixes \( c = g(1) = I(1/2) = 1 \). So \( I(2^{-t}) = t \), that is:</p>
-    <div class="eq">\[ I(p) = -\log_2 p = \log_2 \frac{1}{p} \ \text{bits} \]</div>
-    <p>Check it on the examples. The coin: \( -\log_2 \tfrac12 = 1 \) bit. One face of the 8-sided die: \( -\log_2 \tfrac18 = 3 \) bits. Both together: \( -\log_2 \tfrac1{16} = 4 = 1 + 3 \). A bit has a concrete meaning: it is one yes/no question that halves the possibilities. Finding one face out of 8 takes exactly three halvings:</p>
-    <div class="dg"><div class="seq"><span class="nd">8 faces</span><span class="lk">→ "is it 1–4?" →</span><span class="nd">4 left</span><span class="lk">→ "is it 1–2?" →</span><span class="nd">2 left</span><span class="lk">→ "is it 1?" →</span><span class="nd hot">1 face</span></div>
-      <div class="cap">Three yes/no answers identify one of 8 equally likely outcomes, so the outcome carries 3 bits. An outcome of probability <var>p</var> carries log₂(1/<var>p</var>) bits, also when that number is not a whole number.</div></div>
+    <h4>The question</h4>
+    <p>The service promises: "99% of PYMK requests finish within budget." You log the cost of 1,000 requests. Is the promise kept? Two things are needed: an estimate of the 99th percentile from a sample, and a statement of how far off that estimate might be. As the cost of a request we use <var>W</var>(<var>u</var>) = Σ<sub><var>f</var>∈<var>N</var>(<var>u</var>)</sub> deg(<var>f</var>), the number of adjacency entries the exact algorithm reads (R.4). On a real server time grows with it, and here we can compute it exactly for every one of the 10,000 users, so we know the true answer and can check our estimators against it.</p>
 
-    <h4>2 · Entropy: the average surprise</h4>
-    <p><b>The question.</b> A source emits symbols <var>x</var> with probabilities <var>p</var>(<var>x</var>), such as letters of English. How much information does one symbol carry <em>on average</em>?</p>
-    <p><b>The key idea.</b> Average the surprise over the outcomes, weighting each by how often it happens. That average is the <b>entropy</b>:</p>
-    <div class="eq">\[ H(p) = \sum_x p(x)\, I(p(x)) = -\sum_x p(x)\log_2 p(x) \qquad (0 \log 0 = 0) \]</div>
-    <p>Two dice, worked by hand. A fair six-sided die: every face has surprise log₂ 6, so <var>H</var> = log₂ 6 = <b>2.585</b> bits. A loaded die with probabilities ½, ⅒, ⅒, ⅒, ⅒, ⅒: the likely face carries 1 bit, each rare face log₂ 10 = 3.32 bits, so <var>H</var> = ½ · 1 + 5 · ⅒ · 3.32 = <b>2.161</b> bits. The loaded die is more predictable, so it carries less information per roll.</p>
-    <p><b>Why the uniform distribution has the most entropy, two outcomes first.</b> With probabilities <var>p</var> and 1 − <var>p</var>,</p>
-    <div class="eq">\[ h(p) = -p\log_2 p - (1-p)\log_2(1-p), \qquad h'(p) = \log_2\frac{1-p}{p}, \qquad h''(p) = -\frac{1}{p(1-p)\ln 2} &lt; 0 . \]</div>
-    <p>The derivative is zero only at <var>p</var> = ½, and the second derivative is negative everywhere, so <var>h</var> is concave with its single maximum <var>h</var>(½) = 1 bit. At the ends <var>h</var>(0) = <var>h</var>(1) = 0: a certain outcome tells you nothing.</p>
-    <p><b>The general bound.</b> With <var>n</var> possible outcomes, \( 0 \le H(p) \le \log_2 n \), with equality on the right exactly when <var>p</var> is uniform. The proof uses Gibbs' inequality, derived in part 4 below.</p>
+    <h4>First attempt: report the mean</h4>
+    <p>Ten logged request costs: 310, 120, 950, 480, 205, 3100, 640, 150, 820, 270. Their mean is 7,045 / 10 = 704.5. But 7 of the 10 requests cost less than the mean, and one cost 3,100, more than four times the mean. The mean answers "how much work in total", not "how slow is a slow request". On the week's graph the mean <var>W</var> is 1,477, only 38.7% of users are above it, and the 99th percentile is 7,284: 4.9 times the mean. A budget set from the mean would be broken by a large share of requests, and the users who break it are the same users every time (those with popular friends, Day 2).</p>
 
-    <h4>3 · Shannon's source coding theorem: entropy is the price of a lossless code</h4>
-    <p><b>The question.</b> You must send a long stream of symbols as bits and the receiver must recover it exactly. Give each symbol a binary codeword. What is the smallest possible average number of bits per symbol?</p>
-    <p><b>Statement.</b> For a source with entropy <var>H</var>:</p>
-    <ul>
-      <li><b>Lower bound.</b> No uniquely decodable code has average length below <var>H</var> bits per symbol.</li>
-      <li><b>Achievability.</b> There is a prefix code with average length below <var>H</var> + 1. Coding blocks of <var>k</var> symbols at a time brings the cost per symbol below <var>H</var> + 1/<var>k</var>, because a block of <var>k</var> independent symbols has entropy <var>kH</var>, so its code costs below <var>kH</var> + 1 bits.</li>
-    </ul>
-    <p><b>Intuition.</b> The ideal codeword for <var>x</var> has length −log₂ <var>p</var>(<var>x</var>), its surprise: frequent symbols get short codewords, rare ones long codewords, and the average of the ideal lengths is exactly <var>H</var>. You cannot make every codeword short, because short codewords are scarce: there are only two codewords of length 1, four of length 2, and using one of them rules out every longer codeword that starts with it. The Algorithms block below turns this scarcity into an inequality (Kraft) and proves both halves of the theorem.</p>
-    <p>BPE follows the same rule with a twist: instead of shorter codewords for frequent symbols, it makes frequent strings into single symbols.</p>
-
-    <h4>4 · Cross-entropy: what a model's loss measures</h4>
-    <p><b>The question.</b> We never know the true distribution <var>p</var> of text. A model gives its own estimate <var>q</var>. If we build the code from <var>q</var> and use it on text that really comes from <var>p</var>, what does it cost?</p>
-    <p><b>The key idea.</b> The ideal code for <var>q</var> spends −log₂ <var>q</var>(<var>x</var>) bits on <var>x</var>. Averaged over what actually occurs:</p>
-    <div class="eq">\[ H(p, q) = -\sum_x p(x)\log_2 q(x) = H(p) + \underbrace{\sum_x p(x)\log_2\frac{p(x)}{q(x)}}_{D(p\,\|\,q)} \]</div>
-    <p>The extra term <var>D</var>(<var>p</var>‖<var>q</var>) is the <b>Kullback–Leibler divergence</b>: the bits wasted per symbol because the model is wrong.</p>
-    <p><b>Why it is never negative (Gibbs' inequality).</b> Use \( \ln t \le t - 1 \) for every <var>t</var> &gt; 0 (the line <var>t</var> − 1 is tangent to the concave ln at <var>t</var> = 1), with equality only at <var>t</var> = 1. Summing over the <var>x</var> with <var>p</var>(<var>x</var>) &gt; 0:</p>
-    <div class="eq">\[ -D(p\,\|\,q)\ln 2 = \sum_x p(x)\ln\frac{q(x)}{p(x)} \le \sum_x p(x)\Big(\frac{q(x)}{p(x)} - 1\Big) = \sum_x q(x) - 1 \le 0 . \]</div>
-    <p>So \( H(p, q) \ge H(p) \), with equality only when <var>q</var> = <var>p</var>. Taking <var>q</var> uniform over the <var>n</var> outcomes gives \( H(p, q) = \log_2 n \), so \( H(p) \le \log_2 n \): the general bound from part 2.</p>
-    <p><b>Why a model's loss is a code length.</b> A language model is trained to minimise the average of −ln <var>q</var>(next token | context) over the training tokens. That is a cross-entropy in nats (natural log); divide by ln 2 to get bits. An arithmetic coder driven by the model compresses text to within a couple of bits of the total −log₂ <var>q</var>, so <b>a lower loss is literally a shorter file</b>. Perplexity is the same number on another scale: 2 to the power of the cross-entropy in bits, the size of a uniform choice that would be equally surprising.</p>
-
-    <h4>5 · Bits per byte: the number that survives a change of tokenizer</h4>
-    <p><b>The question.</b> Model A uses a byte-level tokenizer; model B uses BPE with 2,000 tokens. Both are tested on the same text. Which predicts the text better?</p>
-    <p><b>First attempt: compare per-token perplexity.</b> This is wrong, because the two models predict different things. A predicts one byte at a time; B predicts tokens that hold about 3.4 bytes each. A larger token is harder to guess, so B's per-token loss is higher even if B is the better model.</p>
-    <p><b>The key idea, derived.</b> Let the test text have <var>N</var> bytes. A tokenizer turns it into <var>T</var> tokens, and the model pays a total of <var>B</var> = Σ −log₂ <var>q</var>(token) bits. Tokenization is lossless (the bytes can be recovered from the tokens), so those <var>B</var> bits are a code for the bytes themselves. Any two tokenizers' totals are therefore code lengths for <em>the same object</em>, and can be compared. Divide by the bytes, which do not depend on the tokenizer, and factor through the tokens:</p>
-    <div class="eq">\[
-\underbrace{\frac{B}{N}}_{\text{bits/byte: comparable}} \;=\; \underbrace{\frac{B}{T}}_{\text{bits/token}\ \uparrow\ \text{as } V \uparrow} \times \underbrace{\frac{T}{N}}_{\text{tokens/byte}\ \downarrow\ \text{as } V \uparrow}
-\]</div>
-    <p>The tokens cancel. Per-token numbers move with the tokenizer; their product does not depend on how the text was cut up, only on how well the text was predicted.</p>
-    <p><b>Worked example, measured.</b> A unigram model (each token's probability is its training frequency, add-one smoothed; no context at all) on held-out <em>Alice</em> (every 10th document held out, the split used in the Design block):</p>
-    <div class="tablewrap"><table>
-      <tr><th>Tokenizer</th><th class="num">Bits per token</th><th class="num">Tokens per byte</th><th class="num">Bits per byte</th><th class="num">Per-token perplexity</th><th class="num">Per-byte perplexity</th></tr>
-      <tr><td>bytes (<var>V</var> = 256)</td><td class="num">4.676</td><td class="num">1.0000</td><td class="num">4.676</td><td class="num">25.6</td><td class="num">25.6</td></tr>
-      <tr class="hi"><td>BPE, <var>V</var> = 2,000</td><td class="num">8.890</td><td class="num">0.2928</td><td class="num">2.602</td><td class="num">474.3</td><td class="num">6.07</td></tr>
-    </table></div>
-    <p>Per-token perplexity says the byte model is about 18 times better (25.6 against 474.3). Bits per byte says the opposite: the BPE model needs 2.60 bits for each byte of text, the byte model 4.68. The second is the right answer, because it is the length of the compressed file. <b>Never compare tokenizers, or models with different tokenizers, by per-token perplexity</b>; compare bits per byte.</p>
-    <p>The same measurement across vocabulary sizes, from the week's earlier held-out split (it differs from the split above in the second decimal), together with real compressors run on the same book:</p>
-    <div class="chart"><div class="t">Bits per byte on held-out <em>Alice</em> (lower is better)</div>
-      <div class="br"><span>unigram on bytes</span><span class="tr"><i style="width:100%;--c:var(--muted)"></i></span><span class="v">4.66</span></div>
-      <div class="br"><span>unigram, BPE 1,000</span><span class="tr"><i style="width:62%"></i></span><span class="v">2.90</span></div>
-      <div class="br"><span><code>gzip</code></span><span class="tr"><i style="width:56%;--c:var(--ai)"></i></span><span class="v">2.61</span></div>
-      <div class="br"><span>unigram, BPE 3,208</span><span class="tr"><i style="width:53%"></i></span><span class="v">2.45</span></div>
-      <div class="br"><span><code>xz</code></span><span class="tr"><i style="width:50%;--c:var(--ai)"></i></span><span class="v">2.32</span></div>
-      <div class="br"><span><code>bz2</code></span><span class="tr"><i style="width:44%;--c:var(--ai)"></i></span><span class="v">2.05</span></div>
-      <div class="cap">The unigram model ignores context entirely; bigger tokens alone take it past <code>gzip</code>. Compressors measured on the whole file.</div>
-    </div>
-    <div class="tablewrap"><table>
-      <tr><th class="num">Vocab</th><th class="num">Token entropy</th><th class="num">log₂ V</th><th class="num">Efficiency</th><th class="num">Unigram bits per byte (held out)</th></tr>
-      <tr><td class="num">256</td><td class="num">4.60</td><td class="num">8.00</td><td class="num">0.57</td><td class="num">4.66</td></tr>
-      <tr><td class="num">500</td><td class="num">7.58</td><td class="num">8.97</td><td class="num">0.85</td><td class="num">3.37</td></tr>
-      <tr><td class="num">1,000</td><td class="num">8.44</td><td class="num">9.97</td><td class="num">0.85</td><td class="num">2.90</td></tr>
-      <tr><td class="num">2,000</td><td class="num">8.77</td><td class="num">10.97</td><td class="num">0.80</td><td class="num">2.59</td></tr>
-      <tr><td class="num">3,208</td><td class="num">8.79</td><td class="num">11.65</td><td class="num">0.75</td><td class="num">2.45</td></tr>
-    </table></div>
-    <p>A unigram model ignores context, yet with bigger tokens it needs barely half the bits per byte (4.66 → 2.45), and at 2.45 it beats <code>gzip</code> (2.61) on the same book. A token like <code> Alice</code> already contains the dependencies between its letters: <b>tokenization moves modeling work into the vocabulary</b>. <b>Efficiency</b> is token entropy ÷ log₂ <var>V</var>, the fraction of the maximum entropy (part 2) the token distribution reaches. It peaks in the middle and falls once the vocabulary fills with rare tokens.</p>
-    <p>The <b>minimum description length</b> (MDL) view adds the missing term: total cost = bits for the text + bits to write down the vocabulary. BPE replaces the second term with a hard budget; the Unigram LM tokenizer (SentencePiece) comes closer, pruning tokens that hurt likelihood least.</p>
-
-    <h4>6 · Estimating entropy from a sample</h4>
-    <p><b>The question.</b> You have <var>N</var> characters of text and want the entropy of the letter distribution that produced them. You never see <var>p</var>, only counts.</p>
-    <p><b>First attempt: the plug-in estimator.</b> Estimate each probability by its frequency in the sample, \( \hat p(x) = n_x / N \) (this is the maximum-likelihood estimate), and plug it into the formula: \( \hat H = H(\hat p) \). It is consistent (correct as <var>N</var> → ∞) but on small samples it is <b>biased low</b>: on average it reports less entropy than there is. Two reasons:</p>
-    <ul>
-      <li><b>Unseen symbols.</b> A symbol that never appears in the sample gets \( \hat p = 0 \) and contributes nothing, although its true surprise is large.</li>
-      <li><b>The sample fits itself.</b> By Gibbs' inequality (part 4), the sample's own frequencies \( \hat p \) give the shortest code for the sample: \( H(\hat p) \le H(\hat p, p) \). The right-hand side is linear in \( \hat p \) and \( \mathbb{E}[\hat p] = p \), so \( \mathbb{E}[H(\hat p, p)] = H(p) \). Taking expectations, \( \mathbb{E}[\hat H] \le H(p) \). (The same conclusion follows from Jensen's inequality, since <var>H</var> is concave.) The estimator learns the noise in the sample and mistakes it for structure.</li>
-    </ul>
-    <p><b>The key idea: estimate the bias and add it back.</b> Work in nats (natural log) and write \( \hat p_x = p_x + \delta_x \), where \( \delta_x \) is the sampling error. Expand \( f(t) = -t \ln t \) to second order around each \( p_x \): \( f'(t) = -\ln t - 1 \), \( f''(t) = -1/t \), so</p>
-    <div class="eq">\[ H(\hat p) \approx H(p) + \sum_x f'(p_x)\,\delta_x - \sum_x \frac{\delta_x^2}{2p_x} . \]</div>
-    <p>The linear term has mean zero, because \( \mathbb{E}[\delta_x] = 0 \). The count \( n_x \) is binomial, so \( \mathbb{E}[\delta_x^2] = \operatorname{Var}(\hat p_x) = p_x(1-p_x)/N \). Over the <var>m</var> symbols with \( p_x &gt; 0 \):</p>
-    <div class="eq">\[ \mathbb{E}[H(\hat p)] - H(p) \approx -\sum_x \frac{p_x(1-p_x)}{2Np_x} = -\frac{\sum_x (1-p_x)}{2N} = -\frac{m-1}{2N}\ \text{nats} = -\frac{m-1}{2N\ln 2}\ \text{bits}. \]</div>
-    <p>The <b>Miller–Madow</b> estimator adds this back, using the number of <em>observed</em> symbols for <var>m</var> because the true number is unknown:</p>
-    <div class="eq">\[ \hat H_{\text{MM}} = \hat H_{\text{plug-in}} + \frac{m - 1}{2N} \ \text{nats} \;=\; \hat H_{\text{plug-in, bits}} + \frac{m - 1}{2N \ln 2}\ \text{bits}. \]</div>
-    <p>Take care with the units: the correction is in nats, so dividing by ln 2 (multiplying by 1.443) converts it to bits. Forgetting this under-corrects by about 30%.</p>
-    <p><b>Cost.</b> Both estimators count the sample once, O(<var>N</var>) time, and sum over the distinct symbols, O(<var>m</var>) time and space.</p>
-    <p><b>Confirm by measuring.</b> <em>Alice</em>'s letters and spaces, lowercased (28 symbols: 26 letters, the space, and one accented letter that occurs once), have entropy 4.088 bits over the full 137,958 characters. Draw random samples of size <var>N</var> from the text and average each estimator over 2,000 samples:</p>
-    <div class="tablewrap"><table>
-      <tr><th class="num"><var>N</var></th><th class="num">Plug-in (mean)</th><th class="num">Bias</th><th class="num">Miller–Madow (mean)</th><th class="num">Bias</th><th class="num">Symbols seen</th><th class="num">Predicted bias (<var>m</var> = 28)</th></tr>
-      <tr><td class="num">100</td><td class="num">3.896</td><td class="num">−0.192</td><td class="num">4.039</td><td class="num">−0.049</td><td class="num">20.8</td><td class="num">−0.195</td></tr>
-      <tr><td class="num">1,000</td><td class="num">4.068</td><td class="num">−0.020</td><td class="num">4.086</td><td class="num">−0.002</td><td class="num">25.9</td><td class="num">−0.019</td></tr>
-      <tr><td class="num">10,000</td><td class="num">4.086</td><td class="num">−0.002</td><td class="num">4.088</td><td class="num">0.000</td><td class="num">27.1</td><td class="num">−0.002</td></tr>
-      <tr class="hi"><td class="num">137,958 (all)</td><td class="num" colspan="6">4.088 bits: the target</td></tr>
-    </table></div>
-    <p>The derivation predicts the plug-in bias almost exactly (−0.195 predicted, −0.192 measured at <var>N</var> = 100), and the bias shrinks like 1/<var>N</var>. Miller–Madow removes most of it, but not all at <var>N</var> = 100: it can only use the 20.8 symbols it saw, not the true 28. For comparison, the spread of the plug-in estimate from sample to sample at <var>N</var> = 100 is 0.128 bits (standard deviation), smaller than the bias. Averaging more samples of the same size does not remove a bias.</p>
-    <p><b>Where BPE uses it.</b> Every count-based number about a tokenizer is a plug-in estimate. The token-entropy column above is computed from token counts; at a large vocabulary many tokens are seen only a few times, so that column (and the efficiency built on it) is biased low, and the bias grows with <var>V</var> for a fixed amount of text. The same effect makes rare tokens look better estimated than they are (Day 2).</p>
-
-    <div class="part"><b>Practice</b><ul>
-      <li>Compute the entropy of a fair die and of a die with probabilities ½, ⅒, ⅒, ⅒, ⅒, ⅒, by hand, then with <code>entropy()</code>.</li>
-      <li>Show that \( I(p) = -\log_2 p \) is the only function with the three properties of part 1, assuming it is monotone.</li>
-      <li>Prove bits per byte = (bits per token) × (tokens per byte), then reproduce the unigram rows of the worked example.</li>
-      <li>Compute <var>D</var>(<var>p</var>‖<var>q</var>) and <var>D</var>(<var>q</var>‖<var>p</var>) for <var>p</var> = (½, ¼, ¼), <var>q</var> = (0.7, 0.2, 0.1). Is KL divergence symmetric? What does each direction mean as wasted bits?</li>
-      <li>Reproduce the estimator table: plug-in and Miller–Madow on 2,000 random samples of each size.</li>
-    </ul></div>
-    <div class="part"><b>Problem variations</b><ul>
-      <li>A bigram model over tokens: how much lower does bits per byte go? Why does its plug-in estimate need far more data than the unigram's?</li>
-      <li>Compare with <code>gzip</code>, <code>bz2</code> and <code>xz</code> on the same file. Why is the comparison not quite fair to the compressors, or to BPE?</li>
-      <li>Two hosted models report perplexity 8 and 12 with different tokenizers. What do you need to know before ranking them?</li>
-      <li>Apply Miller–Madow to the token distribution of BPE 3,208. Does the efficiency curve still fall at large <var>V</var>?</li>
-      <li>Samples of <em>contiguous</em> text instead of random characters: is the plug-in bias larger or smaller? (Neighbouring letters are not independent.)</li>
-    </ul></div>
-    <details class="sol"><summary>Solutions</summary><div>
-<div class="code"><div class="ch"><span>entropy.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import math
-from collections import Counter
-
-def entropy(counts):
-    """Entropy in bits of the distribution given by a list of counts."""
-    n = sum(counts)
-    return -sum(c / n * math.log2(c / n) for c in counts if c)
-
-def cross_entropy(p, q):
-    """Average code length in bits when data from p is coded with a code built for q."""
-    return -sum(p[x] * math.log2(q[x]) for x in p if p[x])
-
-entropy([1] * 6)             # 2.585 bits (= log2 6)
-entropy([5, 1, 1, 1, 1, 1])  # 2.161 bits</code></pre></div>
-<div class="code"><div class="ch"><span>unigram.py · uses encode() from the week reading R.6</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def unigram_bits_per_byte(train_txt, test_txt, merges):
-    tr, te = encode(train_txt, merges), encode(test_txt, merges)
-    c, n, V = Counter(tr), len(tr), 256 + len(merges)
-    bits = -sum(math.log2((c[t] + 1) / (n + V)) for t in te)   # add-one smoothing
-    bits_per_token = bits / len(te)
-    tokens_per_byte = len(te) / len(test_txt.encode())
-    return bits_per_token * tokens_per_byte                     # = bits / bytes</code></pre></div>
-<div class="code"><div class="ch"><span>estimators.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def plugin_entropy(sample):
-    """Maximum-likelihood ("plug-in") estimate in bits: entropy of the sample's own frequencies."""
-    return entropy(list(Counter(sample).values()))
-
-def miller_madow(sample):
-    """Plug-in plus the first-order bias correction (m - 1) / (2N) nats, converted to bits."""
-    m, N = len(set(sample)), len(sample)
-    return plugin_entropy(sample) + (m - 1) / (2 * N * math.log(2))</code></pre></div>
-    <p>Bits per byte: \( \frac{B}{N} = \frac{B}{T}\cdot\frac{T}{N} \) because <var>T</var> cancels; it is an identity, true for any tokenizer. For the divergences, <var>D</var>(<var>p</var>‖<var>q</var>) = <var>H</var>(<var>p</var>, <var>q</var>) − <var>H</var>(<var>p</var>) = 0.168 bits and <var>D</var>(<var>q</var>‖<var>p</var>) = 0.143 bits: not symmetric. The first is the waste when text from <var>p</var> is coded with <var>q</var>'s code, the second the reverse. On <em>Alice</em>, <code>gzip</code> 2.61, <code>xz</code> 2.32, <code>bz2</code> 2.05 bits per byte. The comparison favours BPE slightly, because the compressors pay to store their dictionary inside the output and the unigram model's vocabulary is not counted: exactly the term MDL adds back. For the hosted models you need bits per byte, or at least tokens per byte for each tokenizer on the same text.</p></div></details>
-    <div class="part"><b>Further reading and watching</b><ul>
-      <li>Chris Olah, <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> (blog): surprise, entropy, cross-entropy and KL drawn as code lengths</li>
-      <li>3Blue1Brown, <a href="https://www.youtube.com/watch?v=v68zYyaEmEA">Solving Wordle using information theory</a> (video)</li>
-      <li>Shannon, <a href="https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf">A Mathematical Theory of Communication</a> (PDF, sections 1–9)</li>
-      <li>David MacKay, <a href="http://www.inference.org.uk/itprnn/book.pdf">Information Theory, Inference, and Learning Algorithms</a> (free book), chapters 2, 4 and 5</li>
-      <li>Cover and Thomas, <em>Elements of Information Theory</em>, chapters 2 (entropy, KL, Jensen) and 5 (data compression)</li>
-      <li>Paninski, <em>Estimation of Entropy and Mutual Information</em> (Neural Computation, 2003): the bias of the plug-in estimator and its corrections</li>
-      <li>Delétang et al., <a href="https://arxiv.org/abs/2309.10668">Language Modeling Is Compression</a> (paper)</li>
-      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16842">Tokenization and the Noiseless Channel</a> (paper): efficiency and Rényi entropy · <a href="https://en.wikipedia.org/wiki/Minimum_description_length">Minimum description length</a></li>
-    </ul></div>
-  </div>
-
-  <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · optimal prefix codes</span></div>
-
-    <h4>1 · Prefix codes: decoding without separators</h4>
-    <p><b>The question.</b> Give each symbol a binary codeword so that the concatenation of codewords, with no separators, can be split back into symbols in exactly one way, and the average length is small.</p>
-    <p><b>First attempt.</b> A fixed-length code: with <var>n</var> symbols, every codeword has ⌈log₂ <var>n</var>⌉ bits. Decoding is easy (cut every 5 bits for 28 symbols), but frequent and rare symbols cost the same. So try variable lengths, say <code>a</code> = 0, <code>b</code> = 01, <code>c</code> = 10. The string <code>010</code> now reads as <code>a c</code> (0 | 10) or as <code>b a</code> (01 | 0). Variable lengths alone are ambiguous.</p>
-    <p><b>The key idea.</b> A <b>prefix code</b> (also called prefix-free) is one in which no codeword is a prefix of another. Draw the codewords as paths in a binary tree, 0 = left, 1 = right: the <b>code tree</b>. Prefix-free means every codeword ends at a leaf, never at a node that lies on the way to another codeword. Decoding is then a walk: start at the root, follow one edge per bit, and when you reach a leaf, output its symbol and jump back to the root. At a leaf there is no choice to make, so the split is unique, and the decoder never needs to look ahead.</p>
-    <p>In the bad example, <code>0</code> (<code>a</code>) is a prefix of <code>01</code> (<code>b</code>), so <code>a</code> sits on the path to <code>b</code>. The cost of a code for symbol counts <var>f</var><sub><var>i</var></sub> and codeword lengths ℓ<sub><var>i</var></sub> is the total number of bits, \( L = \sum_i f_i \ell_i \), which is the sum of <var>f</var> × depth over the leaves of its code tree.</p>
-
-    <h4>2 · The Kraft inequality: short codewords are scarce</h4>
-    <p><b>The question.</b> Which lists of lengths ℓ<sub>1</sub>, …, ℓ<sub><var>n</var></sub> can be the codeword lengths of a prefix code? Lengths 1, 1, 2 cannot: the two length-1 codewords <code>0</code> and <code>1</code> leave no room for a third.</p>
-    <p><b>Statement.</b> A prefix code with lengths ℓ<sub><var>i</var></sub> exists if and only if</p>
-    <div class="eq">\[ \sum_{i=1}^{n} 2^{-\ell_i} \le 1 . \]</div>
-    <p><b>Proof (only if).</b> Let <var>L</var> = max ℓ<sub><var>i</var></sub> and picture the complete binary tree of depth <var>L</var>, which has 2<sup><var>L</var></sup> leaves at the bottom. A codeword at depth ℓ<sub><var>i</var></sub> is the root of a subtree containing 2<sup><var>L</var>−ℓ<sub><var>i</var></sub></sup> of those bottom leaves: all the length-<var>L</var> strings that start with it. Because the code is prefix-free, no codeword lies inside another's subtree, so these sets of bottom leaves are disjoint. Disjoint subsets of 2<sup><var>L</var></sup> leaves have sizes summing to at most 2<sup><var>L</var></sup>:</p>
-    <div class="eq">\[ \sum_i 2^{L-\ell_i} \le 2^L \quad\Longrightarrow\quad \sum_i 2^{-\ell_i} \le 1 . \]</div>
-    <p><b>Proof (if).</b> Sort the lengths ascending and give codewords out in order, each time taking the leftmost free node at the required depth and marking its whole subtree used. Before placing codeword <var>j</var>, the used part of the bottom level is \( \sum_{i&lt;j} 2^{L-\ell_i} &lt; 2^L \) (strictly, because codeword <var>j</var>'s own share is still unspent). Each earlier codeword is no deeper than ℓ<sub><var>j</var></sub>, so it covers a whole number of depth-ℓ<sub><var>j</var></sub> subtrees, and taking leftmost nodes keeps the used region a left-aligned block of them. So a free node exists at depth ℓ<sub><var>j</var></sub>. This construction is exactly <b>canonical Huffman</b> coding (below): it needs only the lengths.</p>
-    <p>Example: lengths 1, 2, 3, 4, 4 give ½ + ¼ + ⅛ + 1⁄16 + 1⁄16 = 1, so the tree is full (every internal node has two children). Lengths 1, 1, 2 give 1¼ &gt; 1: impossible, as seen above.</p>
-
-    <h4>3 · Both halves of the source coding theorem</h4>
-    <p><b>Lower bound: every prefix code has \( L/N \ge H \).</b> Let <var>p</var><sub><var>i</var></sub> = <var>f</var><sub><var>i</var></sub>/<var>N</var> and define \( K = \sum_i 2^{-\ell_i} \le 1 \) (Kraft) and the distribution \( q_i = 2^{-\ell_i}/K \). Then \( \ell_i = -\log_2 q_i - \log_2 K \), and the average length is</p>
-    <div class="eq">\[ \bar\ell = \sum_i p_i \ell_i = H(p, q) - \log_2 K \;\ge\; H(p) - \log_2 K \;\ge\; H(p), \]</div>
-    <p>using Gibbs' inequality (ML block, part 4) for the first step and \( K \le 1 \) for the second.</p>
-    <p><b>Upper bound: some prefix code has \( \bar\ell &lt; H + 1 \).</b> Use the <b>Shannon code lengths</b> \( \ell_i = \lceil -\log_2 p_i \rceil \), the surprise rounded up. They satisfy Kraft, because \( \ell_i \ge -\log_2 p_i \) means \( 2^{-\ell_i} \le p_i \), and \( \sum_i p_i = 1 \). So a prefix code with these lengths exists, and since \( \lceil t \rceil &lt; t + 1 \),</p>
-    <div class="eq">\[ \bar\ell = \sum_i p_i \lceil -\log_2 p_i \rceil &lt; \sum_i p_i(-\log_2 p_i + 1) = H + 1 . \]</div>
-    <p>The best prefix code is at least as good as the Shannon code, so it too lands in [<var>H</var>, <var>H</var> + 1). Shannon's code is not optimal itself, as the example below shows. Huffman's algorithm finds the optimum.</p>
-
-    <h4>4 · Huffman's algorithm</h4>
-    <p><b>The question.</b> Given counts <var>f</var><sub>1</sub>, …, <var>f</var><sub><var>n</var></sub>, find the prefix code (the code tree) that minimises \( L = \sum_i f_i \ell_i \).</p>
-    <p><b>First attempts.</b> Trying every tree is hopeless: the number of full binary trees with <var>n</var> labelled leaves grows faster than exponentially. Rounding surprises up (Shannon's code) is fast but can waste close to a bit per symbol.</p>
-    <p><b>The key idea.</b> The two rarest symbols should be the two deepest leaves, side by side. Once they are siblings, they behave like one symbol whose count is their sum. So: <b>repeatedly take the two smallest counts, join them under a new node whose count is their sum, and put that node back.</b> When one node is left, it is the root. Keep the counts in a min-heap so "take the smallest" is fast.</p>
-    <p><b>Worked by hand.</b> A message of 25 symbols with counts <code>a</code> 10, <code>b</code> 6, <code>c</code> 4, <code>d</code> 3, <code>e</code> 2. Highlighted nodes are the two popped; outlined nodes were just created.</p>
+    <h4>Definitions: quantiles and order statistics</h4>
+    <p>Let <var>X</var> be the cost of a random request, with <b>cumulative distribution function</b> (CDF) \( F(x) = P(X \le x) \). The <b><var>p</var>-quantile</b> is the smallest value that at least a fraction <var>p</var> of requests do not exceed:</p>
+    <div class="eq">\[ q_p = \inf\{\,x : F(x) \ge p\,\}. \]</div>
+    <p>The <b>p50</b> (median), <b>p95</b> and <b>p99</b> are \( q_{0.5}, q_{0.95}, q_{0.99} \). From a sample \( X_1,\dots,X_n \) we only have the <b>empirical CDF</b> \( F_n(x) = \frac1n \#\{i : X_i \le x\} \), the fraction of the sample at or below <var>x</var>. Sort the sample: the <var>k</var>-th smallest value \( X_{(k)} \) is the <var>k</var>-th <b>order statistic</b>. Applying the definition of \( q_p \) to \( F_n \) gives the <b>nearest-rank estimator</b>:</p>
+    <div class="eq">\[ \hat q_p = X_{(\lceil p n\rceil)} , \]</div>
+    <p>because \( F_n(X_{(k)}) \ge k/n \), and <var>k</var> = ⌈<var>pn</var>⌉ is the smallest <var>k</var> with <var>k</var>/<var>n</var> ≥ <var>p</var>.</p>
     <div class="dg"><div class="steps">
-      <div class="step"><span class="k">start</span><span class="seq"><span class="nd hot">e 2</span><span class="nd hot">d 3</span><span class="nd">c 4</span><span class="nd">b 6</span><span class="nd">a 10</span></span><span class="why"><b>Pop e, d.</b> Merge into a node of count 2 + 3 = 5. This merge costs 5 bits: every e and d gains one bit.</span></div>
-      <div class="step"><span class="k">merge 1</span><span class="seq"><span class="nd hot">c 4</span><span class="nd new hot">de 5</span><span class="nd">b 6</span><span class="nd">a 10</span></span><span class="why"><b>Pop c, de.</b> New node of count 9.</span></div>
-      <div class="step"><span class="k">merge 2</span><span class="seq"><span class="nd hot">b 6</span><span class="nd new hot">cde 9</span><span class="nd">a 10</span></span><span class="why"><b>Pop b, cde.</b> New node of count 15.</span></div>
-      <div class="step"><span class="k">merge 3</span><span class="seq"><span class="nd hot">a 10</span><span class="nd new hot">bcde 15</span></span><span class="why"><b>Pop a, bcde.</b> New node of count 25: the root.</span></div>
-      <div class="step"><span class="k">done</span><span class="seq"><span class="nd new">abcde 25</span></span><span class="why"><b>Total cost</b> = 5 + 9 + 15 + 25 = <b>54 bits</b>: the sum of the merged counts.</span></div>
-    </div>
-<pre>            (25)
-          0/    \1
-        a 10    (15)
-              0/    \1
-            b 6     (9)
-                  0/   \1
-                c 4    (5)
-                     0/   \1
-                    e 2   d 3</pre>
-      <div class="cap">The code tree. The first node popped in each merge goes left (0). Reading the path to each leaf gives its codeword.</div></div>
-    <p>Why the sum of merged counts equals the cost: each merge puts every leaf below the new node one level deeper, adding one bit per occurrence of each of those symbols. A symbol at depth ℓ is below exactly ℓ merged nodes, so it is counted ℓ times: \( \sum_{\text{merges}} (\text{merged count}) = \sum_i f_i \ell_i \).</p>
+      <div class="step"><span class="k">sort</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd hot">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd">3100</span></span><span class="why">p50: rank ⌈0.5·10⌉ = <b>5</b> → 310.</span></div>
+      <div class="step"><span class="k">p90</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd hot">950</span><span class="nd">3100</span></span><span class="why">rank ⌈0.9·10⌉ = <b>9</b> → 950.</span></div>
+      <div class="step"><span class="k">p99</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd hot">3100</span></span><span class="why">rank ⌈9.9⌉ = <b>10</b>: with 10 samples, "p99" is just the maximum.</span></div>
+    </div><div class="cap">The nearest-rank percentile picks one sorted value. With <var>n</var> = 10 the p99 is the largest value, so it says nothing about the 1% tail. How large must <var>n</var> be? That is the next question.</div></div>
+
+    <h4>Why the estimator works, and how far off it can be</h4>
+    <p><b>The key identity.</b> Fix a value <var>x</var>. Each sample is ≤ <var>x</var> with probability <var>F</var>(<var>x</var>), independently, so the count \( B_x = \#\{i : X_i \le x\} \) is Binomial(<var>n</var>, <var>F</var>(<var>x</var>)). The <var>k</var>-th smallest value is ≤ <var>x</var> exactly when at least <var>k</var> samples are ≤ <var>x</var>:</p>
+    <div class="eq">\[ X_{(k)} \le x \iff B_x \ge k, \qquad\text{so}\qquad P\big(X_{(k)} \le x\big) = P\big(\mathrm{Bin}(n, F(x)) \ge k\big). \]</div>
+    <p><b>Consistency.</b> Take <var>F</var> continuous and strictly increasing near \( q_p \), and any ε &gt; 0. Then \( F(q_p - \varepsilon) = p - \delta_1 \) and \( F(q_p + \varepsilon) = p + \delta_2 \) with δ<sub>1</sub>, δ<sub>2</sub> &gt; 0. With <var>k</var> = ⌈<var>pn</var>⌉, the estimate is too low only if \( B_{q_p-\varepsilon} \ge k \ge pn \), that is, if a Binomial with mean \( (p-\delta_1)n \) exceeds its mean by \( \delta_1 n \). Chebyshev bounds that by \( \frac{\mathrm{Var}}{(\delta_1 n)^2} \le \frac{n/4}{\delta_1^2 n^2} = \frac{1}{4\delta_1^2 n} \to 0 \). The "too high" side is the same argument. So \( \hat q_p \to q_p \) in probability.</p>
+    <p><b>A confidence interval with no assumptions about <var>F</var>.</b> Put <var>x</var> = \( q_p \) in the identity. For continuous <var>F</var>, \( F(q_p) = p \), so \( B = \#\{X_i \le q_p\} \sim \mathrm{Bin}(n, p) \), and</p>
+    <div class="eq">\[ P\big(X_{(j)} \le q_p &lt; X_{(k)}\big) = P(B \ge j) - P(B \ge k) = P(j \le B &lt; k) = \sum_{i=j}^{k-1} \binom{n}{i} p^i (1-p)^{n-i}. \]</div>
+    <p>This probability does not depend on <var>F</var> at all. Choose the narrowest ranks <var>j</var> &lt; <var>k</var> whose binomial mass is at least 0.95, and \( [X_{(j)}, X_{(k)}] \) is a 95% confidence interval for the true p99, whatever the distribution. This is the <b>order-statistic interval</b>.</p>
+    <p><b>How many samples p99 needs.</b> The highest rank is <var>n</var>, so the best possible upper end is \( X_{(n)} \), the sample maximum. It fails when every sample is below \( q_{0.99} \), which happens with probability \( 0.99^n \). For a 95% upper bound we need \( 0.99^n \le 0.05 \), so</p>
+    <div class="eq">\[ n \ \ge\ \frac{\ln 0.05}{\ln 0.99} = 298.07 . \]</div>
+    <p>With fewer than 299 samples no method can bound p99 from above at 95% using sample values. At <var>n</var> = 100 the chance that all samples miss the 1% tail is \( 0.99^{100} = 0.366 \).</p>
+    <p><b>How wide.</b> A first-order (delta method) approximation shows why tail percentiles are noisy. Near \( q_p \), \( F_n \) rises with slope about <var>f</var>(\( q_p \)), the density there, and \( F_n(\hat q_p) \approx p \). Linearize: \( F_n(\hat q_p) \approx F_n(q_p) + f(q_p)(\hat q_p - q_p) \), so \( \hat q_p - q_p \approx \frac{p - F_n(q_p)}{f(q_p)} \). Since \( n F_n(q_p) \sim \mathrm{Bin}(n,p) \), \( \mathrm{Var}(F_n(q_p)) = p(1-p)/n \), and</p>
+    <div class="eq">\[ \mathrm{Var}(\hat q_p) \approx \frac{p(1-p)}{n\, f(q_p)^2}. \]</div>
+    <p>In a heavy tail the density at \( q_{0.99} \) is tiny (few requests have costs near it), and dividing by its square makes the variance large. Compare the mean, whose variance is \( \sigma^2/n \): that does not involve a density at all.</p>
+
+    <h4>The bootstrap</h4>
+    <p>The order-statistic interval works only for quantiles. For any other statistic (a ratio, a difference of two p99s between versions, an AUC on Day 5) we need a general tool. The sampling distribution of an estimator \( \hat\theta = t(X_1,\dots,X_n) \) depends on the unknown <var>F</var>. The <b>plug-in principle</b>: replace <var>F</var> by \( F_n \), the distribution that puts mass 1/<var>n</var> on each observed value, and compute the sampling distribution under \( F_n \) by simulation. Drawing <var>n</var> values from \( F_n \) is drawing <var>n</var> values from the sample <em>with replacement</em>. That is the <b>bootstrap</b> (Efron, 1979):</p>
+    <ol>
+      <li>Repeat <var>B</var> times: draw a resample \( X^*_1,\dots,X^*_n \) with replacement from the data, and compute \( \hat\theta^*_b = t(X^*) \).</li>
+      <li>The <b>percentile interval</b> is the 2.5% and 97.5% quantiles of \( \hat\theta^*_1,\dots,\hat\theta^*_B \).</li>
+    </ol>
+    <p><b>Why it can fail for p99.</b> A resample contains only values from the sample, so every bootstrap p99 is at most the sample maximum \( X_{(n)} \). Whenever the whole sample lies below the true \( q_{0.99} \), the bootstrap interval lies below it too and misses. That has probability \( 0.99^{100} = 0.366 \) at <var>n</var> = 100, so the coverage of the "95%" bootstrap interval is at most 0.634 there. The bootstrap is justified when \( \hat\theta \) is a smooth function of \( F_n \) and <var>n</var> is large; an extreme order statistic from a small sample is neither.</p>
+    <p><b>Cost.</b> The nearest-rank percentile: sort, O(<var>n</var> log <var>n</var>), or O(<var>n</var>) expected with quickselect (Day 1). The bootstrap: <var>B</var> resamples of <var>n</var> draws plus a percentile each, O(<var>B</var>·<var>n</var> log <var>n</var>) as written below (O(<var>Bn</var>) with selection), and O(<var>Bn</var>) memory when vectorized. The order-statistic interval: O(<var>n</var> log <var>n</var>) for the sort plus O(<var>n</var> log <var>n</var>) to scan ranks with a binary search over the binomial CDF.</p>
+    <div class="code"><div class="ch"><span>percentiles.py · nearest rank, bootstrap CI, order-statistic CI</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import math
+import numpy as np
+
+def percentile(xs, p):
+    """Nearest-rank p-th percentile: the ceil(p·n)-th smallest value (1-based)."""
+    s = sorted(xs)
+    return s[max(1, math.ceil(p * len(s))) - 1]
+
+def bootstrap_ci(xs, p=0.99, b=2000, level=0.95, seed=0):
+    """Percentile bootstrap: resample with replacement, recompute, take the middle 95%."""
+    rng = np.random.default_rng(seed)
+    x = np.sort(np.asarray(xs))
+    n = len(x)
+    k = max(1, math.ceil(p * n)) - 1
+    reps = np.sort(x[rng.integers(0, n, size=(b, n))], axis=1)[:, k]
+    a = (1 - level) / 2
+    return np.quantile(reps, a), np.quantile(reps, 1 - a)
+
+def order_stat_ci(xs, p=0.99, level=0.95):
+    """Distribution-free CI [x_(j), x_(k)): P(j &lt;= B &lt; k) &gt;= level, where B ~ Binomial(n, p)."""
+    s = sorted(xs)
+    n = len(s)
+    logpmf = [math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1)
+              + i * math.log(p) + (n - i) * math.log1p(-p) for i in range(n + 1)]
+    cdf = np.cumsum(np.exp(logpmf))            # cdf[i] = P(B &lt;= i)
+    best = None
+    for j in range(1, n + 1):                  # P(j &lt;= B &lt; k) = cdf[k-1] - cdf[j-1]
+        k = int(np.searchsorted(cdf, cdf[j - 1] + level - 1e-12)) + 1
+        k = min(k, n + 1)                      # k = n + 1: no sample value is high enough
+        if cdf[k - 1] - cdf[j - 1] &gt;= level - 1e-12 and (best is None or k - j &lt; best[1] - best[0]):
+            best = (j, k)
+    j, k = best
+    return s[j - 1], (s[k - 1] if k &lt;= n else math.inf)</code></pre></div>
+
+    <h4>Confirm by measuring</h4>
+    <p>Population (all 10,000 users): mean 1,477, p50 1,023, p90 3,015, p95 3,870, <b>p99 7,284</b>, p99.9 18,461, max 51,806. Now pretend we only see a random sample of <var>n</var> requests (users drawn uniformly with replacement):</p>
     <div class="tablewrap"><table>
-      <tr><th>Symbol</th><th class="num">Count</th><th>Huffman code</th><th class="num">Length</th><th class="num">Shannon length ⌈−log₂ p⌉</th></tr>
-      <tr><td><code>a</code></td><td class="num">10</td><td><code>0</code></td><td class="num">1</td><td class="num">2</td></tr>
-      <tr><td><code>b</code></td><td class="num">6</td><td><code>10</code></td><td class="num">2</td><td class="num">3</td></tr>
-      <tr><td><code>c</code></td><td class="num">4</td><td><code>110</code></td><td class="num">3</td><td class="num">3</td></tr>
-      <tr><td><code>d</code></td><td class="num">3</td><td><code>1111</code></td><td class="num">4</td><td class="num">4</td></tr>
-      <tr><td><code>e</code></td><td class="num">2</td><td><code>1110</code></td><td class="num">4</td><td class="num">4</td></tr>
-      <tr class="hi"><td>bits per symbol</td><td class="num">25</td><td>Huffman 54 / 25</td><td class="num">2.16</td><td class="num">70 / 25 = 2.80</td></tr>
+      <tr><th class="num">n</th><th class="num">sample p99</th><th class="num">bootstrap 95% CI</th><th class="num">order-statistic 95% CI</th><th class="num">sample mean, 95% CI</th></tr>
+      <tr><td class="num">100</td><td class="num">5,240</td><td class="num">[4,286, 9,894]</td><td class="num">[4,872, ∞)</td><td class="num">1,585 [1,292, 1,877]</td></tr>
+      <tr class="hi"><td class="num">1,000</td><td class="num">9,891</td><td class="num">[6,469, 14,518]</td><td class="num">[7,124, 15,025]</td><td class="num">1,553 [1,406, 1,701]</td></tr>
+      <tr><td class="num">10,000</td><td class="num">7,213</td><td class="num">[6,663, 8,143]</td><td class="num">[6,714, 8,228]</td><td class="num">1,474 [1,440, 1,508]</td></tr>
     </table></div>
-    <p>The entropy of these counts is 2.104 bits per symbol and a fixed-length code needs 3. Huffman (2.16) sits within the [<var>H</var>, <var>H</var> + 1) window and well below the Shannon code (2.80).</p>
-
-    <h4>5 · Why Huffman is optimal</h4>
-    <p>The proof has the two parts every greedy proof needs (Day 2): the greedy choice is safe (Lemma 1), and after making it, what remains is a smaller copy of the same problem (Lemma 2). Then induction.</p>
-    <p><b>A fact first.</b> In an optimal tree every internal node has two children. If a node had one child, you could delete it and lift its subtree up a level, shortening every codeword below it and keeping the code prefix-free. So the deepest leaf of an optimal tree always has a sibling, which is also a leaf.</p>
-    <p><b>Lemma 1 (the rarest two can be deepest siblings).</b> Let <var>x</var> and <var>y</var> be the two symbols with the smallest counts. Some optimal tree has <var>x</var> and <var>y</var> as sibling leaves at the maximum depth.</p>
-    <p><em>Proof, by exchange.</em> Take any optimal tree <var>T</var>, and let <var>b</var>, <var>c</var> be sibling leaves at the maximum depth (they exist by the fact above). Then \( f_x \le f_b \) (<var>x</var> is a rarest symbol) and \( d_x \le d_b \) (<var>b</var> is at the maximum depth). Swap the positions of <var>x</var> and <var>b</var>. Only those two terms of the cost change:</p>
-    <div class="eq">\[ L(T_{\text{swap}}) - L(T) = \big(f_x d_b + f_b d_x\big) - \big(f_x d_x + f_b d_b\big) = -\,(f_b - f_x)(d_b - d_x) \;\le\; 0, \]</div>
-    <p>because both brackets are non-negative. The swap does not increase the cost, and <var>T</var> was optimal, so the new tree is optimal too. Swap <var>y</var> with <var>c</var> the same way (\( f_y \le f_c \), \( d_y \le d_c \)). The result is an optimal tree with <var>x</var> and <var>y</var> as deepest siblings. ∎</p>
-    <p><b>Lemma 2 (merging gives the same problem, one symbol smaller).</b> Replace <var>x</var> and <var>y</var> by one new symbol <var>z</var> with \( f_z = f_x + f_y \). For any tree <var>T</var>′ on the new alphabet, expanding the leaf <var>z</var> into an internal node with children <var>x</var> and <var>y</var> gives a tree <var>T</var> on the original alphabet, and conversely collapsing sibling leaves <var>x</var>, <var>y</var> of a tree <var>T</var> gives <var>T</var>′. In both directions</p>
-    <div class="eq">\[ L(T) = L(T') + f_x + f_y , \]</div>
-    <p>because <var>x</var> and <var>y</var> sit at depth \( d_z + 1 \): \( f_x(d_z + 1) + f_y(d_z + 1) = f_z d_z + f_x + f_y \), and every other leaf keeps its depth. In the example, merging <code>d</code> and <code>e</code> into <code>z</code> (count 5) leaves counts 10, 6, 4, 5, whose Huffman tree costs 49 bits, and 49 + 3 + 2 = 54.</p>
-    <p><b>Theorem.</b> Huffman's tree is optimal, by induction on the number of symbols <var>n</var>.</p>
-    <ul>
-      <li><b>Base, <var>n</var> = 2.</b> Each symbol gets one bit, and no prefix code can do better (a 0-bit codeword cannot distinguish two symbols).</li>
-      <li><b>Step.</b> Huffman merges the rarest <var>x</var>, <var>y</var> into <var>z</var> and then runs on the <var>n</var> − 1 symbols, building <var>H</var>′, which is optimal for the smaller problem by the induction hypothesis. Its final tree is <var>H</var>′ with <var>z</var> expanded, so \( L(H) = L(H') + f_x + f_y \) (Lemma 2). Take the optimal tree <var>T</var>* from Lemma 1, where <var>x</var>, <var>y</var> are siblings, and collapse them: \( L(T^*) = L(T^{*\prime}) + f_x + f_y \ge L(H') + f_x + f_y = L(H) \), since <var>H</var>′ is optimal and <var>T</var>*′ is just some tree on the same <var>n</var> − 1 symbols. So <var>H</var> costs no more than an optimal tree: it is optimal. ∎</li>
-    </ul>
-    <p>Combined with part 3: \( H \le \bar\ell_{\text{Huffman}} &lt; H + 1 \), where <var>H</var> is the entropy of the counts. The lower bound holds for every prefix code; the upper bound holds because Huffman is at least as good as Shannon's code.</p>
-
-    <h4>6 · Cost</h4>
-    <ul>
-      <li><b>With a heap: O(<var>n</var> log <var>n</var>) time.</b> Building the heap from <var>n</var> counts is O(<var>n</var>) (Day 4 proves it). Each of the <var>n</var> − 1 merges does two pops and one push, each O(log <var>n</var>) because the heap holds at most <var>n</var> items. Computing every depth afterwards is one pass over the 2<var>n</var> − 1 nodes, O(<var>n</var>). Space: O(<var>n</var>) for the nodes.</li>
-      <li><b>Writing codewords out</b> costs O(Σ ℓ<sub><var>i</var></sub>) extra, the total length of the strings. That is O(<var>n</var> log <var>n</var>) for balanced counts but O(<var>n</var>²) when the counts grow like Fibonacci numbers, which make the tree a long chain. The dictionary-merging <code>huffman()</code> in the solution pays this cost; <code>huffman_lengths()</code> does not.</li>
-      <li><b>Already-sorted counts: O(<var>n</var>), no heap.</b> Keep two FIFO queues: the sorted leaves, and the merged nodes in the order they are created. The merged counts come out in non-decreasing order. Proof: at merge <var>k</var> + 1, every item in the pool either was in the pool at merge <var>k</var> and was not popped, so it is at least as large as both items popped then, or is the node created at merge <var>k</var>, which is their sum and also at least as large. So both items popped at merge <var>k</var> + 1 are at least as large as those popped at merge <var>k</var>, and so is their sum. Each queue therefore stays sorted, the smallest item is at the front of one of the two queues, and each pop is O(1). Total O(<var>n</var>) after sorting, O(<var>n</var> log <var>n</var>) including the sort.</li>
-    </ul>
-
-    <h4>7 · Confirm by measuring</h4>
-    <div class="metrics">
-      <div class="metric"><div class="v">4.134</div><div class="l">Huffman, bits per symbol: <em>Alice</em>'s 28 letters and space</div></div>
-      <div class="metric"><div class="v">4.088</div><div class="l">entropy of the same counts: the floor no code beats</div></div>
-      <div class="metric"><div class="v">5</div><div class="l">fixed-length code: ⌈log₂ 28⌉ bits</div></div>
+    <p>The <var>n</var> = 1,000 sample overshoots: its p99 is 9,891, 36% above the truth. Its top values are 8,821, 9,891, 10,442, 12,139, …, 33,312, 42,304, so the 990th value lands on whichever of a few sparse values the sample happened to draw. Both intervals still contain 7,284. At <var>n</var> = 100 the order-statistic interval has no upper end, as derived. Does "95%" mean 95%? Repeat the whole experiment on 200 independent samples and count how often each interval contains 7,284:</p>
+    <div class="chart"><div class="t">Coverage of nominal 95% intervals for p99 (200 repetitions each)</div>
+      <div class="br"><span>bootstrap, n = 100</span><span class="tr"><i style="width:62.5%;--c:var(--bad)"></i></span><span class="v">0.625</span></div>
+      <div class="br"><span>order-statistic, n = 100</span><span class="tr"><i style="width:98.5%"></i></span><span class="v">0.985</span></div>
+      <div class="br"><span>bootstrap, n = 1,000</span><span class="tr"><i style="width:92.5%;--c:var(--ai)"></i></span><span class="v">0.925</span></div>
+      <div class="br"><span>order-statistic, n = 1,000</span><span class="tr"><i style="width:96%"></i></span><span class="v">0.960</span></div>
+      <div class="cap">The bootstrap's 0.625 at n = 100 sits just under the bound 1 − 0.99<sup>100</sup> = 0.634 derived above. The order-statistic interval keeps its promise at both sizes (at n = 100 by reporting an unbounded upper end). The mean bootstrap width falls from 8,170 at n = 100 to 3,807 at n = 1,000.</div>
     </div>
-    <p>Huffman is 0.046 bits above the entropy, far inside the 1-bit window, and 17% shorter than the fixed-length code. Its code lengths satisfy Kraft with equality (the sum is exactly 1), as every full tree does. The heap version, the two-queue version and the sticks cost agree on the total.</p>
 
-    <h4>8 · Where BPE uses it, and where BPE differs</h4>
-    <p>Both exploit frequency, in opposite directions. Huffman keeps the symbols fixed and gives frequent ones <em>shorter codewords</em>; BPE keeps codewords fixed-size (one id each) and gives frequent strings <em>bigger symbols</em>. The model then plays the Huffman role: a well-trained model spends about −log₂ <var>q</var> bits per token, which is what bits per byte measures.</p>
-    <p>The proof is also where the two part ways. Huffman's merges <b>do not interact</b>: joining <var>x</var> and <var>y</var> leaves every other count unchanged, so the remaining problem is the same problem with one symbol fewer (Lemma 2), and the exchange in Lemma 1 touches only two terms of the cost. BPE's merges <b>do interact</b>: merging the pair (<code>a</code>, <code>b</code>) consumes occurrences of (<code>b</code>, <code>c</code>) and creates new pairs such as (<code>ab</code>, <code>c</code>), so after a merge the remaining problem has different counts, and the best first merge can make later merges worse. There is no Lemma 2 for BPE, which is why its greedy is not optimal (Day 2's counterexample).</p>
+    <h4>Where PYMK uses it</h4>
+    <p>Every latency promise in the design is a percentile: "p99 of the candidate read under budget", "p95 of the whole request". Dashboards compute them from samples of requests, and two versions of the service are compared by their p99s, so the comparison needs an interval, not two point estimates. Day 2 showed why the tail matters more under fan-out: a request that waits on many shards is as slow as the slowest one. This block says how much data that tail needs before you can trust a number about it. The rule of thumb that follows from the derivation: to talk about p99 you need many hundreds of requests per group; for p99.9, many thousands.</p>
 
     <div class="part"><b>Practice</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/last-stone-weight/">1046 Last Stone Weight</a>: a heap warm-up with the same loop shape as Huffman (pop two, push one), but with a max-heap.</li>
-      <li><a class="lc" href="https://leetcode.com/problems/minimum-cost-to-connect-sticks/">1167 Minimum Cost to Connect Sticks</a> (premium). In our words: you have sticks with positive integer lengths. Joining two sticks of lengths <var>x</var> and <var>y</var> makes one stick of length <var>x</var> + <var>y</var> and costs <var>x</var> + <var>y</var>. Join them all into one stick at minimum total cost. This is Huffman's cost exactly (the sum of merged counts), so the same proof shows that always joining the two shortest is optimal.</li>
-      <li>Implement Huffman with <code>heapq</code>; build a code for the letters and spaces of <code>alice.txt</code>; check the average length against 4.134, the entropy 4.088, and the fixed-length 5.</li>
-      <li>Implement canonical Huffman: from the code lengths alone, rebuild codewords, then encode and decode a slice of <em>Alice</em>.</li>
-      <li>Check Kraft for the lengths your Huffman code produced. Prove that a Huffman tree always meets it with equality.</li>
-      <li>Find counts for 6 symbols that make Huffman's tree a chain (depths 1, 2, 3, 4, 5, 5). What pattern do they follow?</li>
+      <li><a href="https://leetcode.com/problems/find-median-from-data-stream/">295 · Find Median from Data Stream</a>: a running p50 with two heaps. Then generalize it to a running p99.</li>
+      <li>Compute the smallest <var>n</var> for which the 95% order-statistic interval for p99.9 has a finite upper end. Then for p50.</li>
+      <li>On the week's graph, sample <var>n</var> = 300 requests 200 times. Measure the coverage of both intervals for p99 and explain the result using \( 0.99^{300} \).</li>
+      <li>Bootstrap the <em>difference</em> of two p99s: requests with hub capping (Day 2) versus without, on the same sampled users. Why resample users, not requests separately in each arm?</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>Ties: make the code deterministic (needed to decode on another machine). What extra field goes in the heap tuple?</li>
-      <li>Length-limited Huffman: no codeword may exceed <var>L</var> bits (hardware decoders need this). Greedy no longer works; look up the package-merge algorithm (Larmore and Hirschberg).</li>
-      <li><var>k</var>-ary Huffman (codewords over <var>k</var> digits): merge <var>k</var> at a time. Why must you first add zero-count dummy symbols until (<var>n</var> − 1) is divisible by (<var>k</var> − 1)?</li>
-      <li>Huffman-code BPE's tokens instead of letters. Bits per byte now? Compare with the unigram column.</li>
-      <li>The counts change while you code (adaptive Huffman). What has to be updated, and how often?</li>
+      <li>Costs arrive as a stream of billions of values, and you cannot keep them all. How would you estimate p99 with bounded memory? (A fixed-bucket histogram with logarithmic buckets bounds the relative error by the bucket width.)</li>
+      <li>Two servers each report their own p99. Can you combine two p99s into the p99 of the union? Prove that you cannot in general, and say what each server must send instead.</li>
+      <li>Request costs are not independent (a hub's friends all request at the same moment after a viral post). Which step of the binomial argument breaks?</li>
     </ul></div>
-    <details class="sol"><summary>Solutions</summary><div>
-<div class="code"><div class="ch"><span>huffman.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import heapq
-def huffman(freqs):
-    if len(freqs) == 1:
-        return {s: "0" for s in freqs}
-    heap = [(f, i, {s: ""}) for i, (s, f) in enumerate(freqs.items())]   # i breaks ties
-    heapq.heapify(heap); i = len(heap)
-    while len(heap) &gt; 1:
-        f1, _, a = heapq.heappop(heap); f2, _, b = heapq.heappop(heap)
-        merged = {s: "0" + c for s, c in a.items()} | {s: "1" + c for s, c in b.items()}
-        heapq.heappush(heap, (f1 + f2, i, merged)); i += 1
-    return heap[0][2]</code></pre></div>
-    <p>On <em>Alice</em>'s letters and spaces (28 symbols): Huffman averages <b>4.134</b> bits per symbol, the entropy is <b>4.088</b>, and a fixed-length code needs <b>5</b>. The counter <code>i</code> in the tuple is the tie-break: without it, two equal counts would compare the dictionaries and fail. This version copies dictionaries at every merge, so it does O(Σ ℓ<sub><var>i</var></sub>) extra work. The next version records parents instead and stays O(<var>n</var> log <var>n</var>), with an O(<var>n</var>) two-queue variant for sorted counts.</p>
-<div class="code"><div class="ch"><span>huffman_lengths.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def depths(parent):
-    """Node i's parent is parent[i] &gt; i; the last node is the root. Returns every node's depth."""
-    d = [0] * len(parent)
-    for i in range(len(parent) - 2, -1, -1):    # parents before children
-        d[i] = d[parent[i]] + 1
-    return d
-
-def huffman_lengths(freqs):
-    """Code length per symbol. O(n log n): n - 1 rounds of two pops and one push."""
-    syms = list(freqs)
-    if len(syms) == 1:
-        return {syms[0]: 1}
-    heap = [(f, i) for i, f in enumerate(freqs.values())]
-    heapq.heapify(heap)                          # O(n)
-    parent = [None] * len(syms)
-    while len(heap) &gt; 1:
-        f1, a = heapq.heappop(heap)
-        f2, b = heapq.heappop(heap)
-        parent.append(None)                      # new internal node
-        parent[a] = parent[b] = len(parent) - 1
-        heapq.heappush(heap, (f1 + f2, len(parent) - 1))
-    d = depths(parent)
-    return {s: d[i] for i, s in enumerate(syms)}
-
-def huffman_lengths_sorted(fs):
-    """Same lengths in O(n) when fs is already sorted ascending: two FIFO queues, no heap."""
-    if len(fs) == 1:
-        return [1]
-    leaves = deque((f, i) for i, f in enumerate(fs))
-    merged = deque()                             # merged weights arrive in ascending order
-    parent = [None] * len(fs)
-    def pop_min():
-        if not merged or (leaves and leaves[0][0] &lt;= merged[0][0]):
-            return leaves.popleft()
-        return merged.popleft()
-    while len(leaves) + len(merged) &gt; 1:
-        f1, a = pop_min()
-        f2, b = pop_min()
-        parent.append(None)
-        parent[a] = parent[b] = len(parent) - 1
-        merged.append((f1 + f2, len(parent) - 1))
-    return depths(parent)[:len(fs)]</code></pre></div>
-<div class="code"><div class="ch"><span>canonical.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def canonical_codes(lengths):
-    """Rebuild a prefix code from code lengths alone (the decoder needs only the lengths)."""
-    assert sum(2 ** -l for l in lengths.values()) &lt;= 1, "lengths violate Kraft"
-    code, prev, out = 0, 0, {}
-    for s, l in sorted(lengths.items(), key=lambda kv: (kv[1], kv[0])):
-        code &lt;&lt;= l - prev                        # move down to depth l in the code tree
-        out[s] = format(code, f"0{l}b")
-        code += 1                                # next free node at this depth
-        prev = l
-    return out
-
-def decode(bits, codes):
-    back, out, cur = {c: s for s, c in codes.items()}, [], ""
-    for b in bits:
-        cur += b
-        if cur in back:                          # prefix-free: the first match is the only one
-            out.append(back[cur]); cur = ""
-    assert cur == "", "trailing bits"
-    return out</code></pre></div>
-    <p>Canonical Huffman sorts symbols by (length, symbol) and counts upward in binary, appending a 0 each time the length grows. That is the "if" half of the Kraft proof: each codeword takes the leftmost free node at its depth. A decoder needs only the 28 lengths, not the tree. For the chain question, Fibonacci-like counts (1, 1, 2, 3, 5, 8) do it: each merged node is no larger than the count two places further on, so it is picked again in the very next merge.</p>
-<div class="code"><div class="ch"><span>leetcode_1046_1167.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def last_stone_weight(stones):                   # LeetCode 1046
-    heap = [-s for s in stones]                  # heapq is a min-heap: negate for max
-    heapq.heapify(heap)
-    while len(heap) &gt; 1:
-        y = -heapq.heappop(heap)                 # heaviest
-        x = -heapq.heappop(heap)                 # second heaviest
-        if y != x:
-            heapq.heappush(heap, -(y - x))
-    return -heap[0] if heap else 0
-
-def connect_sticks(sticks):                      # LeetCode 1167: this is Huffman's cost
-    heap = list(sticks)
-    heapq.heapify(heap)
-    cost = 0
-    while len(heap) &gt; 1:
-        a = heapq.heappop(heap)
-        b = heapq.heappop(heap)
-        cost += a + b                            # every merge pays the merged weight
-        heapq.heappush(heap, a + b)
-    return cost</code></pre></div>
-    <p>For 1167, every merged stick's length is added once per merge above it, so the total cost is Σ (length × depth) of the merge tree: Huffman's objective. Both run in O(<var>n</var> log <var>n</var>).</p></div></details>
-    <div class="part"><b>Further reading and watching</b><ul>
-      <li>Tom Scott, <a href="https://www.youtube.com/watch?v=JsTptu56GM8">How Computers Compress Text: Huffman Coding</a> (video)</li>
-      <li><a href="https://en.wikipedia.org/wiki/Huffman_coding">Huffman coding</a>, <a href="https://en.wikipedia.org/wiki/Kraft%E2%80%93McMillan_inequality">Kraft–McMillan inequality</a> and <a href="https://en.wikipedia.org/wiki/Canonical_Huffman_code">Canonical Huffman code</a> (Wikipedia)</li>
-      <li>D. A. Huffman, <em>A Method for the Construction of Minimum-Redundancy Codes</em> (Proceedings of the IRE, 1952): the original paper</li>
-      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>: the Huffman codes section of the greedy algorithms chapter</li>
-      <li>MacKay, <a href="http://www.inference.org.uk/itprnn/book.pdf">Information Theory, Inference, and Learning Algorithms</a>, chapter 5 (symbol codes)</li>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Smallest n.</b> The upper end can be finite only if \( P(B \le n-1) = 1 - p^n \ge 0.95 \), so \( n \ge \ln 0.05 / \ln p \). For p99.9 that is \( \ln 0.05 / \ln 0.999 \approx 2{,}994.2 \), so <var>n</var> ≥ 2,995. For p50, \( \ln 0.05/\ln 0.5 \approx 4.32 \), so <var>n</var> ≥ 5 for the upper end alone (a two-sided interval needs both tails, \( 2\cdot 0.5^n \le 0.05 \), so <var>n</var> ≥ 6).</p>
+      <p><b>n = 300.</b> \( 0.99^{300} \approx 0.049 \), so the bootstrap's ceiling on coverage is about 0.95: it can just reach nominal coverage in the best case, and in practice falls short, because resamples rarely contain the few largest values in the right proportion.</p>
+      <p><b>Paired difference.</b> Resample users and compute both arms on the same resampled users: the two p99s are positively correlated (the same heavy users are heavy in both), and pairing keeps that correlation, which makes the interval for the difference narrower and correct.</p>
+      <p><b>Combining p99s.</b> Two pairs of servers with the same per-server p99s but different union p99s prove that no formula in the two p99s can work. Pair A: server 1 has 100 values of 1 (p99 = 1); server 2 has 100 values of 2 (p99 = 2); the union's p99 (rank 198 of 200) is 2. Pair B: server 1 as before; server 2 has 98 values of 0 and 2 values of 2 (its 99th value is 2, so p99 = 2); the union is 98 zeros, 100 ones and 2 twos, and its 198th value is 1. Each server must send a mergeable summary instead: a histogram on shared bucket boundaries, which adds bucket by bucket.</p>
+      <p><b>Dependence.</b> \( B_x \) is binomial only if the samples are independent. Bursts of correlated requests make <var>B</var> overdispersed, so the true interval is wider than the formula says.</p>
+      <p>The code for the intervals is above; the coverage experiment is in <code>day_3_measure.py</code>, section 6.</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Bradley Efron and Robert Tibshirani, <em>An Introduction to the Bootstrap</em>, Chapman &amp; Hall, 1993: chapters 6 (standard errors), 13 (confidence intervals)</li>
+      <li>Larry Wasserman, <em>All of Statistics</em>, Springer, 2004: chapter 7 (the empirical CDF) and chapter 8 (the bootstrap)</li>
+      <li>H. A. David and H. N. Nagaraja, <em>Order Statistics</em>, 3rd ed., Wiley, 2003: distribution-free confidence intervals for quantiles</li>
+      <li>Jeffrey Dean and Luiz André Barroso, "The Tail at Scale", <em>Communications of the ACM</em>, 2013</li>
+      <li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)">Bootstrapping (statistics)</a> and <a href="https://en.wikipedia.org/wiki/Order_statistic">Order statistic</a> (Wikipedia)</li>
+      <li><a href="https://github.com/HdrHistogram/HdrHistogram">HdrHistogram</a>: a histogram designed for recording latency with bounded relative error</li>
     </ul></div>
   </div>
 
-  <div class="blk des">
-    <div class="bh"><span class="kind">Design · evaluating a tokenizer, with error bars</span></div>
+  <!-- ===================================================================== ALGORITHMS -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · sharding, consistent hashing, fan-out, caching</span></div>
+    <p>This block treats the placement of keys on machines as a subject in its own right. It starts with the simplest rule, proves exactly how badly it behaves when the cluster grows, derives consistent hashing and its load bounds, then measures what a PYMK request costs once its friends' lists are spread across shards.</p>
 
-    <h4>1 · What to measure</h4>
-    <p>An evaluation plan decides which tokenizer ships. It needs:</p>
-    <ul>
-      <li><b>Fertility</b>: tokens per word (or its inverse, bytes per token) for every language and domain you serve. A language with high fertility costs more per request and fits less text in the context window. Report the worst case, not just the average.</li>
-      <li><b>Held-out text</b> the tokenizer never saw. Measuring on training text flatters the tokenizer, because its merges were chosen to fit that text (Day 2).</li>
-      <li><b>Bits per byte</b> of a small model trained with each tokenizer (ML block, part 5), plus tasks known to be sensitive: arithmetic, spelling, code.</li>
-      <li><b>Paired comparisons</b>: the same sentences in each language (a parallel set like FLORES+), and the same documents for each tokenizer.</li>
-      <li><b>Under-trained tokens</b>: how many appear fewer than <var>τ</var> times in the <em>model's</em> training data.</li>
-      <li><b>Error bars</b> on every number. The rest of this block builds them.</li>
-    </ul>
+    <h4>1 · The question</h4>
+    <p>Store each user's adjacency list on one of <var>S</var> machines (<b>shards</b>). Every server that handles a request must be able to compute, from a user id alone, which shard holds that user's list, without asking anyone. When we add machines, as few lists as possible should move, because every moved list is data copied over the network while the service runs. And each shard should hold about the same number of lists.</p>
 
-    <h4>2 · Error bars: the question</h4>
-    <p><b>The question.</b> Hold out every 10th document of <em>Alice</em> (73 documents, 16,362 bytes) and train BPE with 1,000 tokens on the other 650. On the held-out documents it packs 2.913 bytes into each token. With a different 73 documents, the number would change. By how much? Without that, "2.913" cannot be compared with anything.</p>
-    <p><b>First attempt: treat every token as an independent sample.</b> The held-out set has 5,616 tokens; compute the spread of bytes per token across them and divide by √5,616. This interval is too narrow. Tokens inside one document are not independent: a document about the Queen repeats <code> Queen</code>, a chapter of dialogue is full of short tokens, a poem has its own rhythm. Ten more tokens from the same document tell you much less than ten tokens from a new document. The unit that is (roughly) independent is the <b>document</b>.</p>
-
-    <h4>3 · The bootstrap, from first principles</h4>
-    <p><b>Definitions.</b> We have a sample of <var>D</var> documents, assumed drawn independently from the population of text we care about, and a <b>statistic</b> computed from them, here \( \theta = \sum_d \text{bytes}_d \,/\, \sum_d \text{tokens}_d \) (total bytes over total tokens). Its <b>sampling distribution</b> is the spread of θ over many independent samples of <var>D</var> documents. We cannot draw new samples. The bootstrap's idea is to <b>use the sample as a stand-in for the population</b>:</p>
-    <div class="dg"><div class="vflow">
-      <div class="vbox"><b>73 held-out documents</b><span class="muted small">each reduced to (bytes, tokens): tokenize once</span></div>
-      <div class="varr">↓ draw 73 documents <em>with replacement</em> (some twice, some not at all)</div>
-      <div class="vbox"><b>one resample → θ*</b><span class="muted small">Σ bytes ÷ Σ tokens over the drawn documents</span></div>
-      <div class="varr">↓ repeat <var>B</var> = 10,000 times</div>
-      <div class="vbox" style="border-color:var(--accent)"><b>10,000 values of θ*</b><span class="muted small">sort them; the 2.5th and 97.5th percentiles bound the 95% interval</span></div>
+    <h4>2 · First attempt: hash mod N</h4>
+    <p>A <b>hash function</b> <var>h</var> maps a key to a 64-bit integer that looks uniformly random: changing the key slightly changes the output completely. The code below uses splitmix64, a few multiplications and shifts. <b>Mod-N sharding</b> puts key <var>k</var> on shard \( h(k) \bmod N \). It is fast, needs no state, and balances well: each key lands on each shard with probability 1/<var>N</var>, so on the week's graph with <var>N</var> = 16 the fullest shard holds 1.08 times the average.</p>
+    <p><b>Now add one machine.</b> Keys 0 to 11, with \( h(k) = k \) for the example:</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">mod 3</span><span class="seq"><span class="nd hot">0</span><span class="nd hot">1</span><span class="nd hot">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span></span><span class="why">shard of keys 0…11 with N = 3</span></div>
+      <div class="step"><span class="k">mod 4</span><span class="seq"><span class="nd hot">0</span><span class="nd hot">1</span><span class="nd hot">2</span><span class="nd new">3</span><span class="nd new">0</span><span class="nd new">1</span><span class="nd new">2</span><span class="nd new">3</span><span class="nd new">0</span><span class="nd new">1</span><span class="nd new">2</span><span class="nd new">3</span></span><span class="why">Only keys 0, 1, 2 stay: <b>3 of 12</b>. 9 of 12 move.</span></div>
     </div></div>
-    <p><b>Why it works.</b> If the documents are independent draws, the sample's empirical distribution (each document with probability 1/<var>D</var>) approximates the true distribution of documents, and better as <var>D</var> grows. Drawing <var>D</var> documents with replacement from it is a simulation of "collect a new sample of <var>D</var> documents", so the spread of θ* around θ approximates the spread of θ around the true value. The <b>percentile interval</b> takes the middle 95% of the sorted θ*. Two conditions matter: the resampled units must be independent (hence documents, not tokens), and the statistic should be smooth in the data (sums and ratios of sums are; a maximum is not).</p>
-    <p><b>Why resampling tokens is wrong, measured.</b> A bootstrap over the 5,616 individual tokens gives a 95% interval of width 0.084 bytes per token. The document bootstrap gives 0.235, 2.8 times wider. The token-level interval treats correlated tokens as fresh information and claims a precision the data do not have.</p>
-    <p><b>Cost.</b> Tokenize each held-out document once and store (bytes, tokens): O(total text). Each resample then costs O(<var>D</var>), so the bootstrap is O(<var>B</var> · <var>D</var>) time and O(<var>B</var>) space for the replicates (sorted in O(<var>B</var> log <var>B</var>)). Never re-tokenize inside the loop.</p>
-
-    <h4>4 · Paired comparison of two tokenizers</h4>
-    <p><b>The question.</b> BPE with 2,000 tokens packs 3.416 bytes per token on the same held-out documents. Is it really more compact than BPE 1,000 at 2.913, and by how much?</p>
-    <p><b>First attempt: two separate intervals.</b> Bootstrap each tokenizer independently and subtract. That treats the two numbers as if they came from different documents. But they come from the <em>same</em> documents, and documents differ a lot (per-document bytes per token ranges from 1.57 to 3.73 for BPE 1,000): a resample heavy in long-worded documents raises <em>both</em> numbers. Independent resampling counts this shared variation twice.</p>
-    <p><b>The key idea.</b> Resample document indices once per round, compute both statistics on that same resample, and record the difference \( \theta^*_B - \theta^*_A \). The interval of the differences is the paired interval. Why it is narrower:</p>
-    <div class="eq">\[ \operatorname{Var}(\theta_B - \theta_A) = \operatorname{Var}(\theta_A) + \operatorname{Var}(\theta_B) - 2\operatorname{Cov}(\theta_A, \theta_B) . \]</div>
-    <p>When the two tokenizers move together across documents, the covariance is large and cancels most of the variance. Independent resampling sets that covariance to zero.</p>
-    <p><b>Confirm by measuring.</b> 73 held-out documents (every 10th of 723), BPE trained on the other 650 at 1,000 and 2,000 tokens, <var>B</var> = 10,000 resamples, percentile 95% intervals:</p>
+    <p><b>Claim.</b> If \( h(k) \) is uniform, going from <var>N</var> to <var>N</var>+1 shards moves a fraction <var>N</var>/(<var>N</var>+1) of all keys.</p>
+    <p><b>Proof.</b> <var>N</var> and <var>N</var>+1 share no factor, so by the Chinese remainder theorem the map \( x \mapsto (x \bmod N,\ x \bmod (N{+}1)) \) is a bijection from \( \{0,\dots,N(N{+}1)-1\} \) onto all pairs (<var>a</var>, <var>b</var>) with <var>a</var> &lt; <var>N</var>, <var>b</var> &lt; <var>N</var>+1. A key stays exactly when <var>a</var> = <var>b</var>, and there are <var>N</var> such pairs (<var>b</var> = <var>N</var> cannot equal any <var>a</var>). So within every block of <var>N</var>(<var>N</var>+1) consecutive hash values, exactly <var>N</var> stay: a fraction 1/(<var>N</var>+1). A 64-bit hash spans so many blocks that the partial last block does not matter. ∎ Doubling is better but still bad: \( x \bmod 2N \) equals \( x \bmod N \) exactly when \( x \bmod 2N &lt; N \), half the time, so half the keys move.</p>
     <div class="tablewrap"><table>
-      <tr><th>Quantity</th><th class="num">Point estimate</th><th class="num">95% interval</th><th class="num">Width</th></tr>
-      <tr><td>bytes per token, BPE 1,000</td><td class="num">2.913</td><td class="num">[2.784, 3.019]</td><td class="num">0.235</td></tr>
-      <tr><td>bytes per token, BPE 2,000</td><td class="num">3.416</td><td class="num">[3.225, 3.558]</td><td class="num">0.333</td></tr>
-      <tr class="hi"><td>difference, paired bootstrap</td><td class="num">0.502</td><td class="num">[0.429, 0.564]</td><td class="num">0.135</td></tr>
-      <tr><td>difference, independent resamples (wrong)</td><td class="num">0.502</td><td class="num">[0.282, 0.697]</td><td class="num">0.415</td></tr>
+      <tr><th>Change (10,000 users)</th><th class="num">moved, measured</th><th class="num">predicted</th></tr>
+      <tr><td>16 → 17 shards</td><td class="num">0.9442</td><td class="num">16/17 = 0.9412</td></tr>
+      <tr><td>64 → 65 shards</td><td class="num">0.9845</td><td class="num">0.9846</td></tr>
+      <tr><td>256 → 257 shards</td><td class="num">0.9953</td><td class="num">0.9961</td></tr>
+      <tr><td>16 → 32 shards</td><td class="num">0.5014</td><td class="num">1/2</td></tr>
     </table></div>
-    <p>The two tokenizers' bootstrap replicates have correlation 0.954, so pairing makes the interval for the difference about three times narrower. The paired interval excludes 0 by a wide margin, and BPE 2,000 packs more bytes per token on 71 of the 73 documents. Conclusion: on this kind of text the 2,000-token vocabulary is about 0.50 bytes per token (17%) more compact, and we are confident of that to within about ±0.07.</p>
-    <p>Two cautions. The interval describes variation over documents <em>like these</em> (one English novel); it says nothing about other languages or domains, which need their own held-out sets. And more bytes per token is not automatically better: Day 2 explains what a larger vocabulary costs.</p>
-    <p><b>Where BPE uses it.</b> Every tokenizer decision in this week is a comparison of two numbers measured on the same text: two vocabulary sizes, two split patterns, two tokenizers for a new language. Pair them, resample documents, and report the interval for the difference.</p>
+    <p>Adding the 17th machine to 16 would copy 94% of the graph. The ideal is 1/17 = 5.9%: the new machine's fair share, and nothing else.</p>
+
+    <h4>3 · Consistent hashing: the key idea, derived</h4>
+    <p><b>Definitions.</b> Treat the hash range \( [0, 2^{64}) \) as a circle, the <b>ring</b>. Hash each <em>server</em> to a point on the ring as well. A key belongs to the first server point at or after its own hash, going clockwise and wrapping past the top (its <b>successor</b>). So each server owns the <b>arc</b> between the previous server point and its own.</p>
+    <div class="dg"><svg viewBox="0 0 320 320" width="100%" style="max-width:22rem;display:block;margin:0 auto" role="img" aria-label="A hash ring with servers A, B, C and new server D; key k2 moves from B to D">
+<circle cx="160" cy="160" r="110" fill="none" stroke="var(--line)" stroke-width="3"/>
+<path d="M224.7,71.0 A110,110 0 0,1 264.6,194.0" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linecap="round" opacity=".45"/>
+<circle cx="224.7" cy="71.0" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="238.8" y="56.6" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">A 10</text>
+<circle cx="194.0" cy="264.6" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="201.4" y="292.4" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">B 45</text>
+<circle cx="50.0" cy="160.0" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="26.0" y="165.0" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">C 75</text>
+<circle cx="264.6" cy="194.0" r="9" fill="var(--panel)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="287.4" y="206.4" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">D 30</text>
+<rect x="189.5" y="50.9" width="9" height="9" fill="var(--ink)"/>
+<text x="186.0" y="84.1" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k1 5</text>
+<rect x="260.1" y="121.5" width="9" height="9" fill="var(--ink)"/>
+<text x="239.9" y="138.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k2 20</text>
+<rect x="155.5" y="265.5" width="9" height="9" fill="var(--ink)"/>
+<text x="160.0" y="248.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k3 50</text>
+<rect x="90.8" y="244.5" width="9" height="9" fill="var(--ink)"/>
+<text x="110.6" y="232.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k4 60</text>
+<rect x="90.8" y="66.5" width="9" height="9" fill="var(--ink)"/>
+<text x="110.6" y="96.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k5 90</text>
+<text x="160" y="156" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="var(--f-display)">positions 0–99,</text>
+<text x="160" y="172" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="var(--f-display)">clockwise from the top</text>
+</svg><div class="cap">Servers A, B, C at positions 10, 45, 75 (filled). Keys (squares) go clockwise to the next server: k1 (5) → A, k2 (20) → B, k3 (50) and k4 (60) → C, k5 (90) wraps to A. Add server D at 30 (hollow). Only the shaded arc (10, 30] changes owner: k2 moves from B to D. Nothing else moves.</div></div>
+    <p><b>Claim 1 (only the new server gains keys).</b> When a server is added, every key that moves, moves to the new server. <b>Proof.</b> The old server points are unchanged. A key's successor in the new set of points is the first point clockwise among old ∪ new. If that point is old, it is the key's old successor, since no old point lies between them that did not before. Otherwise it is a new point. ∎ Removing a server is the same argument in reverse: only its own keys move, each to its successor. On the week's graph, adding server 17 to 16 moved keys only to server 17, and removing server 3 moved exactly the 6.1% of users it held (with 100 virtual nodes, below).</p>
+    <p><b>Claim 2 (the expected fraction moved is 1/(N+1)).</b> Model the <var>N</var>+1 server points as independent uniform points on the ring. <b>Proof.</b> Fix a key at position <var>x</var>. It moves iff its successor among all <var>N</var>+1 points is the new server's point. The points are independent and identically distributed, so the labelling is symmetric: each of the <var>N</var>+1 servers is equally likely to own the first point after <var>x</var>. The probability is 1/(<var>N</var>+1) for every key, and by linearity of expectation the expected number of moved keys among <var>K</var> is <var>K</var>/(<var>N</var>+1). ∎</p>
+    <p><b>The catch: one point per server balances badly.</b> A server's share is the length of the arc before its point. For <var>M</var> independent uniform points on a ring of length 1, a given arc is longer than <var>x</var> exactly when the other <var>M</var>−1 points all avoid the length-<var>x</var> stretch before that point:</p>
+    <div class="eq">\[ P(\text{arc} > x) = (1-x)^{M-1}, \qquad E[\text{arc}] = \int_0^1 (1-x)^{M-1}\,dx = \frac1M . \]</div>
+    <p>The mean is fair, but the spread is as large as the mean. Square: \( E[\text{arc}^2] = \int_0^1 2x(1-x)^{M-1}dx = \frac{2}{M(M+1)} \), so</p>
+    <div class="eq">\[ \mathrm{Var}(\text{arc}) = \frac{2}{M(M+1)} - \frac{1}{M^2} = \frac{M-1}{M^2(M+1)}, \qquad \frac{\text{std}}{\text{mean}} = \sqrt{\frac{M-1}{M+1}} \approx 1 . \]</div>
+    <p>And the largest arc is much larger than average. By the union bound over the <var>M</var> arcs, \( P(\text{some arc} > \tfrac{c\ln M}{M}) \le M(1-\tfrac{c \ln M}{M})^{M-1} \approx M\cdot M^{-c} \), so with <var>c</var> = 2 the largest arc is below \( 2\ln M / M \) with probability about 1 − 1/<var>M</var>: the fullest server can carry about ln <var>M</var> times its fair share. (The exact expected largest arc is \( H_M / M \), with \( H_M = 1 + \frac12 + \dots + \frac1M \): 3.38 times the mean for <var>M</var> = 16.)</p>
+
+    <p><b>Virtual nodes.</b> Give each server <var>V</var> points instead of one (its <b>virtual nodes</b>), so there are <var>M</var> = <var>NV</var> points. A server's load is now the sum of <var>V</var> arcs. The arcs sum to 1, so \( \mathrm{Var}(\sum \text{arcs}) = 0 \), which fixes their covariance: \( M\,\mathrm{Var} + M(M-1)\,\mathrm{Cov} = 0 \), so \( \mathrm{Cov} = -\mathrm{Var}/(M-1) \). For a server's <var>V</var> arcs:</p>
+    <div class="eq">\[ \mathrm{Var}(L) = V\,\mathrm{Var} + V(V-1)\,\mathrm{Cov} = V\,\frac{M-1}{M^2(M+1)}\cdot\frac{M-V}{M-1} = \frac{V(M-V)}{M^2(M+1)} \;\overset{M=NV}{=}\; \frac{N-1}{N^2(NV+1)} . \]</div>
+    <p>Dividing the standard deviation by the mean load 1/<var>N</var>:</p>
+    <div class="eq">\[ \frac{\text{std}(L)}{E[L]} = \sqrt{\frac{N-1}{NV+1}} \;\approx\; \frac{1}{\sqrt V}. \]</div>
+    <p>A hundred virtual nodes cut the spread by ten. A second benefit: when a server leaves, its <var>V</var> arcs go to <var>V</var> different successors, so its load spreads over many servers instead of doubling one neighbour's.</p>
+    <p><b>Cost.</b> Keep the <var>NV</var> points in a sorted array. A lookup is one binary search, O(log <var>NV</var>) time. Memory is O(<var>NV</var>). Adding a server inserts <var>V</var> points: O(<var>V</var> log <var>NV</var>) in a balanced tree, O(<var>NV</var>) in the sorted Python list below (each insert shifts the array).</p>
+    <div class="code"><div class="ch"><span>consistent_hash.py · splitmix64, mod-N, a ring with virtual nodes, rendezvous</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import bisect
+
+MASK = (1 &lt;&lt; 64) - 1
+
+def h64(x):
+    """splitmix64: a fast, well-mixed 64-bit hash of a non-negative integer."""
+    z = (x + 0x9E3779B97F4A7C15) &amp; MASK
+    z = ((z ^ (z &gt;&gt; 30)) * 0xBF58476D1CE4E5B9) &amp; MASK
+    z = ((z ^ (z &gt;&gt; 27)) * 0x94D049BB133111EB) &amp; MASK
+    return z ^ (z &gt;&gt; 31)
+
+def mod_shard(key, n):
+    return h64(key) % n                       # the shard of a key among n shards
+
+class Ring:
+    """Consistent hashing with v virtual nodes per server."""
+    def __init__(self, servers, v=100, salt=0):
+        self.v, self.salt = v, salt
+        self.points = []                      # sorted list of (position, server)
+        for s in servers:
+            self.add(s)
+
+    def _positions(self, s):
+        # salt the server id: hashing raw (s, i) like a key would put key i exactly on a point
+        base = h64(s ^ (self.salt &lt;&lt; 32) ^ 0x632BE59BD9B4E019)
+        return [h64((base + i) &amp; MASK) for i in range(self.v)]
+
+    def add(self, s):
+        for p in self._positions(s):
+            bisect.insort(self.points, (p, s))
+
+    def remove(self, s):
+        self.points = [(p, t) for p, t in self.points if t != s]
+
+    def lookup(self, key):
+        i = bisect.bisect_left(self.points, (h64(key), -1))
+        return self.points[i % len(self.points)][1]   # first point clockwise; wrap at the end
+
+def rendezvous(key, servers):
+    """Highest-random-weight hashing: the server with the largest h(key, server) wins."""
+    return max(servers, key=lambda s: h64(h64(key) ^ (s * 0xD6E8FEB86659FD93 &amp; MASK)))</code></pre></div>
+    <div class="watch"><b>A bug the tests caught</b><ul>
+      <li>The first version hashed virtual node <var>i</var> of server 0 as <code>h64((0 &lt;&lt; 20) | i)</code> = <code>h64(i)</code>, the same input as user <var>i</var>. With <var>V</var> = 1,000, users 0 to 999 sat exactly on server 0's points, and server 0 held 2.51 times its share. Hash servers and keys from different inputs (above: a salted 64-bit server id), and test that no key collides with a point.</li>
+    </ul></div>
+    <p><b>Confirm by measuring</b> (16 servers, the week's 10,000 users; ring shares averaged over 200 random layouts, 20 for <var>V</var> = 1,000):</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">virtual nodes V</th><th class="num">points</th><th class="num">std/mean of ring share</th><th class="num">predicted √((N−1)/(NV+1))</th><th class="num">largest share / mean</th></tr>
+      <tr><td class="num">1</td><td class="num">16</td><td class="num">0.915</td><td class="num">0.939</td><td class="num">3.36</td></tr>
+      <tr><td class="num">10</td><td class="num">160</td><td class="num">0.303</td><td class="num">0.305</td><td class="num">1.62</td></tr>
+      <tr class="hi"><td class="num">100</td><td class="num">1,600</td><td class="num">0.096</td><td class="num">0.097</td><td class="num">1.18</td></tr>
+      <tr><td class="num">1,000</td><td class="num">16,000</td><td class="num">0.031</td><td class="num">0.031</td><td class="num">1.06</td></tr>
+    </table></div>
+    <p>With <var>V</var> = 1 the largest share averages 3.36 times the mean, close to \( H_{16} = 3.38 \). Virtual nodes also make the cost of growing predictable. Adding a 17th server, over 100 random layouts:</p>
+    <div class="chart"><div class="t">Fraction of users moved when adding server 17 (ideal 1/17 = 0.0588)</div>
+      <div class="sub">mean over 100 layouts</div>
+      <div class="br"><span>V = 1</span><span class="tr"><i style="width:21.2%"></i></span><span class="v">0.0617</span></div>
+      <div class="br"><span>V = 10</span><span class="tr"><i style="width:21.3%"></i></span><span class="v">0.0620</span></div>
+      <div class="br"><span>V = 100</span><span class="tr"><i style="width:19.9%"></i></span><span class="v">0.0580</span></div>
+      <div class="sub">worst layout of 100</div>
+      <div class="br"><span>V = 1</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">0.2915</span></div>
+      <div class="br"><span>V = 10</span><span class="tr"><i style="width:38.1%;--c:var(--ai)"></i></span><span class="v">0.1110</span></div>
+      <div class="br"><span>V = 100</span><span class="tr"><i style="width:28.1%"></i></span><span class="v">0.0820</span></div>
+      <div class="cap">The average matches Claim 2 for every V; the standard deviation falls from 0.0617 (V = 1) to 0.0172 (V = 10) to 0.0082 (V = 100). With one point per server, an unlucky new server can take 29% of the users, or almost none (minimum 0.0005).</div>
+    </div>
+
+    <h4>4 · Rendezvous hashing</h4>
+    <p><b>Definition.</b> <b>Rendezvous</b> (highest random weight) hashing gives key <var>k</var> to the server <var>s</var> with the largest \( h(k, s) \). No ring, no stored points: just the list of servers.</p>
+    <p><b>Why it has both properties.</b> For a fixed key, the <var>N</var>+1 weights \( h(k,s) \) behave like independent uniform values, so each server is equally likely to hold the maximum: the load is balanced (each key independently uniform), and when a server is added the key moves only if the new server's weight is the new maximum, probability 1/(<var>N</var>+1), and then it moves to the new server. Removing a server moves only the keys for which it was the maximum, each to its runner-up. Measured: adding server 17 moved 0.0577 of users; the fullest of 16 servers held 1.05 times the average.</p>
+    <p><b>Cost.</b> A lookup computes <var>N</var> hashes: O(<var>N</var>) time, O(<var>N</var>) memory for the server list. That is fine for tens of servers and slow for thousands, where the ring's O(log <var>NV</var>) wins. Weighted servers are easy (scale each weight), which is one reason rendezvous hashing is common for choosing among replicas or caches.</p>
+
+    <h4>5 · Scatter-gather: shards touched per request</h4>
+    <p><b>The question.</b> The PYMK request for <var>u</var> reads <var>N</var>(<var>u</var>) from <var>u</var>'s shard, then the adjacency list of every friend (R.3). With lists hashed to shards, the friends' lists are scattered. Sending one RPC (remote procedure call) per friend costs <var>d</var><sub><var>u</var></sub> round trips. <b>Batching by shard</b> groups the friend ids by shard and sends one RPC per shard holding at least one of them, in parallel: the <b>scatter</b>. The answers are merged into one mutual-friend count: the <b>gather</b>. Example: friends {3, 8, 11, 14, 21} on 4 shards (shard = id mod 4) → shards {3, 0, 3, 2, 1}: 4 RPCs instead of 5.</p>
+    <p><b>Derivation.</b> With <var>d</var> friends hashed uniformly onto <var>S</var> shards, let \( I_k = 1 \) when shard <var>k</var> holds at least one friend. A given shard holds none with probability \( (1-1/S)^d \), so by linearity of expectation</p>
+    <div class="eq">\[ E[\#\text{shards touched}] = \sum_{k=1}^{S} P(I_k = 1) = S\Big(1 - \big(1 - \tfrac1S\big)^d\Big) . \]</div>
+    <p>For small <var>d</var> this is close to <var>d</var> (\( (1-1/S)^d \approx 1 - d/S \)): almost every friend is on a different shard, and batching saves little. For <var>d</var> ≫ <var>S</var> it approaches <var>S</var>: every request touches every shard. A user with exactly 20 friends touches 11.6 of 16 shards, 17.29 of 64, 19.27 of 256 on average. The function is concave in <var>d</var>, so by Jensen's inequality the average over the heavy-tailed degrees is lower than the value at the mean degree.</p>
+    <div class="code"><div class="ch"><span>fanout.py · shards touched, batching, cross-shard edges</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import defaultdict
+
+def shards_touched(adj, u, shard_of):
+    """The distinct shards a two-hop request must read: one per shard holding a friend's list."""
+    return {shard_of(f) for f in adj[u]}
+
+def batch_by_shard(friends, shard_of):
+    """Group the keys to read by shard: one RPC per shard instead of one per friend."""
+    batches = defaultdict(list)
+    for f in friends:
+        batches[shard_of(f)].append(f)
+    return batches
+
+def expected_shards(d, s):
+    """E[distinct shards] when d keys land uniformly on s shards."""
+    return s * (1 - (1 - 1 / s) ** d)
+
+def cross_shard_fraction(edges, part):
+    return sum(part[u] != part[v] for u, v, *_ in edges) / len(edges)</code></pre></div>
+    <p><b>Confirm by measuring</b> (every one of the 10,000 users as the requester, lists placed by hash):</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">shards S</th><th class="num">shards touched, mean</th><th class="num">predicted</th><th class="num">median</th><th class="num">p99</th><th class="num">max</th><th class="num">reads unbatched</th></tr>
+      <tr><td class="num">16</td><td class="num">10.05</td><td class="num">10.05</td><td class="num">10</td><td class="num">16</td><td class="num">16</td><td class="num">20.0</td></tr>
+      <tr><td class="num">64</td><td class="num">15.48</td><td class="num">15.47</td><td class="num">14</td><td class="num">51</td><td class="num">64</td><td class="num">20.0</td></tr>
+      <tr><td class="num">256</td><td class="num">18.23</td><td class="num">18.23</td><td class="num">15</td><td class="num">83</td><td class="num">255</td><td class="num">20.0</td></tr>
+    </table></div>
+    <p>The formula, averaged over the measured degrees, predicts the mean to two decimals. Batching saves little once <var>S</var> exceeds the typical degree, and the p99 requester (a user with hundreds of friends) touches most of the cluster. At a billion users, assuming mean degree 200 (R.6) and 1,000 shards, a typical request would touch about 181.4 shards; with 10,000 shards, about 198.0. Combine that with Day 2's \( 1-(1-p)^n \): if each shard is slow 1% of the time, a request that touches 181 shards is slow \( 1 - 0.99^{181} \approx 84\% \) of the time. Scatter-gather over hashed lists does not scale for this request. Two levers remain: place friends together (part 6), or precompute the answer so the request reads one key (the Design block).</p>
+
+    <h4>6 · Placing friends together: hash versus locality</h4>
+    <p><b>The question.</b> An edge (<var>u</var>, <var>v</var>) is <b>cross-shard</b> when <var>u</var> and <var>v</var> are on different shards. Fewer cross-shard edges means fewer shards per request. <b>Under hashing</b> the two endpoints are placed independently, so \( P(\text{same}) = \sum_{k} P(u \in k)P(v \in k) = S \cdot \tfrac{1}{S^2} = \tfrac1S \), and the cross-shard fraction is \( 1 - 1/S \): 93.8% at 16 shards. Hashing ignores the graph completely.</p>
+    <p><b>Locality partitioning.</b> Choosing <var>S</var> equal-size parts with the fewest cut edges is <b>balanced graph partitioning</b>, which is NP-hard (it contains minimum bisection), so practical systems use heuristics. A simple one for this graph, where 35% of friendships come from shared groups:</p>
+    <ol>
+      <li>Give each user a <b>primary group</b>: the one of their groups that contains most of their friends.</li>
+      <li>Pack groups onto shards, largest first, filling the least-loaded shard and spilling to the next least-loaded when a shard reaches its <b>capacity</b>, 1.05 times the average shard size.</li>
+      <li><b>Label propagation</b> under the capacity: up to 5 passes over the users; move a user to the shard holding most of their friends if that is strictly more than on their current shard and the target has room. Each move strictly increases the number of that user's friends on its shard, so it never increases the cut; each pass costs O(<var>n</var> + <var>m</var>).</li>
+    </ol>
+    <div class="code"><div class="ch"><span>partition.py · group packing plus capacity-limited label propagation</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def group_partition(adj, groups, s, slack=1.05, rounds=5):
+    """Place users by group, then move users toward their friends while shards have room."""
+    n = len(adj)
+    cap = int(slack * n / s) + 1
+    members = defaultdict(list)
+    for u in range(n):
+        # primary group: the user's group holding most of their friends
+        g = max(groups[u], key=lambda g: (sum(g in groups[f] for f in adj[u]), -g))
+        members[g].append(u)
+    part, load = [0] * n, [0] * s
+    for g in sorted(members, key=lambda g: (-len(members[g]), g)):   # biggest groups first
+        k = min(range(s), key=lambda i: load[i])
+        for u in members[g]:                   # keep a group together until its shard is full
+            if load[k] &gt;= cap:
+                k = min(range(s), key=lambda i: load[i])
+            part[u] = k; load[k] += 1
+    for _ in range(rounds):                    # label propagation under a capacity cap
+        moved = 0
+        for u in range(n):
+            votes = Counter(part[f] for f in adj[u])
+            best, c = max(votes.items(), key=lambda kv: (kv[1], -kv[0]), default=(part[u], 0))
+            if best != part[u] and c &gt; votes[part[u]] and load[best] &lt; cap:
+                load[part[u]] -= 1; load[best] += 1; part[u] = best; moved += 1
+        if moved == 0:
+            break
+    return part</code></pre></div>
+    <div class="chart"><div class="t">Fraction of the 100,000 friendships that cross shards</div>
+      <div class="sub">16 shards</div>
+      <div class="br"><span>hash</span><span class="tr"><i style="width:93.7%;--c:var(--bad)"></i></span><span class="v">0.937</span></div>
+      <div class="br"><span>group + propagation</span><span class="tr"><i style="width:73.3%"></i></span><span class="v">0.733</span></div>
+      <div class="sub">64 shards</div>
+      <div class="br"><span>hash</span><span class="tr"><i style="width:98.4%;--c:var(--bad)"></i></span><span class="v">0.984</span></div>
+      <div class="br"><span>group only (step 2)</span><span class="tr"><i style="width:89.6%;--c:var(--ai)"></i></span><span class="v">0.896</span></div>
+      <div class="br"><span>group + propagation</span><span class="tr"><i style="width:80.9%"></i></span><span class="v">0.809</span></div>
+      <div class="sub">256 shards</div>
+      <div class="br"><span>hash</span><span class="tr"><i style="width:99.6%;--c:var(--bad)"></i></span><span class="v">0.996</span></div>
+      <div class="br"><span>group + propagation</span><span class="tr"><i style="width:86.3%"></i></span><span class="v">0.863</span></div>
+      <div class="cap">Hashing matches 1 − 1/S (0.938, 0.984, 0.996). Locality cuts the cross-shard share by 14 to 20 points while keeping the fullest shard within 1.05 to 1.08 of the average.</div>
+    </div>
+    <div class="tablewrap"><table>
+      <tr><th class="num">S</th><th>placement</th><th class="num">shards touched, mean</th><th class="num">median</th><th class="num">p99</th><th class="num">fullest shard / mean</th></tr>
+      <tr><td class="num">16</td><td>hash</td><td class="num">10.05</td><td class="num">10</td><td class="num">16</td><td class="num">1.08</td></tr>
+      <tr><td class="num">16</td><td>group + propagation</td><td class="num">8.46</td><td class="num">8</td><td class="num">16</td><td class="num">1.05</td></tr>
+      <tr><td class="num">64</td><td>hash</td><td class="num">15.48</td><td class="num">14</td><td class="num">51</td><td class="num">1.17</td></tr>
+      <tr><td class="num">64</td><td>group + propagation</td><td class="num">12.69</td><td class="num">11</td><td class="num">46</td><td class="num">1.06</td></tr>
+      <tr><td class="num">256</td><td>hash</td><td class="num">18.23</td><td class="num">15</td><td class="num">83</td><td class="num">1.61</td></tr>
+      <tr><td class="num">256</td><td>group + propagation</td><td class="num">15.54</td><td class="num">13</td><td class="num">72</td><td class="num">1.08</td></tr>
+    </table></div>
+    <p><b>Why the gain is modest here.</b> One in five friendships in this graph goes to a random popular user, which no placement can localize; the largest group has 3,035 members, far more than one shard holds; and friend-of-friend closures cross groups. City is no better a key: only 12.5% of friendships are within a city, and the largest city holds 27.7% of users, which would overload its shard. The two partitioning papers in Further reading report much larger gains on real social graphs. The price of locality: the shard of a user is no longer computable from the id, so every server needs a <b>directory</b> (user → shard map), and the placement must be recomputed as the graph changes.</p>
+
+    <h4>7 · Caching hot adjacency lists</h4>
+    <p><b>The question.</b> Some lists are read far more than others. Which ones, and how much does a small cache save? A request by <var>u</var> reads the list of <var>f</var> exactly when <var>u</var> ∈ <var>N</var>(<var>f</var>). If requesters are uniform, list <var>f</var> is read by a fraction deg(<var>f</var>)/<var>n</var> of requests: <b>read frequency is proportional to degree</b>, the friendship paradox of Day 2 seen from the storage side.</p>
+    <p><b>LRU recap.</b> A <b>least-recently-used</b> cache of capacity <var>C</var> keeps the <var>C</var> keys used most recently. It needs two structures: a hash map from key to node, for O(1) lookup, and a doubly linked list in order of use, for O(1) "move to front" and "remove the last". Both operations touch a constant number of pointers, so <code>get</code> and <code>put</code> are O(1); memory is O(<var>C</var>). Sentinel head and tail nodes remove the empty-list special cases.</p>
+    <div class="code"><div class="ch"><span>lru.py · LeetCode 146 with the list written out</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Node:
+    __slots__ = ("key", "val", "prev", "next")
+    def __init__(self, key=0, val=0):
+        self.key, self.val, self.prev, self.next = key, val, None, None
+
+class LRUFromScratch:
+    """The same cache with the doubly linked list written out. Sentinels avoid edge cases."""
+    def __init__(self, capacity):
+        self.cap, self.map = capacity, {}
+        self.head, self.tail = Node(), Node()  # head.next = most recent, tail.prev = least recent
+        self.head.next, self.tail.prev = self.tail, self.head
+
+    def _unlink(self, x):
+        x.prev.next, x.next.prev = x.next, x.prev
+
+    def _push_front(self, x):
+        x.prev, x.next = self.head, self.head.next
+        self.head.next.prev = x
+        self.head.next = x
+
+    def get(self, key):
+        x = self.map.get(key)
+        if x is None:
+            return -1
+        self._unlink(x); self._push_front(x)
+        return x.val
+
+    def put(self, key, value):
+        x = self.map.get(key)
+        if x:
+            x.val = value
+            self._unlink(x); self._push_front(x)
+            return
+        if len(self.map) == self.cap:
+            lru = self.tail.prev
+            self._unlink(lru); del self.map[lru.key]
+        x = Node(key, value)
+        self.map[key] = x; self._push_front(x)</code></pre></div>
+    <p>Python's <code>OrderedDict</code> is exactly this pair of structures, so the short version is:</p>
+    <div class="code"><div class="ch"><span>lru_short.py · LeetCode 146 with OrderedDict</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import OrderedDict
+
+class LRUCache:
+    """LeetCode 146. get/put in O(1): a hash map plus a recency order."""
+    def __init__(self, capacity):
+        self.cap = capacity
+        self.d = OrderedDict()                 # least recent first
+
+    def get(self, key):
+        if key not in self.d:
+            return -1
+        self.d.move_to_end(key)                # now the most recent
+        return self.d[key]
+
+    def put(self, key, value):
+        if key in self.d:
+            self.d.move_to_end(key)
+        self.d[key] = value
+        if len(self.d) &gt; self.cap:
+            self.d.popitem(last=False)         # evict the least recent</code></pre></div>
+    <p><b>Which cache is best?</b> If requests are independent draws with fixed probabilities \( p_f \) (the <b>independent reference model</b>), the hit rate of a fixed set <var>A</var> of cached keys is \( \sum_{f\in A} p_f \), which is largest when <var>A</var> is the <var>C</var> keys with the largest \( p_f \). Here \( p_f \propto \deg(f) \), so the optimal static cache holds the top-degree users' lists. LRU admits every miss and evicts useful lists to make room for one-off reads, so under this model it does worse; its strength is adapting when popularity changes over time.</p>
+    <div class="chart"><div class="t">20,000 uniform requests (397,439 list reads): share of reads served by the cache</div>
+      <div class="sub">by number of list reads</div>
+      <div class="br"><span>LRU, 1% of lists</span><span class="tr"><i style="width:2.9%;--c:var(--ai)"></i></span><span class="v">0.029</span></div>
+      <div class="br"><span>top-degree, 1%</span><span class="tr"><i style="width:11.2%"></i></span><span class="v">0.112</span></div>
+      <div class="br"><span>LRU, 10%</span><span class="tr"><i style="width:19.8%;--c:var(--ai)"></i></span><span class="v">0.198</span></div>
+      <div class="br"><span>top-degree, 10%</span><span class="tr"><i style="width:32.1%"></i></span><span class="v">0.321</span></div>
+      <div class="sub">by adjacency entries (bytes) read</div>
+      <div class="br"><span>LRU, 1% of lists</span><span class="tr"><i style="width:22.8%;--c:var(--ai)"></i></span><span class="v">0.228</span></div>
+      <div class="br"><span>top-degree, 1%</span><span class="tr"><i style="width:69.5%"></i></span><span class="v">0.695</span></div>
+      <div class="br"><span>LRU, 10%</span><span class="tr"><i style="width:68.6%;--c:var(--ai)"></i></span><span class="v">0.686</span></div>
+      <div class="br"><span>top-degree, 10%</span><span class="tr"><i style="width:84.1%"></i></span><span class="v">0.841</span></div>
+      <div class="cap">The 100 highest-degree lists (1% of users, 22,269 of 200,000 entries) serve 69.5% of all entries read. Hot lists are both read most often and longest, so caching them saves far more bytes than reads.</div>
+    </div>
+    <p><b>Request coalescing.</b> When many requests in flight at once need the same list, send one read and share the result (a "single flight"). Among windows of 10, 100 and 1,000 concurrent requests, the distinct lists are 2.9%, 17.2% and 61.7% fewer than the reads. It also protects a shard when a hot list falls out of the cache and many requests miss at the same moment.</p>
+
+    <h4>8 · Where PYMK uses it</h4>
+    <p>The graph store places adjacency lists with consistent hashing (virtual nodes, so machines can be added a few at a time without copying the graph), keeps a cache of hub lists in front of it, and coalesces concurrent reads. The fan-out measurement is the main argument of the Design block: computing two hops on request touches nearly as many shards as the user has friends, so the request path should read a precomputed answer from one shard.</p>
 
     <div class="part"><b>Practice</b><ul>
-      <li>Reproduce the table: hold out every 10th document, train BPE at 1,000 and 2,000, store (bytes, tokens) per document, run the paired bootstrap with 10,000 resamples.</li>
-      <li>Repeat with 1,000 and 100 resamples. Which digits of the interval are stable?</li>
-      <li>Write a one-page plan to choose between <code>cl100k_base</code> and <code>o200k_base</code> for a product used in English, Hindi and Tamil.</li>
+      <li><a href="https://leetcode.com/problems/lru-cache/">146 · LRU Cache</a>: both versions above; explain why the map must store the node, not the value.</li>
+      <li><a href="https://leetcode.com/problems/design-hashmap/">706 · Design HashMap</a>: separate chaining with resizing; prove the amortized cost of <code>put</code> is O(1).</li>
+      <li><a href="https://leetcode.com/problems/time-based-key-value-store/">981 · Time Based Key-Value Store</a>: versioned values, the shape of an adjacency list with timestamps.</li>
+      <li>Implement jump consistent hashing (Lamping and Veach) and measure moved fraction and balance against the ring on the week's users.</li>
+      <li>Run the shards-touched measurement with the top 1% of users' lists replicated to every shard. How much do mean and p99 fall?</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>The budget allows training only one small model. Which measurements do you drop?</li>
-      <li>Code-heavy traffic: which extra test set and metric do you add?</li>
-      <li>Bootstrap the <em>bits per byte</em> of the unigram model instead of bytes per token. What do you store per document?</li>
-      <li>Documents come in chapters and chapters are correlated too. What do you resample now?</li>
+      <li>Servers have different capacities (2× and 1× machines). Adapt the ring and rendezvous hashing, and prove each server's expected share is proportional to its weight.</li>
+      <li><a href="https://leetcode.com/problems/lfu-cache/">460 · LFU Cache</a>: evict the least <em>frequently</em> used key in O(1). When does it beat LRU on PYMK traffic, and when does it fail (a list that was hot yesterday)?</li>
+      <li>"Consistent hashing with bounded loads": cap every server at (1+ε) times the average and send overflow clockwise. What does this cost in moved keys?</li>
+      <li>Hash by edge instead of by user (each friendship on <code>h(u, v)</code>). What does a two-hop request cost now?</li>
     </ul></div>
-    <details class="sol"><summary>Solution and outline</summary><div>
-<div class="code"><div class="ch"><span>bootstrap.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import random
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>hashmap.py · LeetCode 706</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MyHashMap:
+    """LeetCode 706. Separate chaining; the table doubles when the load factor passes 0.75."""
+    def __init__(self):
+        self.size, self.buckets = 0, [[] for _ in range(8)]
 
-def paired_bootstrap(rows, B=10_000, seed=0):
-    """rows: one (bytes, tokens_A, tokens_B) per held-out document.
-    Resamples documents, never tokens. Returns sorted replicates of
-    bytes/token for A, for B, and of the paired difference B - A."""
-    rng, D = random.Random(seed), len(rows)
-    ra, rb, rd = [], [], []
-    for _ in range(B):
-        s = [rows[rng.randrange(D)] for _ in range(D)]   # D documents, with replacement
-        nbytes = sum(r[0] for r in s)
-        a = nbytes / sum(r[1] for r in s)
-        b = nbytes / sum(r[2] for r in s)                # same documents for both tokenizers
-        ra.append(a); rb.append(b); rd.append(b - a)
-    return sorted(ra), sorted(rb), sorted(rd)
+    def _bucket(self, key):
+        return self.buckets[h64(key) % len(self.buckets)]
 
-def percentile_ci(reps, level=0.95):
-    """Percentile interval from sorted bootstrap replicates."""
-    k = int(len(reps) * (1 - level) / 2)
-    return reps[k], reps[len(reps) - 1 - k]</code></pre></div>
-    <p>The statistic is total bytes over total tokens of the resampled documents, so long documents count in proportion to their length. Rerunning with 20 different seeds, the lower end of the paired interval ranges from 0.415 to 0.451 with 100 resamples, from 0.426 to 0.442 with 1,000, and from 0.428 to 0.433 with 10,000: use thousands of resamples before trusting the second decimal. For bits per byte, store (bytes, bits) per document. For chapters, resample whole chapters: always resample the largest unit that is independent.</p>
-    <p>Plan outline for <code>cl100k_base</code> against <code>o200k_base</code>:</p>
-    <ol>
-      <li><b>Data:</b> FLORES+ <code>devtest</code> for the three languages (same 1,012 sentences each), plus a sample of real product traffic, held out.</li>
-      <li><b>Fertility:</b> tokens per sentence for each tokenizer and language; the ratio to English per sentence, with a bootstrap 95% interval; the paired difference between the two tokenizers, bootstrapped per sentence.</li>
-      <li><b>Cost:</b> convert fertility into price and context-window use at expected traffic.</li>
-      <li><b>Decision rule:</b> pick the tokenizer whose worst-language ratio is lowest, unless its English fertility is worse by more than an agreed margin.</li>
-    </ol>
-    <p>Why paired: the sentences differ hugely in length, and pairing removes that variation, so the interval reflects the tokenizers rather than the sentences.</p></div></details>
+    def put(self, key, value):
+        b = self._bucket(key)
+        for i, (k, _) in enumerate(b):
+            if k == key:
+                b[i] = (key, value); return
+        b.append((key, value)); self.size += 1
+        if self.size &gt; 0.75 * len(self.buckets):
+            old = [kv for b in self.buckets for kv in b]
+            self.buckets = [[] for _ in range(2 * len(self.buckets))]
+            for k, v in old:
+                self._bucket(k).append((k, v))
+
+    def get(self, key):
+        for k, v in self._bucket(key):
+            if k == key:
+                return v
+        return -1
+
+    def remove(self, key):
+        b = self._bucket(key)
+        for i, (k, _) in enumerate(b):
+            if k == key:
+                b.pop(i); self.size -= 1; return</code></pre></div>
+      <p><b>Amortized O(1) put.</b> The table doubles when the size passes 0.75 × buckets. A resize to 2<var>b</var> buckets moves about 0.75<var>b</var> entries and happens after 0.375<var>b</var> new inserts since the last one, so each insert pays O(1) extra on average. With a good hash, each bucket holds 0.75 entries on average, so <code>get</code> is O(1) expected.</p>
+      <div class="code"><div class="ch"><span>timemap.py · LeetCode 981</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class TimeMap:
+    """LeetCode 981. Timestamps arrive increasing per key, so each list stays sorted."""
+    def __init__(self):
+        self.times, self.vals = defaultdict(list), defaultdict(list)
+
+    def set(self, key, value, timestamp):
+        self.times[key].append(timestamp); self.vals[key].append(value)
+
+    def get(self, key, timestamp):
+        i = bisect.bisect_right(self.times[key], timestamp)   # first time &gt; timestamp
+        return self.vals[key][i - 1] if i else ""</code></pre></div>
+      <p><b>Why the map stores the node in 146.</b> Moving a key to the front needs its position in the list; storing the node gives it in O(1), while storing only the value would force an O(<var>C</var>) search of the list.</p>
+      <p><b>Weighted servers.</b> Ring: give a server of weight <var>w</var> about <var>wV</var> virtual nodes; its expected share is its fraction of the points. Rendezvous: use the score \( -w_s / \ln(u_s) \), where \( u_s \in (0,1) \) is the hash scaled to a uniform; the maximum of these is server <var>s</var> with probability \( w_s / \sum w \), because \( -\ln(u_s)/w_s \) is exponential with rate \( w_s \) and the smallest of independent exponentials is index <var>s</var> with probability proportional to its rate.</p>
+      <p><b>Edge hashing.</b> A request needs all edges of each friend, and those are now on up to deg(<var>f</var>) shards each, so it touches up to min(<var>S</var>, <var>W</var>(<var>u</var>)) shards: worse. Edge partitioning helps batch jobs that scan all edges evenly, not lookups by user.</p>
+      <p>LRU tests, the differential test of both LRU versions, and the HashMap and TimeMap tests are in <code>day_3_solutions.py</code>.</p>
+    </div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)">Bootstrapping (statistics)</a> (Wikipedia)</li>
-      <li>Efron and Tibshirani, <em>An Introduction to the Bootstrap</em> (book): the percentile interval and when it fails</li>
-      <li>Koehn, <a href="https://aclanthology.org/W04-3250/">Statistical Significance Tests for Machine Translation Evaluation</a> (EMNLP 2004): the paired bootstrap in NLP</li>
-      <li>Rust et al., <em>How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models</em> (ACL 2021): fertility</li>
-      <li>Petrov et al., <em>Language Model Tokenizers Introduce Unfairness Between Languages</em> (NeurIPS 2023)</li>
-      <li><a href="https://github.com/openlanguagedata/flores">FLORES+</a> (Open Language Data Initiative)</li>
-      <li>Land and Bartolo, <a href="https://arxiv.org/abs/2405.05417">Fishing for Magikarp</a>: finding under-trained tokens</li>
+      <li>David Karger, Eric Lehman, Tom Leighton, Rina Panigrahy, Matthew Levine, Daniel Lewin, "Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web", STOC 1997</li>
+      <li>David Thaler and Chinya Ravishankar, "Using Name-Based Mappings to Increase Hit Rates", <em>IEEE/ACM Transactions on Networking</em>, 1998 (rendezvous hashing)</li>
+      <li>Giuseppe DeCandia et al., "Dynamo: Amazon's Highly Available Key-value Store", SOSP 2007: virtual nodes in practice</li>
+      <li>John Lamping and Eric Veach, <a href="https://arxiv.org/abs/1406.2294">"A Fast, Minimal Memory, Consistent Hash Algorithm"</a>, 2014 (jump hash)</li>
+      <li>Vahab Mirrokni, Mikkel Thorup, Morteza Zadimoghaddam, "Consistent Hashing with Bounded Loads", SODA 2018</li>
+      <li>Johan Ugander and Lars Backstrom, "Balanced Label Propagation for Partitioning Massive Graphs", WSDM 2013</li>
+      <li>Igor Kabiljo et al., "Social Hash Partitioner: A Scalable Distributed Hypergraph Partitioner", VLDB 2017</li>
+      <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, O'Reilly, 2017: chapter 6 (partitioning)</li>
+      <li><a href="https://en.wikipedia.org/wiki/Consistent_hashing">Consistent hashing</a> and <a href="https://en.wikipedia.org/wiki/Rendezvous_hashing">Rendezvous hashing</a> (Wikipedia)</li>
+    </ul></div>
+  </div>
+
+  <!-- ===================================================================== DESIGN -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">System Design · the graph store, precompute, incremental updates</span></div>
+
+    <h4>The question</h4>
+    <p>Where does the PYMK answer come from at request time? Either compute two hops on request (the scatter-gather above), or compute every user's candidates ahead of time and store them. If we store them, they go stale the moment two people connect. Which stored suggestions must change, and how do we stay correct in between?</p>
+
+    <h4>A graph store, as a published design describes it</h4>
+    <p>The TAO paper (Bronson et al., USENIX ATC 2013) describes Facebook's store for the social graph. In its data model, <b>objects</b> are typed nodes (users, posts, places) and <b>associations</b> are typed directed edges between objects, each with a time; queries are mostly "the list of associations of a given type from this object, newest first" and "how many are there". The paper describes a read-dominated workload, persistent storage in sharded MySQL, and a two-level cache tier (followers that serve reads, and leaders that sit between followers and the database), with eventual consistency between regions. We use it here as a public example of the pattern, not as a description of any current system: an adjacency-list store, sharded by object id, read through caches.</p>
+    <div class="dg"><div class="vflow">
+      <div class="vbox"><b>PYMK request for u</b><span class="muted small">reads one key: the precomputed top candidates of u</span></div>
+      <div class="varr">↓</div>
+      <div class="vbox" style="border-color:var(--accent)"><b>candidate store</b><span class="muted small">u → [(candidate, mutual count)], sharded by u (consistent hashing)</span></div>
+      <div class="varr">↑ batch self-join (nightly) + incremental updates (on each new friendship)</div>
+      <div class="vbox"><b>graph store</b><span class="muted small">u → adjacency list, sharded by u, hub lists cached</span></div>
+      <div class="varr">↓ final eligibility check on every response</div>
+      <div class="vbox"><b>response</b><span class="muted small">drop: self, already friends, blocked, privacy-restricted</span></div>
+    </div><div class="cap">The hypothetical PYMK storage path. The request reads one shard of the candidate store, then checks the short list against the graph store.</div></div>
+
+    <h4>First attempt: compute on request</h4>
+    <p>Online two hops read <var>W</var>(<var>u</var>) entries (mean 1,477, p99 7,284) from about 15 of 64 shards per request, and the shard count approaches the degree as the cluster grows (Algorithms part 5). It is always fresh, but slow and fragile in the tail.</p>
+
+    <h4>The key idea: precompute as a self-join</h4>
+    <p>Write the friendships as a table of ordered pairs (<var>x</var>, <var>v</var>), both directions. Joining the table with itself on the middle user <var>v</var> produces one row (<var>x</var>, <var>y</var>) for every two-hop path <var>x</var> – <var>v</var> – <var>y</var>. Grouping the rows by (<var>x</var>, <var>y</var>) and counting gives \( m(x,y) = |N(x)\cap N(y)| = (A^2)_{xy} \). <b>Why the count is right:</b> each common friend <var>v</var> of <var>x</var> and <var>y</var> contributes exactly one row, the path through <var>v</var>, and nothing else produces a row for (<var>x</var>, <var>y</var>). <b>Cost:</b> user <var>v</var> produces deg(<var>v</var>)(deg(<var>v</var>) − 1) ordered rows, so the join emits \( \sum_v d_v(d_v - 1) \) rows (Day 2's \( \sum d^2 \), minus the <var>x</var> = <var>y</var> pairs). A distributed batch job partitions the join by <var>v</var>, so each machine expands its own users, then shuffles rows by <var>x</var> to group them.</p>
+    <div class="code"><div class="ch"><span>precompute.py · the batch two-hop self-join</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def precompute_all(adj):
+    """Batch two-hop: the self-join of the edge list with itself on the middle user."""
+    m = defaultdict(Counter)
+    for v in range(len(adj)):                  # v is the mutual friend
+        for x in adj[v]:
+            for y in adj[v]:
+                if x != y:
+                    m[x][y] += 1               # deg(v)·(deg(v)-1) rows for this v
+    return m                                   # m[x][y] = |N(x) ∩ N(y)|, friends included</code></pre></div>
+    <p><b>Measured on the past graph</b> (the first 80,000 friendships): the join emits 9,519,454 rows, which group into 8,214,888 ordered pairs with at least one mutual friend (1.16 rows per pair), of which 8,091,284 are not yet friends: 809.1 candidate entries per user on average. The candidate store keeps only each user's top few (10 for display, a few hundred for the ranker of Day 5), so the stored output is small even though the join is large.</p>
+
+    <h4>Incremental updates: whose candidates change when u and v connect</h4>
+    <p><b>The question.</b> Re-running the 9.5-million-row join after each new friendship is absurd. Which counts does one new edge change?</p>
+    <p><b>Derivation.</b> Write the mutual count as a sum over possible middle users:</p>
+    <div class="eq">\[ m(x,y) = \sum_{w} [\,w \in N(x)\,]\,[\,w \in N(y)\,] . \]</div>
+    <p>Adding the edge <var>u</var>–<var>v</var> changes only two memberships: <var>v</var> joins <var>N</var>(<var>u</var>), and <var>u</var> joins <var>N</var>(<var>v</var>). A term of the sum changes only if one of its two brackets changes, so only when (<var>x</var>, <var>w</var>) or (<var>y</var>, <var>w</var>) is (<var>u</var>, <var>v</var>) or (<var>v</var>, <var>u</var>). Take <var>x</var> = <var>u</var>, <var>w</var> = <var>v</var>: the term becomes \( [v \in N(y)] \), so \( m(u, y) \) rises by 1 for every <var>y</var> ∈ <var>N</var>(<var>v</var>), the new paths <var>u</var> – <var>v</var> – <var>y</var>. Symmetrically, \( m(v, x) \) rises by 1 for every <var>x</var> ∈ <var>N</var>(<var>u</var>), the paths <var>v</var> – <var>u</var> – <var>x</var>. The pair (<var>u</var>, <var>v</var>) itself would need <var>v</var> ∈ <var>N</var>(<var>v</var>), which never holds, so <var>m</var>(<var>u</var>, <var>v</var>) is unchanged. Nothing else changes. So:</p>
+    <ul>
+      <li><b>Changed counts:</b> exactly \( d_u + d_v \) pairs (degrees before the edge), each +1, stored in both directions.</li>
+      <li><b>Users whose candidate rows change:</b> \( \{u, v\} \cup N(u) \cup N(v) \). In addition, <var>u</var> and <var>v</var> leave each other's candidate lists, because they are now friends.</li>
+      <li><b>Everyone else is untouched</b>, so their stored suggestions stay exactly correct.</li>
+    </ul>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">before</span><span class="seq"><span class="nd">a</span><span class="lk">–</span><span class="nd hot">u</span><span class="lk">   </span><span class="nd hot">v</span><span class="lk">–</span><span class="nd">b</span><span class="lk">,</span><span class="nd hot">v</span><span class="lk">–</span><span class="nd">c</span></span><span class="why">N(u) = {a}, N(v) = {b, c}.</span></div>
+      <div class="step"><span class="k">add u–v</span><span class="seq"><span class="pp add">m(u,b) +1</span><span class="pp add">m(u,c) +1</span><span class="pp add">m(v,a) +1</span><span class="pp rm">u, v no longer candidates of each other</span></span><span class="why"><b>d<sub>u</sub> + d<sub>v</sub> = 3</b> changed counts; rows of u, v, a, b, c change. Pair (b, c) is untouched: its middle users did not change.</span></div>
+    </div></div>
+    <p><b>Expected cost.</b> The two endpoints of a new edge are not average users. The 20,000 future friendships form mostly among sociable users, and an endpoint of a random edge is a user picked with probability proportional to degree, whose expected degree is \( E[d^2]/E[d] \): the friendship paradox again (Day 2). So the expected update is about \( 2\,E[d^2]/E[d] \) counts, not \( 2\,E[d] \).</p>
+    <div class="code"><div class="ch"><span>incremental.py · update mutual counts for one new friendship</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def add_friendship(adj, m, u, v):
+    """Update mutual counts m in place when u and v become friends. Returns the users touched."""
+    for x in adj[u]:                           # new two-hop paths x - u - v
+        m[x][v] += 1; m[v][x] += 1
+    for y in adj[v]:                           # new two-hop paths u - v - y
+        m[u][y] += 1; m[y][u] += 1
+    adj[u].add(v); adj[v].add(u)
+    return {u, v} | adj[u] | adj[v]</code></pre></div>
+    <p><b>Confirm by measuring.</b> Start from the precomputed counts of the past graph and replay the 20,000 future friendships in order:</p>
+    <div class="metrics">
+      <div class="metric"><div class="v">127.0</div><div class="l">users touched per new friendship, mean (median 46, p99 1,297, max 1,747 of 10,000)</div></div>
+      <div class="metric"><div class="v">126.2</div><div class="l">counts changed per friendship, mean d<sub>u</sub> + d<sub>v</sub> (p99 1,299, max 1,836), each stored twice</div></div>
+      <div class="metric"><div class="v">63.1</div><div class="l">mean degree of an endpoint, vs 16.0 for a random user and E[d²]/E[d] = 60.5 on the past graph</div></div>
+      <div class="metric"><div class="v">363,628</div><div class="l">entries read to recompute the touched users from scratch instead (mean, every 20th edge)</div></div>
+    </div>
+    <p>All 20,000 updates together change 5,048,870 stored counts, about half of one batch join (9,519,454 rows), while keeping every user exact after every edge. A differential check confirms the derivation: on 50 sampled edges, the counts of 80 users each (40 touched, 40 random) match a full recomputation, and untouched users' counts did not change. A friendship with a hub is expensive: the largest update touches 1,747 users. That is write amplification, the mirror image of Day 2's read skew, and the same fix applies: cap or delay updates through hubs.</p>
+
+    <h4>Consistency: why the final check runs on every response</h4>
+    <p>The candidate store is updated asynchronously: an event "u and v are now friends" travels through a queue to the shards holding the touched rows, and the batch job rebuilds everything periodically. Between the event and the update, a reader can see a stale row. This is <b>eventual consistency</b>: if writes stop, all replicas converge, but a read can return an old value. How stale does a list get without updates? Take 2,000 users' top-10 lists at the end of the past graph and let the 20,000 future friendships happen: 17.3% of those users now have at least one suggestion who is already their friend (2.0% of all suggestions). Blocks and privacy settings change the same way, and showing a blocked person is a serious failure, not a ranking error. So the last step of every response re-checks the ten suggestions against the source of truth (the friend list, the block list, privacy settings): ten membership tests per request, cheap enough to run every time. Stale <em>counts</em> are tolerable (a slightly wrong rank); stale <em>eligibility</em> is not. One more promise is worth making: the user who just connected with someone should not see that person suggested on their next page load (<b>read-your-writes</b>), which the final check against the friend list also guarantees.</p>
+
+    <h4>Where PYMK uses it</h4>
+    <p>The design is now: a graph store sharded by user with consistent hashing and a hub cache; a candidate store filled by a batch self-join and kept fresh by the incremental rule; a request path that reads one key from the candidate store; and a final eligibility check against the graph store on every response. Day 4 shrinks the candidate generation work with sampling and sketches, and Day 5 ranks the stored candidates with a model.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Derive the update for an <em>unfriend</em> (<var>u</var>–<var>v</var> removed). Which counts fall, and why can a user's top-10 then need candidates that were not stored?</li>
+      <li>Write the self-join in SQL over a table <code>friends(x, v)</code> holding both directions, and give its output row count in terms of degrees.</li>
+      <li>Maintain each touched user's top-10 incrementally under +1 updates only. Prove that a candidate outside the top 10 can enter it only if its count was just incremented.</li>
+      <li>Read the TAO paper's sections on the data model and the cache tiers; list the API calls PYMK would need and which tier serves each.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>The update queue for a hub's new friendship holds 1,747 row updates. Bound the delay before every touched user is fresh, given a per-shard write rate.</li>
+      <li>Replace the nightly batch with incremental updates only. What goes wrong over months (lost events, bugs), and how does a periodic batch fix it?</li>
+      <li>Candidates from shared groups (not two hops) change when someone joins a group. Derive whose candidates change.</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Unfriend.</b> The same derivation with −1: \( m(u,y) \) falls by 1 for <var>y</var> ∈ <var>N</var>(<var>v</var>) and \( m(v,x) \) for <var>x</var> ∈ <var>N</var>(<var>u</var>) (neighbourhoods after removing the edge), and <var>u</var>, <var>v</var> become candidates of each other again with count <var>m</var>(<var>u</var>, <var>v</var>). If a user stores only their top 10 and one of them drops below the 11th, the true 10th is a candidate whose count was never stored, so the store must keep the full count map (or more than 10) for decrements, or recompute that user.</p>
+      <p><b>SQL.</b> <code>SELECT a.x, b.x AS y, COUNT(*) AS m FROM friends a JOIN friends b ON a.v = b.v AND a.x &lt;&gt; b.x GROUP BY a.x, b.x</code>. It emits \( \sum_v d_v(d_v-1) \) rows before grouping; filter out pairs that are already friends with an anti-join.</p>
+      <p><b>Top-10 under increments.</b> Counts only grow. Let <var>t</var> be the 10th largest count. A candidate outside the top 10 has count ≤ <var>t</var>; if it was not incremented its count is unchanged and <var>t</var> did not fall, so it still cannot pass the 10th. So after each increment, compare only the incremented candidate with the current 10th (a size-10 heap per user, Day 1).</p>
+      <p><b>Group join.</b> When <var>u</var> joins group <var>g</var>, the pairs (<var>u</var>, <var>y</var>) for every member <var>y</var> of <var>g</var> gain a shared group, so <var>u</var> and every member are touched: |<var>g</var>| users, up to 3,035 here. That is why large groups are usually capped or sampled as a candidate source.</p>
+      <p>The incremental rule is tested against a full recomputation on 20 random graphs in <code>day_3_solutions.py</code>, and on the week's graph in <code>day_3_measure.py</code>, section 5.</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Nathan Bronson et al., <a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">"TAO: Facebook's Distributed Data Store for the Social Graph"</a>, USENIX ATC 2013</li>
+      <li>Rajesh Nishtala et al., <a href="https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala">"Scaling Memcache at Facebook"</a>, NSDI 2013: leases against stale sets and thundering herds</li>
+      <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>: chapter 5 (replication, read-your-writes) and chapter 10 (batch processing, joins)</li>
+      <li>Jeffrey Dean and Sanjay Ghemawat, "MapReduce: Simplified Data Processing on Large Clusters", OSDI 2004</li>
     </ul></div>
   </div>
 
   <div class="check" data-check="day3">
     <div class="ch"><b>Checkpoint · Day 3</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="d3a" data-dim="ml"><span class="tx">Derive −log₂ <var>p</var> from additivity, compute both dice entropies, and prove <var>H</var> ≤ log₂ <var>n</var> with Gibbs' inequality.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3b" data-dim="ml"><span class="tx">Prove the bits-per-byte identity and explain, with the worked example, why per-token perplexity misleads.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3c" data-dim="ml"><span class="tx">Derive the Miller–Madow correction in nats and bits, and reproduce the estimator table on <em>Alice</em>.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3d" data-dim="dsa"><span class="tx">Prove the Kraft inequality and both halves of <var>H</var> ≤ average length &lt; <var>H</var> + 1.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3e" data-dim="dsa"><span class="tx">Run Huffman by hand on the 5-symbol example, then implement it with a heap and match the 4.134-bit average on <em>Alice</em>.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3f" data-dim="dsa"><span class="tx">Write the full optimality proof (Lemma 1 by exchange, Lemma 2's cost relation, induction), and say which step fails for BPE.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3g" data-dim="dsa"><span class="tx">Solve 1046 and 1167, and implement canonical Huffman and the two-queue O(<var>n</var>) version.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3h" data-dim="ai"><span class="tx">Run the paired document bootstrap for BPE 1,000 against 2,000 and explain why tokens are the wrong unit.</span><span class="dim ai">AI</span></label>
-    <label class="ck"><input type="checkbox" data-id="d3i" data-dim="ai"><span class="tx">Write the one-page tokenizer evaluation plan, with paired intervals.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3a" data-dim="ml"><span class="tx">Estimate p99 by nearest rank; derive the order-statistic interval and why p99 needs n ≥ 299; measure bootstrap versus order-statistic coverage at n = 100 and 1,000.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3b" data-dim="dsa"><span class="tx">Prove by the Chinese remainder theorem that mod-N resizing moves N/(N+1) of keys, and confirm on the week's users.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3c" data-dim="dsa"><span class="tx">Implement the ring with virtual nodes; prove that only the new server gains keys, that the expected moved fraction is 1/(N+1), and the 1/√V load spread.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3d" data-dim="dsa"><span class="tx">Implement rendezvous hashing and explain when it beats the ring.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3e" data-dim="sys"><span class="tx">Derive E[shards touched] = S(1 − (1 − 1/S)^d) and measure it for S = 16, 64, 256; compare hash and group placement by cross-shard edges.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3f" data-dim="dsa"><span class="tx">Solve 146 (both versions), 706 and 981; show why top-degree caching beats LRU under uniform requests.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3g" data-dim="sys"><span class="tx">Derive which counts change when u–v connect; implement the update and check it against a full recompute on the temporal split.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="p3h" data-dim="sys"><span class="tx">Explain the storage path (graph store, candidate store, final check) and why eligibility is re-checked on every response.</span><span class="dim sys">System Design</span></label>
   </div>
-</section><div class="pager"><a class="btn" href="day_2.html">← Greedy and the objective</a><a class="btn pri" href="day_4.html">Fast training →</a></div>
+</section>
+<div class="pager"><a class="btn" href="day_2.html">← Scale and skew</a><a class="btn pri" href="day_4.html">Approximation and candidates →</a></div>
 <footer>
-  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
-  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
   <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
 </footer>
 
@@ -960,8 +1090,8 @@ simInit(); simRender();
 }
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
-const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const KEY = "pymk-week1-progress-v1";
+const ITEMS = [{"id": "pr1", "dim": "sys", "page": "index.html"}, {"id": "pr2", "dim": "ml", "page": "index.html"}, {"id": "pr3", "dim": "ml", "page": "index.html"}, {"id": "pr4", "dim": "dsa", "page": "index.html"}, {"id": "pr5", "dim": "dsa", "page": "index.html"}, {"id": "pr6", "dim": "dsa", "page": "index.html"}, {"id": "pr7", "dim": "del", "page": "index.html"}, {"id": "pr8", "dim": "sys", "page": "index.html"}, {"id": "pr9", "dim": "sys", "page": "index.html"}, {"id": "p2a", "dim": "ml", "page": "day_2.html"}, {"id": "p2b", "dim": "ml", "page": "day_2.html"}, {"id": "p2c", "dim": "ml", "page": "day_2.html"}, {"id": "p2d", "dim": "dsa", "page": "day_2.html"}, {"id": "p2e", "dim": "dsa", "page": "day_2.html"}, {"id": "p2f", "dim": "dsa", "page": "day_2.html"}, {"id": "p2g", "dim": "sys", "page": "day_2.html"}, {"id": "p2h", "dim": "sys", "page": "day_2.html"}, {"id": "p2i", "dim": "sys", "page": "day_2.html"}, {"id": "p3a", "dim": "ml", "page": "day_3.html"}, {"id": "p3b", "dim": "dsa", "page": "day_3.html"}, {"id": "p3c", "dim": "dsa", "page": "day_3.html"}, {"id": "p3d", "dim": "dsa", "page": "day_3.html"}, {"id": "p3e", "dim": "sys", "page": "day_3.html"}, {"id": "p3f", "dim": "dsa", "page": "day_3.html"}, {"id": "p3g", "dim": "sys", "page": "day_3.html"}, {"id": "p3h", "dim": "sys", "page": "day_3.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

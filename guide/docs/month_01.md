@@ -1,28 +1,39 @@
 # Month 1 · AI Engineer + FDE
 
-Four builds, each one used by the next. By Day 30 you have an agent that runs on parts you wrote yourself: your tokenizer and decoder, your context and memory library, and your search engine.
+Every week is built around **one hard design problem** of the kind top companies ask in interviews. The week reading poses it and solves it end to end; each day goes deeper on one part of the design, in ML, algorithms and system design; the weekend build ships a small, tested version.
 
-Every week has the same shape: **use** the real thing, **measure** it, then **rebuild** its core. Every build goes spec → contract → test → code, with your failing tests committed first. Each week's **practice projects** apply the build to real data; a Kaggle competition is used only when it exercises that week's probability and statistics.
+Every build goes spec → contract → test → code, with your failing tests committed first.
 
-| Week | Days | Build |
-|---|---|---|
-| 1 | 1–7 | **[Tokenization](week_01/index.html):** byte-level BPE from first principles: the week reading, five days of ML, algorithms and design, and a weekend build |
-| 2 | 8–14 | **Prompt, context and memory engineering:** context within a token budget, compaction, short- and long-term memory |
-| 3 | 15–21 | **RAG and search:** inverted index, BM25, HNSW, hybrid retrieval, reranking, GraphRAG |
-| 4 | 22–30 | **Month project, the agentic harness:** agent loop, tools, skills, MCP, subagents, permissions |
+| Week | Days | The problem | Build |
+|---|---|---|---|
+| 1 | 1–7 | **[Design People You May Know](week_01/index.html)** | Friends-of-friends recommendations on a 10,000-user graph: exact counting, scale and skew, sharding, approximate candidates, an ML ranker, serving |
+| 2 | 8–14 | **Representation learning** (next) | From word embeddings to user embeddings: learned representations that replace hand-made features |
+| 3 | 15–21 | **[Tokenization](week_03/index.html)** | Byte-level BPE from first principles, with a tested tokenizer of your own |
 
-## Week 1 · Tokenization
+The weeks after Week 3 are being reordered; their topics are listed below.
 
-Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html).
+## Week 1 · People You May Know
 
-- **DSA:** hash maps and sliding windows, greedy vs optimal, Huffman, heaps with lazy deletion, inverted index, linked lists, LRU cache
+Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html). The [talk](week_01/talk.html) presents the whole design as slides.
+
+- **DSA:** graph representations, traversal, hash counting, set intersection, top-k, triangle counting, consistent hashing, MinHash and LSH, Bloom filters, personalized PageRank, k-way merge
+- **ML:** triadic closure, heavy-tailed degrees and the friendship paradox, percentiles with error bars, sampling estimators and recall@K, link prediction with logistic regression, AUC
+- **System Design:** back-of-envelope estimation, tail latency at scale, sharding and graph stores, precompute vs online, incremental updates, the serving architecture, A/B tests
+- **Software Delivery:** the function contract, golden, property and differential tests against a brute-force baseline
+
+## Week 3 · Tokenization
+
+Start at the [week reading](week_03/index.html), then work through [Day 1](week_03/day_1.html) to [Day 5](week_03/day_5.html) and finish with the [worksheet and learning checks](week_03/worksheet.html).
+
+- **DSA:** hash maps and sliding windows, greedy vs optimal, Huffman, heaps with lazy deletion, inverted index, linked lists, LRU cache, heavy hitters and sketches
 - **ML:** Zipf's law, the length / vocabulary / learnability trade-off, entropy and bits per byte, sufficient statistics, BPE-dropout
 - **AI:** the token tax, production split patterns, glitch tokens and other tokenizer-caused failures
 - **System Design:** the vocabulary budget, training on terabytes (MapReduce), serving and versioning a tokenizer
 - **Software Delivery:** contracts and invariants, golden, property and differential tests, a versioned file format
-- **Practice:** a token-tax study on FLORES+ with bootstrap intervals, and a vocabulary sweep on held-out text
 
-## Week 2 · Prompt, context and memory engineering
+## Later in Month 1 (order to be decided)
+
+### Prompt, context and memory engineering
 
 - **DSA:** sliding window, LRU/LFU caches, intervals, priority queues
 - **ML:** entropy, cosine similarity, position effects ("lost in the middle")
@@ -31,7 +42,7 @@ Start at the [week reading](week_01/index.html), then work through [Day 1](week_
 - **Software Delivery:** prompt versioning, contract tests for prompts
 - **Practice:** replicate "lost in the middle": accuracy vs where a fact sits in the context, with binomial confidence intervals · Kaggle [LLM Prompt Recovery](https://www.kaggle.com/competitions/llm-prompt-recovery) (recover the rewrite prompt; a cubed cosine-similarity metric)
 
-## Week 3 · RAG and search
+### RAG and search
 
 - **DSA:** inverted index, top-K heaps, k-way merge, HNSW graphs, MinHash and union-find
 - **ML:** TF-IDF and BM25, embeddings, contrastive loss, nDCG
@@ -40,19 +51,11 @@ Start at the [week reading](week_01/index.html), then work through [Day 1](week_
 - **Software Delivery:** ingestion pipeline, data contracts, freshness and deletes
 - **Practice:** evaluate your search on a public benchmark with nDCG and bootstrap intervals · Kaggle [LLM Science Exam](https://www.kaggle.com/competitions/kaggle-llm-science-exam) (RAG over Wikipedia, MAP@3)
 
-## Week 4 · Month project: the agentic harness
+### The agentic harness (month project)
 
 - **DSA:** state machines, backtracking, DAGs and topological sort
 - **ML:** pass@k, bootstrap intervals, variance across seeds
-- **AI:** tool schemas using Week 1's constrained decoding; Week 2 memory and Week 3 search as tools; skills, MCP, subagents
+- **AI:** tool schemas with constrained decoding; the memory and search builds as tools; skills, MCP, subagents
 - **System Design:** ◆ chat · job scheduler
 - **Software Delivery:** sandboxing, tracing, prompt-injection tests, release
 - **Practice:** the unbiased pass@k estimator, and how often majority voting is right as samples grow · Kaggle [AI Mathematical Olympiad](https://www.kaggle.com/competitions/ai-mathematical-olympiad-prize) (an agent that writes and runs code)
-
-## How the weeks connect
-
-- Week 1's constrained decoder is how Week 4's agent produces valid tool calls.
-- Week 2's memory and Week 3's search become tools the Week 4 agent can call.
-- Each week ends with a capstone design: the week's build as a service, defended with numbers.
-
-**Day 30:** the month project defense, the idea review, and choosing your major (Systems, Models, Agents, or Architecture). Weeks 2–4 open here as they are released.

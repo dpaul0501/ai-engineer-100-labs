@@ -1,6 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
-<title>BPE from First Principles</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+</style>
+<title>People You May Know</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -265,31 +268,32 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
-  <div class="rail-label">Week 1 · Tokenization</div>
+  <div class="rail-label">Week 1 · People You May Know</div>
   <a href="index.html" class="on" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
-  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Graphs and counting</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Scale and skew</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>The distributed graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Approximation and candidates</a>
+  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Ranking with ML</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
 <main><div class="page">
 <section id="start" style="padding-top:0">
-  <div class="eyebrow">Week 1 · Tokenization</div>
-  <h1>Byte pair encoding, from first principles</h1>
-  <p class="lead">Every language model reads and writes tokens, not text. This week you build the tokenizer GPT-style models use. The main reading gives you the whole solution: the problem, how to state it precisely, what BPE does, the algorithm, the code and a worked example. Each day then goes deeper on one theme from three sides: ML, algorithms and design. At the weekend you put it all together into a working, tested tokenizer and use it to measure something real.</p>
+  <div class="eyebrow">Week 1 · People You May Know</div>
+  <h1>People You May Know: from two hops to a billion users</h1>
+  <p class="lead">When a user opens a social app, it shows a short list of people they may want to connect with. "Design People You May Know" is a classic interview problem, asked at companies such as Meta and LinkedIn, and this week you solve it as a hypothetical design from the ground up. The main reading gives you the whole solution: the product contract, the problem stated as mathematics, the exact friends-of-friends algorithm worked by hand and in code, what it costs, the workload measured on a 10,000-user graph, an estimate at a billion users, and the full architecture. Each day then goes deeper on one part of that design from three sides: ML and statistics, algorithms, and system design. At the weekend you build and measure a working, tested recommender.</p>
 
   <div class="metrics">
-    <div class="metric"><div class="v">6.9×</div><div class="l">more tokens for the same sentence in Hindi than English, with GPT-2's tokenizer</div></div>
-    <div class="metric"><div class="v">3.7</div><div class="l">bytes per token on held-out text, from 1.0 with raw bytes</div></div>
-    <div class="metric"><div class="v">60×</div><div class="l">faster training from counting once and updating locally, same merges</div></div>
-    <div class="metric"><div class="v">13 vs 12</div><div class="l">tokens: greedy BPE vs the best 2-merge plan. Greedy is good, not optimal</div></div>
+    <div class="metric"><div class="v">53%</div><div class="l">of new friendships on the week's graph join two people who already had a mutual friend</div></div>
+    <div class="metric"><div class="v">0.02% → 12%</div><div class="l">chance a pair becomes friends, with 0 vs 10 or more mutual friends</div></div>
+    <div class="metric"><div class="v">3.7×</div><div class="l">more work per request than "20 friends × 20 friends" suggests: your friends are unusually popular</div></div>
+    <div class="metric"><div class="v">1.6 TB</div><div class="l">of friend lists at a billion users (estimate, assumptions labelled in R.6)</div></div>
   </div>
 
   <div class="progcard">
@@ -300,471 +304,524 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <h3>How the week works</h3>
   <div class="flow"><span class="b hi">Main reading</span><span class="ar">→</span><span class="b">Day 1–5</span><span class="ar">→</span><span class="b hi">Weekend build</span></div>
   <ul>
-    <li><b>Main reading first.</b> Read it end to end before Day 1. It is enough to build a correct tokenizer; the days make you understand it, make it fast, and design it properly.</li>
-    <li><b>Every day has three blocks:</b> <span class="t-ml">ML</span>, <span class="t-dsa">Algorithms</span> and <span class="t-sys">Design</span>. Each block has a reading, practice problems, variations, a worked solution (closed until you open it), and further reading, video or blog links.</li>
-    <li><b>Every day ends with a checkpoint.</b> Tick the subproblems you have done; the coverage bars fill by dimension.</li>
+    <li><b>Main reading first.</b> Read it end to end before Day 1. On its own it is enough to explain and build a correct People You May Know (PYMK) service; each day then takes one box of the design and goes deep on it.</li>
+    <li><b>One problem all week.</b> Every topic, from set intersection to logistic regression to consistent hashing, is taught because PYMK needs it, and each day says which box of the design it builds.</li>
+    <li><b>Every day has three blocks:</b> <span class="t-ml">ML</span>, <span class="t-dsa">Algorithms</span> and <span class="t-sys">Design</span>. Each block teaches from first principles (the question, a first attempt, the idea derived, a proof, the cost, a measurement), then gives practice problems, variations, a worked solution (closed until you open it) and further reading.</li>
+    <li><b>One dataset all week.</b> A synthetic social graph of 10,000 users and 100,000 friendships, each with the order in which it formed. Every measured number on these pages comes from code you can run on it; every estimate labels its assumptions.</li>
+    <li><b>Every day ends with a checkpoint.</b> Tick the subproblems you have done; the coverage bars fill by dimension: DSA, ML, AI, System Design and Software Delivery.</li>
     <li><b>Self-paced.</b> "Day" means a unit of work, not a date. Take the time you need.</li>
   </ul>
 
   <h3>The week at a glance</h3>
   <div class="tablewrap"><table class="weekmap">
     <tr><th></th><th>Theme</th><th class="t-ml">ML</th><th class="t-dsa">Algorithms</th><th class="t-sys">Design</th></tr>
-    <tr><td>R</td><td><b>Main reading</b></td><td colspan="3">The problem, the formulation, what BPE does, the algorithm, the code, a worked example</td></tr>
-    <tr><td>D1</td><td><a href="day_1.html">Text as data</a></td><td>Zipf's and Heaps' laws, fitted properly</td><td>Hashing, top-k four ways, sliding windows, UTF-8</td><td>The pre-tokenization pattern</td></tr>
-    <tr><td>D2</td><td><a href="day_2.html">Greedy and the objective</a></td><td>1/√n noise; vocabulary size as model selection</td><td>Greedy in full: proofs, matroids, failure, DP, approximation</td><td>Choosing the vocabulary budget</td></tr>
-    <tr><td>D3</td><td><a href="day_3.html">Information</a></td><td>Entropy from scratch, and estimating it</td><td>Prefix codes, Kraft, Huffman's optimality proof</td><td>Evaluating a tokenizer, with bootstrap error bars</td></tr>
-    <tr><td>D4</td><td><a href="day_4.html">Fast training</a></td><td>Counts are sufficient statistics</td><td>The max of a changing set: heaps, lazy deletion, indexed heaps</td><td>Contracts and tests</td></tr>
-    <tr><td>D5</td><td><a href="day_5.html">Encoding and serving</a></td><td>Failure modes and alternatives</td><td>Linked-list encoder, LRU; streams: heavy hitters, Count-Min, reservoir</td><td>Training on terabytes, serving at scale</td></tr>
-    <tr><td>WE</td><td><a href="worksheet.html"><b>Weekend build</b></a></td><td colspan="3"><code>tok.bpe</code> with tests, a vocabulary sweep, and the token tax with error bars</td></tr>
+    <tr><td>R</td><td><b>Main reading</b></td><td colspan="3">The contract, the formulation, why friends of friends, the exact algorithm by hand and in code, its cost, the measured workload, the 1B-user estimate, the architecture</td></tr>
+    <tr><td>D1</td><td><a href="day_1.html">Graphs and counting</a></td><td>Triadic closure and the clustering coefficient; P(friendship | m mutual friends) in depth</td><td>Graph representations, BFS, set intersection three ways, top-k three ways</td><td>The function contract and tests for the exact baseline</td></tr>
+    <tr><td>D2</td><td><a href="day_2.html">Scale and skew</a></td><td>Heavy tails, preferential attachment, the friendship paradox proved</td><td>A² as sparse matrix multiplication, Σ deg², triangle counting, capping hubs</td><td>Back-of-envelope estimation, percentiles, tail at scale, Little's law</td></tr>
+    <tr><td>D3</td><td><a href="day_3.html">The distributed graph</a></td><td>Percentiles from samples and a bootstrap interval for p99</td><td>Sharding, consistent and rendezvous hashing, scatter-gather, caching, partitioning</td><td>A graph store, precompute vs online, incremental updates, consistency</td></tr>
+    <tr><td>D4</td><td><a href="day_4.html">Approximation and candidates</a></td><td>Sampled mutual counts: unbiasedness and variance; recall@K</td><td>Jaccard, MinHash, LSH, Bloom filters, random walks with restart</td><td>The candidate budget, several candidate sources, what must stay exact</td></tr>
+    <tr><td>D5</td><td><a href="day_5.html">Ranking with ML</a></td><td>Link prediction, Adamic–Adar, logistic regression derived, AUC and recall@K</td><td>k-way merge with a heap, top-k, deduplication</td><td>The full serving architecture and A/B tests</td></tr>
+    <tr><td>WE</td><td><a href="worksheet.html"><b>Weekend build</b></a></td><td colspan="3">A tested <code>pymk</code> package: exact baseline, workload report, sampled and MinHash candidates, a logistic-regression ranker, and a served API with the final eligibility filter</td></tr>
   </table></div>
 
   <h3>What you will be able to do</h3>
   <div class="obj">
-    <div><span class="dim dsa">DSA</span><ul><li>Count with hash maps and size-2 sliding windows</li><li>Keep a running maximum with a heap and lazy deletion</li><li>Update counts incrementally with an inverted index</li><li>Show when greedy is optimal (Huffman) and when not (BPE)</li></ul></div>
-    <div><span class="dim ml">ML</span><ul><li>State tokenization as a constrained optimization</li><li>Compare tokenizers with entropy and bits per byte</li><li>Explain the length / vocabulary / learnability trade-off</li><li>Explain glitch tokens and segmentation noise</li></ul></div>
-    <div><span class="dim ai">AI</span><ul><li>Explain and measure the token tax across languages</li><li>Read a production tokenizer's split pattern</li><li>Explain spelling and arithmetic failures</li></ul></div>
-    <div><span class="dim sys">System Design</span><ul><li>Train a tokenizer on terabytes: what parallelizes</li><li>Size a tokenizer service</li><li>Version a tokenizer as part of a model</li></ul></div>
-    <div><span class="dim del">Software Delivery</span><ul><li>Write the contract and invariants before the code</li><li>Test with golden, property and differential tests</li><li>Ship a versioned file format</li></ul></div>
+    <div><span class="dim dsa">DSA</span><ul><li>Represent a graph as lists, a matrix or CSR, and say what each costs</li><li>Count mutual friends exactly, and prove the count correct</li><li>Intersect sets and take the top k with the right method for the sizes</li><li>Estimate similarity with MinHash and LSH, and membership with Bloom filters</li></ul></div>
+    <div><span class="dim ml">ML</span><ul><li>Measure triadic closure on a temporal split</li><li>Prove the friendship paradox and use it to predict work per request</li><li>Derive and train logistic regression for link prediction</li><li>Evaluate candidates and rankers with recall@K and AUC, with error bars</li></ul></div>
+    <div><span class="dim ai">AI</span><ul><li>Explain why a recommender's own suggestions change the data it learns from</li><li>Say why learned user embeddings (Week 2) replace hand-made features</li></ul></div>
+    <div><span class="dim sys">System Design</span><ul><li>Estimate storage, traffic and reads per request at a billion users</li><li>Shard a graph with consistent hashing and reason about fan-out and tail latency</li><li>Choose between precomputing and computing online</li><li>Draw the whole PYMK architecture and defend every box</li></ul></div>
+    <div><span class="dim del">Software Delivery</span><ul><li>Write the contract (eligibility, ties, determinism) before the code</li><li>Test with golden, property and differential tests</li><li>Ship an API whose final filter makes the hard rules hold on every response</li></ul></div>
   </div>
-  <p class="small muted">Prerequisites: Python, dictionaries and lists, big-O notation, logarithms. Everything else is introduced where it is used.</p>
+  <p class="small muted">Prerequisites: Python, sets and dictionaries, big-O notation, basic probability (what a conditional probability is). Everything else is introduced where it is used.</p>
 </section><section class="s" id="reading" data-sec="reading">
-  <div class="shead"><span class="sno">MAIN READING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span></span></div>
+  <div class="shead"><span class="sno">MAIN READING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">System Design</span><span class="dim del">Delivery</span></span></div>
   <h2>The problem, and the whole solution</h2>
+  <p>This reading answers the interview question end to end. R.1 pins down what the product must do. R.2 turns that into mathematics and measures why "friends of friends" is the right place to look. R.3 and R.4 give the exact algorithm, by hand and in code, with its proof and its cost. R.5 measures that cost on the week's graph. R.6 scales it to a billion users on paper, and R.7 draws the architecture that the rest of the week builds, box by box.</p>
 
-  <h3>R.1 · Foundations: what a model reads, and why we need a tokenizer</h3>
-  <p>Before any algorithm, two questions: what does a language model actually take as input and produce as output, and why does that force us to build a tokenizer at all? This section answers both from the ground up and ends with the objective that R.2 writes down precisely.</p>
+  <h3>R.1 · The interview problem and the product contract</h3>
 
-  <h4>1. What a language model reads and writes</h4>
-  <p><b>The question.</b> A model computes with numbers. Text is a string of characters. What exactly crosses the boundary between them?</p>
-  <p><b>The answer: integer ids.</b> Fix a list of <var>V</var> pieces of text, called <b>tokens</b>, and number them 0 to <var>V</var>−1. That list is the <b>vocabulary</b>. A model never sees text. It sees a list of ids, and it produces, for the next position, one probability for each of the <var>V</var> ids.</p>
-  <p>A toy example. Take a vocabulary of <var>V</var> = 6 tokens:</p>
+  <h4>1. The question as it is asked</h4>
+  <p><b>The question.</b> "Design People You May Know. When a user opens the app, show them 10 people they may want to connect with. There are a billion users." That is all the interviewer says. Everything else, you must ask for or decide, and write down.</p>
+  <p><b>First attempt.</b> "Recommend the most popular users." It is easy: sort users by number of friends once, show everyone the same top 10. It is wrong for three reasons you can see on a tiny case. A user in Lisbon is shown a celebrity in Seoul they will never befriend. The same 10 people appear for everyone, so they are flooded with requests. And nothing depends on who <em>you</em> are. A recommendation must be personal: a function of the user and their place in the graph.</p>
+
+  <h4>2. Inputs and output</h4>
+  <p>Write the contract as a table before any design. "Contract" means the promises the service makes to whoever calls it.</p>
   <div class="tablewrap"><table>
-    <tr><th>id</th><td class="num">0</td><td class="num">1</td><td class="num">2</td><td class="num">3</td><td class="num">4</td><td class="num">5</td></tr>
-    <tr><th>token</th><td><code>The</code></td><td><code>&nbsp;cat</code></td><td><code>&nbsp;sat</code></td><td><code>&nbsp;on</code></td><td><code>&nbsp;the</code></td><td><code>&nbsp;mat</code></td></tr>
+    <tr><th>Part</th><th>What it is</th></tr>
+    <tr><td><b>Input</b></td><td>A user id <var>u</var>, and <var>k</var> (here 10). The service may read the friendship graph, user profiles (city, groups), the block list, privacy settings, and the history of what was shown and what was accepted.</td></tr>
+    <tr><td><b>Output</b></td><td>An ordered list of at most <var>k</var> user ids, best first. Optionally, for each, a reason the app can display ("12 mutual friends").</td></tr>
+    <tr><td><b>Called when</b></td><td>The user opens a page. So the call is on the critical path: the user waits for it.</td></tr>
   </table></div>
-  <p>The text <code>The cat sat</code> becomes the ids <code>[0, 1, 2]</code>. The model's job is to say which id comes next.</p>
-  <div class="dg"><div class="vflow">
-    <div class="vbox"><b>ids in: [0, 1, 2]</b><span class="muted small">"The", " cat", " sat"</span></div>
-    <div class="varr">↓ look up row 0, row 1, row 2 of the embedding table E (V × d)</div>
-    <div class="vbox"><b>three vectors of length d</b><span class="muted small">the only thing the network ever sees</span></div>
-    <div class="varr">↓ the network mixes them into one vector h for the next position</div>
-    <div class="vbox"><b>scores z = h · Wᵀ, one per id</b><span class="muted small">W is the output table, also V × d</span></div>
-    <div class="varr">↓ softmax</div>
-    <div class="vbox" style="border-color:var(--accent)"><b>V probabilities that sum to 1</b><span class="muted small">for example, " on" gets the highest</span></div>
-  </div><div class="cap">Both ends of the model are tables with one row per id. The middle never touches text.</div></div>
-  <p><b>The input end: the embedding table.</b> The model owns a matrix <var>E</var> with <var>V</var> rows and <var>d</var> columns (<var>d</var> is the model width, for example 768). Row <var>i</var> is a learned vector for token <var>i</var>. "Embedding id 2" just means "read row 2". It is a table lookup, not a computation.</p>
-  <p><b>The output end: a softmax over V ids.</b> The network turns its input into one vector <var>h</var> of length <var>d</var>. It scores every token by a dot product with that token's row of a second <var>V</var> × <var>d</var> table <var>W</var>: \(z_i = h \cdot W_i\). The softmax turns the <var>V</var> scores into probabilities:</p>
-  <div class="eq">\[ p(\text{next} = i) \;=\; \frac{e^{z_i}}{\sum_{j=0}^{V-1} e^{z_j}}, \qquad i = 0, \dots, V-1 \]</div>
-  <p>Worked by hand with <var>V</var> = 3 and scores <var>z</var> = (2, 1, 0): \(e^2 = 7.389\), \(e^1 = 2.718\), \(e^0 = 1\), sum 11.107, so the probabilities are 0.665, 0.245 and 0.090. Each is positive, and they add to 1 because every term is divided by the same sum.</p>
-  <p><b>Generating text</b> is this step in a loop: pick an id from the probabilities, append it to the input, repeat. At the end, the ids are turned back into text. So the model needs two functions it cannot learn by itself: text → ids before it runs, and ids → text after. Those two functions are the <b>tokenizer</b>.</p>
 
-  <h4>2. Why V must be fixed before training</h4>
-  <p><b>The question.</b> Why not let the vocabulary grow as new words show up?</p>
-  <p>Three reasons, each from the picture above.</p>
+  <h4>3. Hard constraints: must hold on every response</h4>
+  <p>A <b>hard constraint</b> is a rule that may never be broken, not even once, not even to gain relevance. Break one and the product is wrong, or worse, unsafe.</p>
   <ul>
-    <li><b>(a) Each id owns learned parameters.</b> Row <var>i</var> of <var>E</var> and row <var>i</var> of <var>W</var> are learned from the training examples in which token <var>i</var> appears. A token added after training has rows that no gradient ever touched: random numbers. The model has no idea what it means.</li>
-    <li><b>(b) The softmax needs a finite set to normalize over.</b> The denominator sums over all <var>V</var> ids. An id outside 0..<var>V</var>−1 has no score, so its probability is 0 and the model can never produce it. Adding an id also changes the denominator, so every probability the model learned shifts.</li>
-    <li><b>(c) V sets the parameter count.</b> The two tables each have one row per id, so their size in parameters is fixed by <var>V</var>:</li>
+    <li><b>Not yourself.</b> <var>u</var> is never in its own list.</li>
+    <li><b>Not already friends.</b> Suggesting an existing friend is a visible bug.</li>
+    <li><b>Not blocked, in either direction.</b> If <var>u</var> blocked <var>v</var>, or <var>v</var> blocked <var>u</var>, neither is ever suggested to the other. Blocking is often a safety tool, so a single leak can do real harm.</li>
+    <li><b>Privacy.</b> Respect the settings of the person being suggested ("do not suggest me", hidden friend lists). A reason like "12 mutual friends" must not reveal a friendship that someone chose to hide.</li>
   </ul>
-  <div class="eq">\[ \underbrace{V \cdot d}_{\text{input table } E} \;+\; \underbrace{V \cdot d}_{\text{output table } W} \;=\; 2\,V d \]</div>
-  <p>With <var>V</var> = 50,000 and <var>d</var> = 768 that is 76.8 million, chosen once, before training. (Some models share one table for both ends, called weight tying, which halves this.) Doubling <var>V</var> doubles these tables, so <var>V</var> is a budget decision, not a detail.</p>
-  <div class="idea">The ids mean something only to the model that was trained with them. Row 1 was learned as " cat". Change the tokenizer so that id 1 means " dog", or so that " cat" is split into two ids, and the trained rows no longer match what they are fed. Changing the tokenizer means retraining the model.</div>
+  <p>Why "hard" changes the design: a ranking model can be wrong on average and still be useful, but these rules cannot be "mostly" right. So the design ends with a separate, simple, exact <b>final filter</b> that checks every rule on the freshest data, right before the response leaves (R.7). Approximation is allowed everywhere else; never here.</p>
 
-  <h4>3. Character, code point, grapheme, byte, subword</h4>
-  <p><b>The question.</b> If we must pick a fixed list of units, what units does text offer? "Character" sounds obvious, but it hides four different things. Definitions first:</p>
+  <h4>4. Soft goals: traded off against each other</h4>
   <ul>
-    <li><b>Code point.</b> Unicode gives every symbol a number, written U+ and hex: <code>a</code> is U+0061, <code>न</code> (Devanagari "na") is U+0928, 😀 is U+1F600. There are 1,114,112 possible code points, and about 150,000 are assigned. A Python <code>str</code> is a sequence of code points; <code>len(s)</code> counts them.</li>
-    <li><b>Mark.</b> Some code points do not stand alone: they modify the code point before them. U+0301 adds an acute accent; U+093F is the Devanagari vowel sign "i". Unicode classes these as marks (categories Mn, Mc).</li>
-    <li><b>Grapheme (cluster).</b> What a reader sees as one character: a base code point plus any marks or modifiers attached to it. Unicode defines the boundaries in UAX #29.</li>
-    <li><b>Byte.</b> To store or send code points, they are written as bytes (numbers 0–255). <b>UTF-8</b>, the encoding used almost everywhere, writes each code point as 1 to 4 bytes.</li>
+    <li><b>Relevance.</b> Suggestions the user accepts and that turn into real, lasting connections (not just clicks).</li>
+    <li><b>Freshness.</b> A friendship made a minute ago should change the list soon: the new friend disappears from suggestions and their friends become candidates.</li>
+    <li><b>Latency.</b> The page waits for the answer. A typical target is a p99 (the time under which 99% of requests finish; Day 2 defines it) in the low hundreds of milliseconds. That number is a design assumption to agree with the interviewer, not a fact.</li>
+    <li><b>Cost.</b> Machines and memory. At a billion users, a design that reads too much per request is unaffordable (R.6).</li>
   </ul>
-  <p>The same visible text gives different counts at each level:</p>
-  <div class="tablewrap"><table>
-    <tr><th>Text</th><th>Code points</th><th class="num">Code points</th><th class="num">Graphemes</th><th>UTF-8 bytes (hex)</th><th class="num">Bytes</th></tr>
-    <tr><td><code>a</code></td><td>U+0061</td><td class="num">1</td><td class="num">1</td><td><code>61</code></td><td class="num">1</td></tr>
-    <tr><td><code>é</code></td><td>U+00E9</td><td class="num">1</td><td class="num">1</td><td><code>c3 a9</code></td><td class="num">2</td></tr>
-    <tr class="hi"><td><code>é</code></td><td>U+0065 <code>e</code> + U+0301 accent mark</td><td class="num">2</td><td class="num">1</td><td><code>65 cc 81</code></td><td class="num">3</td></tr>
-    <tr><td><code>न</code></td><td>U+0928</td><td class="num">1</td><td class="num">1</td><td><code>e0 a4 a8</code></td><td class="num">3</td></tr>
-    <tr><td><code>नि</code></td><td>U+0928 + U+093F vowel sign (a mark)</td><td class="num">2</td><td class="num">1</td><td><code>e0 a4 a8 e0 a4 bf</code></td><td class="num">6</td></tr>
-    <tr><td>😀</td><td>U+1F600</td><td class="num">1</td><td class="num">1</td><td><code>f0 9f 98 80</code></td><td class="num">4</td></tr>
-    <tr><td>👍🏽</td><td>U+1F44D thumbs up + U+1F3FD skin tone</td><td class="num">2</td><td class="num">1</td><td><code>f0 9f 91 8d f0 9f 8f bd</code></td><td class="num">8</td></tr>
-    <tr><td><code>नमस्ते</code></td><td>6 code points, 2 of them marks</td><td class="num">6</td><td class="num">4*</td><td>3 bytes each</td><td class="num">18</td></tr>
-    <tr><td><code>hello</code></td><td>U+0068 … U+006F</td><td class="num">5</td><td class="num">5</td><td><code>68 65 6c 6c 6f</code></td><td class="num">5</td></tr>
-  </table></div>
-  <p class="small muted">Measured with Python 3 (Unicode 16.0) and the <code>regex</code> module's <code>\X</code>. *Grapheme counts for Hindi conjuncts depend on the Unicode version's rules; the code point and byte counts do not.</p>
-  <p>The two <code>é</code> rows look identical on screen but are different code points and different bytes. A tokenizer that works on bytes sees two different strings. (Unicode normalization, NFC, converts the second into the first; whether to apply it is a design choice.)</p>
-  <p><b>UTF-8 in one paragraph.</b> Code points below 128 (plain ASCII: English letters, digits, punctuation) take one byte, equal to the code point, so ASCII text is unchanged. Larger code points take 2, 3 or 4 bytes. The first byte's leading bits say how many bytes follow (<code>110…</code> two, <code>1110…</code> three, <code>11110…</code> four), and every following byte starts with <code>10</code>. That is why Devanagari letters are 3 bytes and emoji 4, and why you can always find where a character starts. Day 1 builds and validates UTF-8 bit by bit.</p>
-  <p><b>Why tokenizers start from bytes.</b> Bytes have two properties nothing else on the list has together:</p>
-  <ul>
-    <li><b>Finite and small:</b> exactly 256 symbols, fixed forever. New emoji, new scripts and new Unicode versions add code points, never bytes.</li>
-    <li><b>Total:</b> every string, in every language, with any typo, has a UTF-8 byte sequence, and the bytes give the exact string back. A vocabulary that contains all 256 bytes can write anything.</li>
-  </ul>
-  <p><b>What a subword token is.</b> A byte-level tokenizer starts with the 256 single bytes as tokens and adds longer tokens: each new token is a <em>byte string</em> chosen by training because it is frequent, such as <code>&nbsp;the</code> or <code>ing</code>. Nothing forces a token to stop at a character boundary. If <code>e0 a4</code> is frequent in Hindi text, it can become a token, holding two of the three bytes of <code>न</code>:</p>
-  <div class="toks"><span class="tk mk">e0 a4</span><span class="tk mk">a8</span><span class="tk">e0 a4 bf</span></div>
-  <p class="small muted">A possible split of <code>नि</code> into three tokens. Red: tokens that hold part of a character. Neither is valid UTF-8 on its own; joined, the bytes are.</p>
-  <p>This is why <code>decode</code> must join bytes first and decode UTF-8 once at the end (R.6).</p>
-
-  <h4>4. The units compared, and what we require</h4>
-  <p><b>The question.</b> Which unit should the vocabulary be made of? First write down what any tokenizer must do. It is a pair of functions plus a way to learn them:</p>
-  <div class="code"><div class="ch"><span>the contract</span><button class="copy" type="button">Copy</button></div><pre><code>encode : str  → list[int]        <span class="c"># every id in 0 .. V-1</span>
-decode : list[int] → str
-train  : corpus, V → tokenizer     <span class="c"># learn the list of tokens from data</span></code></pre></div>
-  <div class="tablewrap"><table>
-    <tr><th>#</th><th>Requirement</th><th>Precisely</th><th>Why</th></tr>
-    <tr><td>R1</td><td><b>Lossless</b></td><td><code>decode(encode(x)) == x</code> for every string</td><td>Model output must turn back into exactly the text it means</td></tr>
-    <tr><td>R2</td><td><b>Total</b></td><td><code>encode</code> never fails, for any Unicode input</td><td>Users type anything</td></tr>
-    <tr><td>R3</td><td><b>Deterministic</b></td><td>Same input, same ids, on every machine</td><td>Training and serving must see the same tokens</td></tr>
-    <tr><td>R4</td><td><b>Short</b></td><td>Few tokens per byte</td><td>Compute, latency, price and context are counted in tokens</td></tr>
-    <tr><td>R5</td><td><b>Learnable</b></td><td>Every token appears often in training data</td><td>A token's vector is only as good as its examples</td></tr>
-    <tr><td>R6</td><td><b>Fast</b></td><td>Encoding keeps up with the model</td><td>It runs on every request and the whole corpus</td></tr>
-  </table></div>
-  <p>Now try each unit against R2 (total), R4 (short) and R5 (learnable).</p>
-  <p><b>Whole words.</b> The first attempt: one token per word. Sequences are short. But the set of words has no end. <b>Heaps' law</b> says the number of distinct words in a text of <var>n</var> words grows like \(c\, n^{\beta}\) with β roughly 0.4–0.6: it keeps growing as you read more, without a ceiling (Day 1 measures it). Any fixed word list therefore misses words, and the classic fix is a special <code>&lt;UNK&gt;</code> ("unknown") id for every word not in the list, which breaks R1: the word is lost. On <em>Alice</em>, keeping every 10th document as held-out text, 4.8% of held-out words (135 of 2,810) never occur in the other 90% of the same book, for example <code>birthday</code> and <code>anywhere</code>. And 44% of the word types in the training part (1,071 of 2,435) occur exactly once, so their vectors would have one example each (fails R5).</p>
-  <p><b>Characters (code points).</b> About 150,000 assigned code points, and the number grows with each Unicode version, so it is not fixed. Most are rare: a Chinese character seen twice gets a poor vector. Sequences are as long as the text has characters.</p>
-  <p><b>Bytes.</b> 256 symbols, total, fixed. But sequences are long: one token per byte, so <code>&nbsp;the</code> is 4 steps and <code>नमस्ते</code> is 18.</p>
-  <p><b>Subwords.</b> Bytes plus a learned list of frequent byte strings. Frequent words get one token; rare words are spelled with smaller pieces, down to single bytes if needed. This keeps the totality of bytes and gets most of the shortness of words.</p>
-  <div class="tablewrap"><table>
-    <tr><th>Unit</th><th class="num">V</th><th>Total (R2)</th><th>Short (R4)</th><th>Learnable (R5)</th></tr>
-    <tr><td><b>Bytes</b></td><td class="num">256</td><td>yes: 256 bytes write anything</td><td>no: <code>&nbsp;the</code> is 4 steps</td><td>yes</td></tr>
-    <tr><td><b>Code points</b></td><td class="num">~150k, growing</td><td>only with an unknown id</td><td>somewhat</td><td>no: most are rare</td></tr>
-    <tr><td><b>Whole words</b></td><td class="num">unbounded</td><td>no: new words need <code>&lt;UNK&gt;</code></td><td>yes</td><td>no: most words are rare</td></tr>
-    <tr class="hi"><td><b>Subwords (BPE)</b></td><td class="num">30k–200k</td><td>yes: falls back to bytes</td><td>mostly</td><td>mostly, by construction</td></tr>
-  </table></div>
-  <p><b>Why the details matter.</b> <em>"The children went to the market to buy fresh vegetables for dinner."</em> is 13 tokens in English with GPT-2, GPT-4's <code>cl100k_base</code> and GPT-4o's <code>o200k_base</code>. Its Hindi translation is 90, 65 and 22 tokens: Hindi users paid up to 6.9× the price and got 6.9× less context, purely because of the tokenizer. Every one of these is a byte-level subword tokenizer; they differ in which byte strings training gave identity to. By the end of the week you can explain each number.</p>
-
-  <h4>5. Why a bigger vocabulary gives shorter sequences</h4>
-  <p><b>The question.</b> We want short sequences (R4). How short can text get with <var>V</var> tokens, and why does a bigger <var>V</var> help?</p>
-  <p><b>The analogy: number bases.</b> Write one million in different bases. Base 2 needs 20 digits (11110100001001000000). Base 10 needs 7 (1000000). Base 1000 needs 3, and you already use it: the commas in 1,000,000 mark base-1000 digits.</p>
-  <div class="toks"><span class="tk">1</span><span class="tk">000</span><span class="tk">000</span></div>
-  <p class="small muted">One million as three base-1000 digits. Each box is one "token" from an alphabet of 1,000 symbols (000 to 999).</p>
-  <p>A bigger alphabet means fewer symbols for the same value. How many fewer is a counting argument.</p>
-  <p><b>The bound, derived.</b> With <var>k</var> digits in base <var>b</var> you can write \(b^k\) different values, no more: each position has <var>b</var> choices, and the choices multiply. To name any one of <var>N</var> values you need \(b^k \ge N\), so</p>
-  <div class="eq">\[ k \;\ge\; \log_b N \;=\; \frac{\log_2 N}{\log_2 b}. \]</div>
-  <p>\(\log_2 N\) is the number of bits needed to pick one value out of <var>N</var>, and \(\log_2 b\) is the number of bits one digit can carry. For one million, \(\log_2 10^6 = 19.93\): base 2 carries 1 bit per digit (20 digits), base 10 carries 3.32 (7 digits), base 1000 carries 9.97 (3 digits).</p>
-  <p>Tokens work the same way. A sequence of <var>n</var> tokens from a vocabulary of <var>V</var> can take at most \(V^n\) different values, so one token carries <b>at most \(\log_2 V\) bits</b>. Say a text carries <var>H</var> bits of information, meaning that even the best lossless code needs <var>H</var> bits to tell it apart from the alternatives (Day 3 defines this exactly as entropy). Because <code>encode</code> is lossless, its tokens must carry all <var>H</var> bits, so</p>
-  <div class="eq">\[ n \cdot \log_2 V \;\ge\; H \qquad\Longrightarrow\qquad n \;\ge\; \frac{H}{\log_2 V}. \]</div>
-  <p>Example: a passage carrying <var>H</var> = 2,000 bits needs at least 2,000 / 8 = 250 tokens with <var>V</var> = 256, and at least 2,000 / 16 = 125 with <var>V</var> = 65,536. The floor falls only like \(1 / \log_2 V\): squaring the vocabulary halves it.</p>
-  <p><b>Where the analogy stops.</b> In a number base every digit string is used, and all digits are equally likely. Text is not like that, in two ways.</p>
-  <ul>
-    <li><b>Tokens are not used equally.</b> A token carries the full \(\log_2 V\) bits only if all <var>V</var> tokens are equally likely in every position. In real text <code>&nbsp;the</code> is far more common than <code>&nbsp;quadrille</code>, so each token carries less, and real sequences are longer than the floor.</li>
-    <li><b>Bytes are a wasteful starting point.</b> A byte could carry 8 bits, but English uses a few dozen byte values, mostly in predictable orders, so each byte carries much less. A pure change of base from 256 to <var>V</var> = 3,208 symbols would shorten text by \(\log_2 3208 / 8 = 1.46\times\). Merging frequent byte strings removes the predictability as well, so the measured gain is much larger.</li>
-  </ul>
-  <p><b>Confirm by measuring.</b> BPE trained on 90% of <em>Alice</em>'s documents, measured on the other 10%:</p>
-  <div class="chart"><div class="t">Bytes per token on held-out <em>Alice</em> (higher = shorter sequences)</div>
-    <div class="br"><span>vocab 256</span><span class="tr"><i style="width:27%"></i></span><span class="v">1.00</span></div>
-    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:61%"></i></span><span class="v">2.26</span></div>
-    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:79%"></i></span><span class="v">2.94</span></div>
-    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:92%"></i></span><span class="v">3.45</span></div>
-    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%"></i></span><span class="v">3.73</span></div>
-  </div>
-  <p>Sequences get shorter as <var>V</var> grows, with diminishing returns, as the \(1/\log_2 V\) shape predicts. The gain at 3,208 is 3.73×, not the 1.46× a change of base gives, for the second reason above. (3,208 is the largest vocabulary this text supports: after that no pair occurs twice.)</p>
-
-  <h4>6. Why a bigger vocabulary can hurt: sharing vs identity</h4>
-  <p><b>The question.</b> If bigger <var>V</var> means shorter sequences, why not make every frequent word its own token?</p>
-  <p>Because of (a) in part 2: a token's vector is learned only from the examples that contain it. Compare two vocabularies for three related words:</p>
-  <div class="grid2">
-    <div><b>Sharing</b> (small V)
-      <div class="toks"><span class="tk">happ</span><span class="tk">y</span></div>
-      <div class="toks"><span class="tk">un</span><span class="tk">happ</span><span class="tk">y</span></div>
-      <div class="toks"><span class="tk">happ</span><span class="tk">iness</span></div>
-      <p class="small">One vector for <code>happ</code>, trained by every occurrence of all three words. An unseen word like <code>happily</code> still reuses it.</p></div>
-    <div><b>Identity</b> (large V)
-      <div class="toks"><span class="tk new">happy</span></div>
-      <div class="toks"><span class="tk new">unhappy</span></div>
-      <div class="toks"><span class="tk new">happiness</span></div>
-      <p class="small">Three independent vectors, each starting random and trained only by its own occurrences. Nothing tells the model they are related.</p></div>
-  </div>
-  <p>Shared pieces give <b>generalization</b>: many examples per vector, and new words built from known parts. Identity gives shorter sequences and a dedicated vector, but if the token is rare its vector stays close to its random start: the model ends up <b>memorizing</b> the few contexts it saw rather than learning what the token means. Day 2 derives how fast a vector's noise shrinks with its number of examples.</p>
-  <p><b>Confirm by measuring.</b> Same split as above. As <var>V</var> grows, most new tokens become rare, and the gap between how well a model fits the training text and the held-out text (in bits per token; set-up on Day 2) widens:</p>
-  <div class="chart"><div class="t">The cost of identity, on <em>Alice</em></div>
-    <div class="sub">New tokens used fewer than 10 times</div>
-    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:3%;--c:var(--bad)"></i></span><span class="v">3%</span></div>
-    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:11%;--c:var(--bad)"></i></span><span class="v">11%</span></div>
-    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:68%;--c:var(--bad)"></i></span><span class="v">68%</span></div>
-    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:86%;--c:var(--bad)"></i></span><span class="v">86%</span></div>
-    <div class="sub">Train → test gap, bits per token (higher = more memorization)</div>
-    <div class="br"><span>vocab 256</span><span class="tr"><i style="width:18%;--c:var(--ai)"></i></span><span class="v">0.06</span></div>
-    <div class="br"><span>vocab 500</span><span class="tr"><i style="width:15%;--c:var(--ai)"></i></span><span class="v">0.05</span></div>
-    <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:24%;--c:var(--ai)"></i></span><span class="v">0.08</span></div>
-    <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:50%;--c:var(--ai)"></i></span><span class="v">0.17</span></div>
-    <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%;--c:var(--ai)"></i></span><span class="v">0.34</span></div>
-  </div>
-  <p>So there is a best <var>V</var> in between, and it depends on how much data and how big a model you have. On 130 KB of text it is small. At large scale, Tao et al. (2024) fit scaling laws for vocabulary size and find that the best <var>V</var> grows with model size: larger models should use larger vocabularies.</p>
-
-  <h4>7. The design objective, derived</h4>
-  <p><b>The question.</b> What exactly should a tokenizer optimize?</p>
-  <p><b>The real goal.</b> A tokenizer is good if the model trained with it is good. Measure the model in <b>bits per byte</b>: how many bits, on average, the model needs to predict each byte of held-out text (Day 3 explains why this is fair across tokenizers, whose tokens have different lengths). Compare tokenizers at a fixed compute budget <var>C</var>, since a shorter sequence also means less compute per byte. Then the goal is</p>
-  <div class="eq">\[
-\begin{aligned}
-\min_{T}\quad & \mathrm{BPB}\bigl(\text{model trained with tokenizer } T \text{ under compute } C\bigr)\\
-\text{s.t.}\quad & T \text{ is lossless (R1), total (R2) and deterministic (R3).}
-\end{aligned}
-\]</div>
-  <p><b>Why we cannot optimize it directly.</b> Evaluating one candidate <var>T</var> means training a whole model. The search space of vocabularies is astronomically large. So we optimize a <b>proxy</b> that is cheap to compute from the training text alone and that tracks the parts of the real goal we understand:</p>
-  <ul>
-    <li><b>Fewest tokens</b> stands for compute and context: fewer tokens per byte means each unit of compute covers more text (part 5).</li>
-    <li><b>A budget <var>K</var> on new tokens</b> stands for learnability and parameter cost: it caps the \(2Vd\) table size (part 2) and stops the vocabulary from filling with rare tokens (part 6).</li>
-    <li><b>Starting from the 256 bytes</b> gives R1 and R2 for free (part 3).</li>
-  </ul>
-  <p>R.2 states this proxy precisely: minimize the total number of tokens over the training corpus, with at most 256 + <var>K</var> tokens, each frequent enough to learn.</p>
-
-  <div class="code"><div class="ch"><span>foundations.py · check the numbers in this section</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import math
-
-def softmax(z):
-    m = max(z)                                   # subtract the max: same result, no overflow
-    e = [math.exp(x - m) for x in z]
-    s = sum(e)
-    return [x / s for x in e]
-
-def min_tokens(h_bits, V):
-    return h_bits / math.log2(V)                 # n &gt;= H / log2 V
-
-def show(s):
-    b = s.encode("utf-8")
-    return f"{s!r}: {len(s)} code points, {len(b)} bytes: {b.hex(' ')}"
-
-print([round(p, 3) for p in softmax([2, 1, 0])])   # [0.665, 0.245, 0.09]
-print(min_tokens(2000, 256), min_tokens(2000, 65536))   # 250.0 125.0
-for s in ["a", "é", "é", "नि", "\U0001F600", "नमस्ते"]:
-    print(show(s))</code></pre></div>
-
-  <div class="part"><b>Practice</b><ul>
-    <li>Run <code>foundations.py</code>. Then predict, before running, the code points and bytes of <code>ñ</code>, <code>中</code> and 🇮🇳 (a flag), and check.</li>
-    <li>A model has <var>d</var> = 4,096 and separate input and output tables. How many parameters does moving from <var>V</var> = 50,000 to <var>V</var> = 100,000 add?</li>
-    <li>Using the bound, how many tokens at least does a 2,000-bit passage need with <var>V</var> = 1,024? With <var>V</var> = 2<sup>20</sup>?</li>
-    <li>Give a byte string that cannot be decoded as UTF-8 on its own but can be a BPE token. Why does <code>decode</code> still return the right text?</li>
-  </ul></div>
-  <div class="part"><b>Problem variations</b><ul>
-    <li>Make the model's vocabulary grow after training: what would a new token's rows have to be initialized to, and what would its probability be before any further training?</li>
-    <li>Instead of bytes, use code points as the base alphabet with an <code>&lt;UNK&gt;</code> fallback. Which of R1–R3 break, and on what inputs?</li>
-    <li>The bound uses \(\log_2 V\) bits per token. If tokens occur with probabilities \(p_i\) and are otherwise unpredictable, the average information per token is the entropy \(-\sum_i p_i \log_2 p_i\). Check on a small example that this is at most \(\log_2 V\), with equality only when all \(p_i = 1/V\) (Day 3 proves it).</li>
-  </ul></div>
-  <details class="sol"><summary>Solution</summary><div>
-    <p><b>Bytes.</b> <code>ñ</code> is U+00F1, bytes <code>c3 b1</code>. <code>中</code> is U+4E2D, <code>e4 b8 ad</code>. 🇮🇳 is two code points, the regional indicators U+1F1EE and U+1F1F3, 8 bytes, one grapheme.</p>
-    <p><b>Parameters.</b> \(2 \cdot (100{,}000 - 50{,}000) \cdot 4{,}096 = 409{,}600{,}000\): 409.6 million new parameters, all of which need training data.</p>
-    <p><b>Bound.</b> \(2000 / \log_2 1024 = 2000/10 = 200\) tokens; \(2000 / 20 = 100\) tokens. A vocabulary 1,024 times larger only halves the floor.</p>
-    <p><b>Partial characters.</b> <code>e0 a4</code> (the first two bytes of <code>न</code>) is not valid UTF-8 alone. <code>decode</code> joins the bytes of all tokens first, so the full 3-byte sequence is back together before UTF-8 decoding.</p>
-  </div></details>
-  <div class="part"><b>Further reading</b><ul>
-    <li>Wikipedia, <a href="https://en.wikipedia.org/wiki/UTF-8">UTF-8</a> (the byte layout table) and <a href="https://en.wikipedia.org/wiki/Heaps%27_law">Heaps' law</a>.</li>
-    <li>Unicode Standard Annex #29, <a href="https://www.unicode.org/reports/tr29/">Unicode Text Segmentation</a>: the official grapheme cluster rules.</li>
-    <li>Joel Spolsky, <a href="https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses/">The Absolute Minimum Every Software Developer Absolutely, Positively Must Know About Unicode and Character Sets</a> (blog).</li>
-    <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (2016): the paper that brought BPE to language models, motivated by the unknown-word problem.</li>
-    <li>Tao et al., <a href="https://arxiv.org/abs/2407.13623">Scaling Laws with Vocabulary: Larger Models Deserve Larger Vocabularies</a> (2024).</li>
-    <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video).</li>
-  </ul></div>
+  <p>These pull against each other. More candidates scanned can mean better relevance but higher latency and cost. Precomputing lists overnight is cheap per request but stale. A good answer names the trade-off and picks a point on it, with numbers.</p>
+  <p><b>Questions to ask the interviewer.</b> Is friendship mutual (an undirected graph) or a follow (directed)? How many users, and how many friends on average? How many requests per second? What latency? How fresh must suggestions be? Is there a signal beyond the graph (groups, city, contacts)? This week assumes mutual friendship, 1B users with about 200 friends on average, and the hard rules above.</p>
 
   <h3>R.2 · State it precisely</h3>
-  <p>Name the objects, the objective and the constraints before any algorithm.</p>
+  <p>Name every object before any algorithm. All of them are shown on one small example graph, used again in R.3.</p>
+
+  <div class="dg">
+    <svg viewBox="0 0 600 240" role="img" aria-labelledby="g6t g6d" style="width:100%;max-width:600px;display:block;margin:0 auto;font-family:inherit">
+      <title id="g6t">The 6-person example graph</title>
+      <desc id="g6d">YOU is friends with B and C, who are friends with each other. B is friends with D and E. C is friends with E and F. So D has 1 mutual friend with YOU (B), E has 2 (B and C), F has 1 (C).</desc>
+      <g stroke-linecap="round">
+        <line x1="80" y1="120" x2="230" y2="60" stroke="var(--ink)" stroke-width="3"/>
+        <line x1="80" y1="120" x2="230" y2="180" stroke="var(--ink)" stroke-width="3"/>
+        <line x1="230" y1="60" x2="230" y2="180" stroke="var(--muted)" stroke-width="2"/>
+        <line x1="230" y1="60" x2="400" y2="40" stroke="var(--accent)" stroke-width="2"/>
+        <line x1="230" y1="60" x2="400" y2="120" stroke="var(--accent)" stroke-width="2"/>
+        <line x1="230" y1="180" x2="400" y2="120" stroke="var(--accent)" stroke-width="2"/>
+        <line x1="230" y1="180" x2="400" y2="200" stroke="var(--accent)" stroke-width="2"/>
+      </g>
+      <g font-size="15" font-weight="700" text-anchor="middle" fill="var(--ink)">
+        <circle cx="80" cy="120" r="26" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="3"/>
+        <text x="80" y="125">YOU</text>
+        <circle cx="230" cy="60" r="22" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
+        <text x="230" y="65">B</text>
+        <circle cx="230" cy="180" r="22" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
+        <text x="230" y="185">C</text>
+        <circle cx="400" cy="40" r="22" fill="var(--panel)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="400" y="45">D</text>
+        <circle cx="400" cy="120" r="22" fill="var(--panel)" stroke="var(--accent)" stroke-width="3.5"/>
+        <text x="400" y="125">E</text>
+        <circle cx="400" cy="200" r="22" fill="var(--panel)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="400" y="205">F</text>
+      </g>
+      <g font-size="14" fill="var(--muted)">
+        <text x="436" y="45">m = 1 (via B)</text>
+        <text x="436" y="125" fill="var(--accent)" font-weight="700">m = 2 (via B, C)</text>
+        <text x="436" y="205">m = 1 (via C)</text>
+        <text x="80" y="170" text-anchor="middle">you</text>
+        <text x="230" y="232" text-anchor="middle">your friends N(YOU)</text>
+        <text x="400" y="232" text-anchor="middle">candidates C(YOU)</text>
+      </g>
+    </svg>
+    <div class="cap">The running example. Thick lines: your friendships. Coloured lines: your friends' friendships that reach a candidate. B–C is a friendship between two of your friends, so neither is a candidate. Ids: YOU = 0, B = 1, C = 2, D = 3, E = 4, F = 5.</div>
+  </div>
+
+  <h4>1. The graph</h4>
   <ul>
-    <li><b>Base alphabet</b> <var>B</var>: the 256 byte values. UTF-8 writes every string as bytes, so <var>B</var> alone already gives R1 and R2.</li>
-    <li><b>Corpus</b> <var>D</var>: training text, cut into <b>chunks</b> (roughly words with their leading space), each chunk <var>w</var> occurring <var>f(w)</var> times. Merges never cross a chunk boundary.</li>
-    <li><b>Vocabulary</b> <var>V</var> ⊇ <var>B</var>, and a <b>segmentation</b> <var>s<sub>V</sub>(w)</var> of each chunk into tokens.</li>
+    <li><b>Graph</b> \(G = (V, E)\). <var>V</var> is the set of users, <var>E</var> the set of friendships. A friendship is an unordered pair \(\{u, v\}\) with \(u \ne v\): if <var>u</var> is friends with <var>v</var>, then <var>v</var> is friends with <var>u</var>. Such a graph is called <b>undirected</b>. Write \(n = |V|\) for the number of users and \(|E|\) for the number of friendships.</li>
+    <li><b>Neighbourhood</b> \(N(u) = \{v : \{u, v\} \in E\}\), the friends of <var>u</var>. In the example, \(N(\text{YOU}) = \{B, C\}\) and \(N(B) = \{\text{YOU}, C, D, E\}\).</li>
+    <li><b>Degree</b> \(\deg(u) = |N(u)|\), the number of friends; \(d_u\) for short. Here \(d_\text{YOU} = 2\), \(\deg(B) = \deg(C) = 4\). Each friendship adds 1 to two degrees, so \(\sum_u d_u = 2|E|\) (the <b>handshake lemma</b>).</li>
+    <li><b>Adjacency matrix</b> <var>A</var>: the \(n \times n\) table with \(A_{uv} = 1\) if <var>u</var> and <var>v</var> are friends and 0 otherwise. It is symmetric (\(A_{uv} = A_{vu}\)) and has zeros on the diagonal.</li>
   </ul>
+
+  <h4>2. Candidates: friends of friends who are not yet friends</h4>
+  <p>The friends of your friends are \(N(N(u)) = \bigcup_{f \in N(u)} N(f)\). In the example, \(N(B) \cup N(C) = \{\text{YOU}, B, C, D, E, F\}\). That set contains you (every friend's list contains you) and your own friends (B is in C's list, because B and C are friends). Remove both:</p>
+  <div class="eq">\[ C(u) \;=\; N(N(u)) \setminus N(u) \setminus \{u\}, \qquad C(\text{YOU}) = \{D, E, F\}. \]</div>
+  <p>These are exactly the users at <b>distance 2</b>: reachable in two steps, not in one or zero. Blocked and hidden users are removed later, by the hard rules.</p>
+
+  <h4>3. The mutual-friend count, and why it equals \((A^2)_{uv}\)</h4>
+  <p><b>Definition.</b> The number of mutual friends of <var>u</var> and <var>v</var> is \(m(u, v) = |N(u) \cap N(v)|\). In the example, \(m(\text{YOU}, E) = |\{B, C\} \cap \{B, C\}| = 2\) and \(m(\text{YOU}, D) = |\{B, C\} \cap \{B\}| = 1\).</p>
+  <p><b>Claim.</b> \(m(u, v) = (A^2)_{uv}\), the entry in row <var>u</var>, column <var>v</var> of the matrix product \(A \cdot A\).</p>
+  <p><b>Proof.</b> By the definition of matrix multiplication,</p>
+  <div class="eq">\[ (A^2)_{uv} \;=\; \sum_{w \in V} A_{uw}\,A_{wv}. \]</div>
+  <p>Each term is a product of two numbers that are 0 or 1, so it is 1 exactly when both are 1, that is, when <var>w</var> is a friend of <var>u</var> <em>and</em> a friend of <var>v</var>; otherwise it is 0. The sum therefore counts the users <var>w</var> in \(N(u) \cap N(v)\), which is \(m(u, v)\). ∎</p>
+  <p>Three consequences, each used later. (a) <b>Symmetry:</b> \(m(u, v) = m(v, u)\), because \(A^2\) is symmetric: \((A^2)^\top = A^\top A^\top = A A\). (b) <b>The diagonal</b> is the degree: \((A^2)_{uu} = \sum_w A_{uw}^2 = d_u\). (c) <b>A candidate is a pair with \(m \ge 1\)</b> that is not a friendship and not the same user: \(v \in C(u) \iff v \ne u,\ A_{uv} = 0,\ (A^2)_{uv} \ge 1\), since \((A^2)_{uv} \ge 1\) says some friend of <var>u</var> has <var>v</var> as a friend. So PYMK's candidate set and scores are one row of \(A^2\), with some entries masked out. The row for YOU in the example is \((2, 1, 1, 1, 2, 1)\): the diagonal 2 is your degree, the 1s at B and C are masked because they are already friends, leaving D = 1, E = 2, F = 1.</p>
+  <p>Computing a whole \(n \times n\) matrix is out of the question at a billion users (Day 2 measures how much work all of \(A^2\) is). But as a check on tiny graphs, it is perfect, and the tests use it:</p>
+  <div class="code"><div class="ch"><span>mutual_matrix.py · brute-force reference for tests</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import numpy as np
+
+def mutual_matrix(adj):
+    """(A^2)[u][v] = number of common neighbours of u and v. Fine for tiny graphs only: O(n^2) memory."""
+    n = len(adj)
+    A = np.zeros((n, n), dtype=np.int64)
+    for u in range(n):
+        for v in adj[u]:
+            A[u, v] = 1
+    return A @ A
+
+M = mutual_matrix(adj)
+assert list(M[YOU]) == [2, 1, 1, 1, 2, 1]      # diagonal = deg(YOU); B and C are friends, not candidates
+assert (M == M.T).all()                        # m(u, v) = m(v, u)</code></pre></div>
+  <p class="small muted">This block continues from <code>pymk_exact.py</code> in R.4, which defines <code>adj</code> for the example graph.</p>
+
+  <h4>4. The real objective, and the proxy</h4>
+  <p><b>The question.</b> What exactly should the 10 suggestions maximize?</p>
+  <p><b>The real objective.</b> Let \(\mathcal{E}(u)\) be the <b>eligible</b> users: everyone except <var>u</var>, <var>u</var>'s friends, anyone blocked in either direction, and anyone whose privacy settings exclude them. Let \(p(u, v)\) be the probability that, if shown, <var>v</var> becomes a meaningful connection of <var>u</var> (accepted and actually used, not just clicked). Choose a set <var>S</var> of 10 to show:</p>
   <div class="eq">\[
 \begin{aligned}
-\min_{V}\quad & L(V) \;=\; \sum_{w \in D} f(w)\,\bigl|s_V(w)\bigr| && \text{total tokens}\\
-\text{s.t.}\quad & |V| \le 256 + K && \text{budget: } K \text{ new tokens}\\
-& c_t(D) \ge \tau \quad \forall\, t \in V && \text{every token learnable (R5)}
+\max_{S}\quad & \mathbb{E}\Bigl[\textstyle\sum_{v \in S} \mathbf{1}[\,u, v \text{ connect}\,]\Bigr] \;=\; \sum_{v \in S} p(u, v) && \text{expected meaningful connections}\\
+\text{s.t.}\quad & S \subseteq \mathcal{E}(u),\ \ |S| \le 10 && \text{hard rules}\\
+& \text{latency} \le L,\ \ \text{cost per request} \le B && \text{budgets}
 \end{aligned}
 \]</div>
-  <p>Shorter is better (R4), but without the budget the answer is useless: every chunk becomes its own token. The two constraints are the trade-off: a bigger vocabulary shortens text but creates rare, poorly learned tokens. Day 2 measures this trade-off; Day 3 explains it with information theory.</p>
-  <p>BPE searches a restricted family: every new token is <b>two existing tokens glued together</b>, and segmenting a chunk means <b>replaying the merges in order</b>. Training then reduces to one question, asked <var>K</var> times: <em>which pair do we merge next?</em></p>
+  <p>The equality on the first line is <b>linearity of expectation</b>: the expected value of a sum of indicator variables is the sum of their probabilities, whether or not they are independent. (This model ignores that a suggestion's position on screen changes its chance; Day 5 returns to that.)</p>
+  <p><b>The objective tells us to rank.</b> A sum of 10 terms chosen from a list is largest when we choose the 10 largest terms. Proof by exchange: if <var>S</var> leaves out some <var>x</var> with \(p(u, x) > p(u, y)\) for a <var>y</var> in <var>S</var>, swapping <var>y</var> for <var>x</var> raises the sum by \(p(u, x) - p(u, y) > 0\), so <var>S</var> was not optimal. So the whole problem reduces to <em>estimating \(p(u, v)\) well enough to sort by it</em>, cheaply, for the users that could be near the top.</p>
+  <p><b>Why we cannot use it directly.</b> We do not know <var>p</var>. We have no labels on day one, and there are \(n - 1\) possible <var>v</var> for each <var>u</var>, a billion of them. We need a <b>proxy</b>: a score that is cheap to compute and that sorts users roughly as <var>p</var> would.</p>
+  <p><b>The proxy: rank by \(m(u, v)\).</b> If <var>p</var> depends only on the mutual count through some increasing function, \(p(u, v) = g(m(u, v))\) with <var>g</var> increasing, then sorting by <var>m</var> gives exactly the same order as sorting by <var>p</var>, so ranking by <var>m</var> is optimal. That "if" is a claim about the world, and we can test it: if <var>g</var> is increasing, the measured chance of a friendship forming must rise with <var>m</var>. The next part measures it. Where the proxy is weak (a mutual friend with 1,000 friends is weaker evidence than one with 10; cities and groups matter too) is what Day 5's learned ranker fixes.</p>
 
-  <h3>R.3 · What BPE does</h3>
-  <div class="idea">Start with the 256 bytes as tokens. Count every adjacent pair of tokens in the training data. Merge the most frequent pair into a new token. Repeat until the vocabulary is full.</div>
-  <div class="eq">\[ L(\text{after merging } a\,b) \;=\; L(\text{before}) \;-\; r(a,b), \qquad r(a,b) = \text{non-overlapping occurrences, weighted by } f(w) \]</div>
-  <p>Why the most frequent pair? Merging a pair that occurs <var>c</var> times (without overlaps) shortens the corpus by exactly <var>c</var> tokens, so the most frequent pair is the <b>best possible single step</b> for the objective. That makes BPE a <em>greedy</em> algorithm. Day 2 shows it is not optimal over many steps, and why it is used anyway.</p>
-
-  <div class="dg"><div class="cycle">
-    <span class="nd">bytes 0–255</span><span class="lk">→</span><span class="nd">count adjacent pairs</span><span class="lk">→</span><span class="nd hot">merge the most frequent</span><span class="lk">→</span><span class="nd">new token 256, 257, …</span><span class="lk">↺ repeat until V is full</span>
-  </div><div class="cap">Gain of one merge: if <code>(a, b)</code> occurs <var>c</var> times without overlap, the corpus gets exactly <var>c</var> tokens shorter.</div></div>
-
-  <h3>R.4 · The algorithm</h3>
-  <div class="code"><div class="ch"><span>pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>train(corpus, vocab_size):
-    chunks ← split corpus with the pre-tokenization pattern; count each unique chunk
-    write each chunk as a list of byte ids (0..255)
-    merges ← []
-    while 256 + len(merges) &lt; vocab_size:
-        count every adjacent pair in every chunk, weighted by the chunk's count
-        (a, b) ← the most frequent pair (ties: the smaller pair)
-        if its count &lt; 2: stop                    <span class="c"># nothing worth merging</span>
-        new id ← 256 + len(merges); merges.append((a, b))
-        in every chunk, replace each non-overlapping (a, b) with the new id, left to right
-    return merges                                 <span class="c"># the ordered list IS the model</span>
-
-encode(text, merges):
-    for each chunk: start from its bytes; repeatedly apply the EARLIEST-learned merge
-    that occurs in it, until none does
-
-decode(ids): join each token's bytes, then decode the bytes as UTF-8</code></pre></div>
-
-  <h3>R.5 · A worked example by hand</h3>
-  <p>Train on the single chunk <code>aaabdaaabac</code> (11 bytes) with vocab size 259, so 3 merges. <code>a</code> = 97, <code>b</code> = 98.</p>
-  <div class="dg"><div class="steps">
-    <div class="step"><span class="k">step 0</span><span class="seq"><span class="nd hot">a</span><span class="nd hot">a</span><span class="nd">a</span><span class="nd">b</span><span class="nd">d</span><span class="nd hot">a</span><span class="nd hot">a</span><span class="nd">a</span><span class="nd">b</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>11 tokens.</b> <code>aa</code> ×4, <code>ab</code> ×2, the rest ×1 → merge <code>aa</code> = 256</span></div>
-    <div class="step"><span class="k">step 1</span><span class="seq"><span class="nd new">aa</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">d</span><span class="nd new">aa</span><span class="nd hot">a</span><span class="nd hot">b</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>9 tokens.</b> <code>(aa, a)</code> ×2 and <code>(a, b)</code> ×2 tie; <code>(97, 98)</code> is smaller → <code>ab</code> = 257</span></div>
-    <div class="step"><span class="k">step 2</span><span class="seq"><span class="nd hot">aa</span><span class="nd hot">ab</span><span class="nd">d</span><span class="nd hot">aa</span><span class="nd hot">ab</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>7 tokens.</b> <code>(aa, ab)</code> ×2 → <code>aaab</code> = 258</span></div>
-    <div class="step"><span class="k">step 3</span><span class="seq"><span class="nd new">aaab</span><span class="nd">d</span><span class="nd new">aaab</span><span class="nd">a</span><span class="nd">c</span></span><span class="why"><b>5 tokens.</b> Budget reached; every pair now occurs once</span></div>
-  </div>
-  <div class="chart" style="margin:.8rem 0 0"><div class="t">Pair counts at step 0</div>
-    <div class="br"><span><code>a a</code></span><span class="tr"><i style="width:100%"></i></span><span class="v">4</span></div>
-    <div class="br"><span><code>a b</code></span><span class="tr"><i style="width:50%"></i></span><span class="v">2</span></div>
-    <div class="br"><span><code>b d</code> · <code>d a</code> · <code>b a</code> · <code>a c</code></span><span class="tr"><i style="width:25%;--c:var(--muted)"></i></span><span class="v">1 each</span></div>
-  </div>
-  <div class="cap">Filled = the pair about to merge; outlined = a token created by the previous merge.</div></div>
-  <p>Three things to notice. <b>Overlaps:</b> <code>aaa</code> has two <code>aa</code> pairs, but scanning left to right merges only the first. <b>Ties</b> are broken by the smaller pair, so the result is deterministic. <b>Merges build on merges:</b> <code>aaab</code> was never looked for; it appeared because <code>aa</code> and <code>ab</code> became tokens first.</p>
-  <p><b>Encoding new text</b> with <code>merges = [(97,97), (97,98), (256,257)]</code>:</p>
+  <h4>5. Why friends of friends: triadic closure, measured</h4>
+  <p><b>The idea.</b> If <var>u</var>–<var>w</var> and <var>w</var>–<var>v</var> are friendships, the three people form an open triangle. <b>Triadic closure</b> is the tendency for the third side, <var>u</var>–<var>v</var>, to form later. Sociologists give three reasons: <var>u</var> and <var>v</var> have <b>opportunity</b> to meet (both spend time with <var>w</var>), <b>trust</b> (each can vouch through <var>w</var>), and they tend to be <b>similar</b> (people befriend people like themselves, so two of <var>w</var>'s friends resemble each other). Each extra mutual friend adds opportunity and trust, so the chance should rise with <var>m</var>. Day 1 derives the related clustering coefficient (on this graph, about 0.11: an average user's friends are friends with each other 11% of the time).</p>
+  <p><b>How to test it without cheating: the temporal split.</b> Every friendship in the week's graph carries the order <var>t</var> in which it formed. Call the first 80,000 the <b>past</b> and the last 20,000 the <b>future</b>. Compute everything (neighbours, mutual counts) on the past graph only, then ask which pairs became friends in the future. Using only the past is the point: at serving time, the system only knows the past too. Measuring <var>m</var> on the full graph would leak the answer.</p>
+  <p><b>The population of pairs.</b> A conditional probability is only meaningful once we say "out of which pairs?". Here it is <b>every unordered pair \(\{u, v\}\) of distinct users that were not friends in the past graph</b>: \(\binom{10{,}000}{2} - 80{,}000 = 49{,}915{,}000\) pairs, counted exactly, with no sampling. For each, <var>m</var> is its number of mutual friends in the past graph. Pairs with \(m \ge 1\) (the pairs at distance 2) are found by walking two hops out from every user; the pairs with \(m = 0\) are everything else, so their number is a subtraction. A pair is a "hit" if it is among the 20,000 future friendships. (Every future friendship is a non-friend pair in the past, because the graph has no repeated friendships.)</p>
+  <div class="code"><div class="ch"><span>closure.py · P(future friendship | m) over all non-adjacent pairs</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def rate_by_mutuals(past_adj, future_pairs, buckets):
+    """For each bucket (lo, hi) of m: (pairs, future friendships) over ALL unordered
+    non-adjacent pairs {u, v} of the past graph. Pairs with m &gt;= 1 are enumerated two hops
+    out; pairs with m = 0 are counted as (all non-adjacent pairs) - (pairs with m &gt;= 1)."""
+    n = len(past_adj)
+    which = lambda m: next(i for i, (lo, hi) in enumerate(buckets) if lo &lt;= m &lt;= hi)
+    pairs, hits, at_dist2 = [0] * len(buckets), [0] * len(buckets), 0
+    for u in range(n):
+        cnt = Counter()
+        for f in past_adj[u]:
+            for v in past_adj[f]:
+                if v &gt; u and v not in past_adj[u]:      # each unordered pair once
+                    cnt[v] += 1
+        at_dist2 += len(cnt)
+        for m in cnt.values():
+            pairs[which(m)] += 1
+    past_edges = sum(len(s) for s in past_adj) // 2
+    pairs[which(0)] += n * (n - 1) // 2 - past_edges - at_dist2
+    for u, v in future_pairs:
+        hits[which(len(past_adj[u] &amp; past_adj[v]))] += 1
+    return pairs, hits</code></pre></div>
+  <p class="small muted">Tested against a brute-force loop over every pair on random small graphs. On the week's graph it reproduces the table below exactly (<code>index_measure.py</code>).</p>
+  <p><b>Confirm by measuring.</b> First, the share: <b>10,645 of the 20,000 future friendships (53.2%) joined two people who already had at least one mutual friend in the past graph</b>. Only 4,045,642 of the 49,915,000 non-friend pairs (8.1%) are at distance 2. So the distance-2 pairs are 8.1% of the possibilities but produce 53.2% of the new friendships: 6.6 times their share. Now the rate within each group:</p>
   <div class="tablewrap"><table>
-    <tr><th>Input</th><th>Step by step (lowest rank first)</th><th>Result</th></tr>
-    <tr><td><code>aaab</code></td><td>a a a b → rank 0 <code>aa</code>: aa a b → rank 1 <code>ab</code>: aa ab → rank 2: aaab</td><td>1 token</td></tr>
-    <tr><td><code>abaa</code></td><td>pairs present: <code>ab</code> (rank 1), <code>aa</code> (rank 0) → apply rank 0 first: a b aa → then rank 1: ab aa → <code>(ab, aa)</code> was never learned</td><td>2 tokens</td></tr>
-    <tr><td><code>xyz</code></td><td>no learned pair</td><td>3 byte tokens</td></tr>
+    <tr><th>Mutual friends <var>m</var> (past)</th><th class="num">Non-friend pairs</th><th class="num">Became friends (future)</th><th class="num">P(friends in future | <var>m</var>)</th><th class="num">vs <var>m</var> = 0</th></tr>
+    <tr><td>0</td><td class="num">45,869,358</td><td class="num">9,355</td><td class="num">0.020%</td><td class="num">1×</td></tr>
+    <tr><td>1</td><td class="num">3,618,574</td><td class="num">7,057</td><td class="num">0.195%</td><td class="num">9.6×</td></tr>
+    <tr><td>2</td><td class="num">343,961</td><td class="num">2,042</td><td class="num">0.594%</td><td class="num">29×</td></tr>
+    <tr><td>3</td><td class="num">55,370</td><td class="num">692</td><td class="num">1.25%</td><td class="num">61×</td></tr>
+    <tr><td>4–5</td><td class="num">21,156</td><td class="num">473</td><td class="num">2.24%</td><td class="num">110×</td></tr>
+    <tr><td>6–9</td><td class="num">5,536</td><td class="num">254</td><td class="num">4.59%</td><td class="num">225×</td></tr>
+    <tr class="hi"><td>10+</td><td class="num">1,045</td><td class="num">127</td><td class="num">12.2%</td><td class="num">596×</td></tr>
   </table></div>
-  <p>Encoding uses the merge <b>order</b>, not frequencies: training applied merge 2 to text in which merges 0 and 1 had already happened, so encoding must too.</p>
-
-  <h3>R.6 · The code</h3>
-  <p>A complete, correct byte-level BPE tokenizer in about 50 lines. Day 4 makes training fast and Day 5 makes encoding fast; this version stays as the reference you test them against.</p>
-  <div class="code"><div class="ch"><span>bpe.py · the complete simple tokenizer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
-import regex   # pip install regex: supports \p{L} (any letter) and \p{N} (any digit)
-
-PATTERN = regex.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-
-def unique_chunks(texts):
-    counts = Counter()
-    for text in texts:
-        counts.update(c.encode("utf-8") for c in PATTERN.findall(text))
-    return [list(c) for c in counts], list(counts.values())    # words, freqs
-
-def merge(ids, pair, new_id):
-    out, i = [], 0
-    while i &lt; len(ids):
-        if i + 1 &lt; len(ids) and ids[i] == pair[0] and ids[i + 1] == pair[1]:
-            out.append(new_id); i += 2                          # consume both, emit one
-        else:
-            out.append(ids[i]); i += 1
-    return out
-
-def train(texts, vocab_size):
-    words, freqs = unique_chunks(texts)
-    merges = []
-    while 256 + len(merges) &lt; vocab_size:
-        counts = Counter()
-        for w, f in zip(words, freqs):
-            for pair in zip(w, w[1:]):                          # every adjacent pair
-                counts[pair] += f
-        if not counts:
-            break
-        pair = min(counts, key=lambda p: (-counts[p], p))       # most frequent; ties → smaller pair
-        if counts[pair] &lt; 2:
-            break
-        new_id = 256 + len(merges)
-        merges.append(pair)
-        words = [merge(w, pair, new_id) for w in words]
-    return merges
-
-def encode(text, merges):
-    ranks = {pair: 256 + i for i, pair in enumerate(merges)}    # id order = merge order
-    out = []
-    for chunk in PATTERN.findall(text):
-        ids = list(chunk.encode("utf-8"))
-        while len(ids) &gt;= 2:
-            pair = min(zip(ids, ids[1:]), key=lambda p: ranks.get(p, float("inf")))
-            if pair not in ranks:
-                break
-            ids = merge(ids, pair, ranks[pair])
-        out.extend(ids)
-    return out
-
-def decode(ids, merges):
-    vocab = {i: bytes([i]) for i in range(256)}
-    for i, (a, b) in enumerate(merges):
-        vocab[256 + i] = vocab[a] + vocab[b]                    # each token's bytes
-    return b"".join(vocab[i] for i in ids).decode("utf-8", errors="replace")
-
-assert train(["aaabdaaabac"], 259) == [(97, 97), (97, 98), (256, 257)]
-text = "The cat sat on the mat. मैं घर जा रहा हूँ 🙂"
-assert decode(encode(text, train([text], 300)), train([text], 300)) == text</code></pre></div>
-  <p>Two lines deserve a second look. <code>zip(w, w[1:])</code> lines the list up against itself shifted by one, giving every adjacent pair. <code>b"".join(...)</code> joins <em>bytes</em> before decoding, because a token can hold part of a character: <code>न</code> is 3 bytes and can be split across two tokens.</p>
-
-  <h3>R.7 · Watch it run</h3>
-  <p>The simulator trains the same way, one merge per click. The <code>heap</code> panel and the "visited" highlight belong to the fast trainer from Day 4; for now, watch <code>words</code>, <code>counts</code> and <code>merges</code>.</p>
-
-  <div class="demo" id="sim">
-    <div class="dh"><b>Training simulator</b><span>Step through</span></div>
-    <div class="db">
-      <div class="controls">
-        <textarea id="simText" rows="2" aria-label="Training text">aaabdaaabac</textarea>
-      </div>
-      <div class="controls">
-        <span class="small muted">Presets:</span>
-        <button class="btn" type="button" data-mode="words" data-preset="aaabdaaabac">worked example</button>
-        <button class="btn" type="button" data-mode="gpt2" data-preset="The cat sat on the mat. The cat ate the rat. Then the cat sat.">a paragraph</button>
-        <button class="btn" type="button" data-mode="words" data-preset="nan nan nab nab anan anan anan">greedy counterexample (Day 2)</button>
-        <button class="btn" type="button" data-mode="gpt2" data-preset="aaaaa aaaaa bc bc bc">runs (overlap)</button>
-        <button class="btn" type="button" data-mode="gpt2" data-preset="मैं घर जा रहा हूँ। मैं घर पर हूँ।">Hindi</button>
-        <label>Chunks: <select id="simMode" class="btn"><option value="words">words, spaces dropped</option><option value="gpt2">GPT-2 pattern</option></select></label>
-      </div>
-      <div class="controls">
-        <button class="btn pri" type="button" id="simStep">Next merge</button>
-        <button class="btn" type="button" id="simAll">Run to the end</button>
-        <button class="btn" type="button" id="simReset">Reset</button>
-        <span class="stat" id="simStat" style="margin:0"></span>
-      </div>
-      <div class="simgrid">
-        <div class="box"><div class="k"><span><code>words</code> · unique chunks × count</span><span id="simVisited"></span></div><div id="simWords"></div></div>
-        <div class="box"><div class="k"><span><code>counts</code> · top pairs</span><span>change</span></div><table class="mini" id="simCounts"></table></div>
-        <div class="box"><div class="k"><span><code>heap</code> · top entries (Day 4)</span><span>struck = stale</span></div><table class="mini" id="simHeap"></table></div>
-        <div class="box"><div class="k"><span><code>merges</code> · the model</span><span>id</span></div><table class="mini" id="simMerges"></table></div>
-      </div>
-      <div class="log" id="simLog" aria-live="polite"></div>
-    </div>
+  <div class="chart"><div class="t">P(friends in future | <var>m</var> mutual friends in the past), all 49.9M non-friend pairs</div>
+    <div class="br"><span><var>m</var> = 0</span><span class="tr"><i style="width:1%;--c:var(--muted)"></i></span><span class="v">0.020%</span></div>
+    <div class="br"><span><var>m</var> = 1</span><span class="tr"><i style="width:1.6%"></i></span><span class="v">0.195%</span></div>
+    <div class="br"><span><var>m</var> = 2</span><span class="tr"><i style="width:4.9%"></i></span><span class="v">0.594%</span></div>
+    <div class="br"><span><var>m</var> = 3</span><span class="tr"><i style="width:10.3%"></i></span><span class="v">1.25%</span></div>
+    <div class="br"><span><var>m</var> = 4–5</span><span class="tr"><i style="width:18.4%"></i></span><span class="v">2.24%</span></div>
+    <div class="br"><span><var>m</var> = 6–9</span><span class="tr"><i style="width:37.8%"></i></span><span class="v">4.59%</span></div>
+    <div class="br"><span><var>m</var> = 10+</span><span class="tr"><i style="width:100%"></i></span><span class="v">12.2%</span></div>
+    <div class="cap">The rate rises at every step, as the proxy needs. Each bar is hits / pairs from the table, drawn to scale except <var>m</var> = 0 (true width 0.17%), widened to stay visible.</div>
   </div>
-  <p class="small muted">"Words, spaces dropped" treats each space-separated word as a chunk; the GPT-2 pattern keeps each word's leading space, as real tokenizers do. Hex like <code>E0 A4</code> is part of a multi-byte character.</p>
+  <p><b>What the numbers say.</b> (1) The curve rises monotonically: on this graph, sorting by <var>m</var> is consistent with sorting by the chance of friendship, which is what the proxy assumed. (2) Even the best bucket is only 12%: <var>m</var> is a strong signal, not a certainty, which leaves room for a better ranker (Day 5). (3) <b>46.8% of future friendships had no mutual friend</b> (9,355 pairs). A PYMK that looks only two hops out can never suggest them, so its recall is capped at 53.2% here. Those come from shared groups and popular users, which is why Day 4 adds other candidate sources. (4) A caution on the data: the generator forms 45% of new friendships by closing a triangle, so closure is built into this graph. Real networks show the same rising curve: Kossinets and Watts measured it on a university's e-mail network ("Empirical Analysis of an Evolving Social Network", <em>Science</em>, 2006).</p>
+  <p><b>Where PYMK uses it.</b> This is the justification for the first, and largest, candidate source: walk two hops out and score by mutual friends. Day 1 measures the curve in more depth; Day 5 turns <var>m</var> into one feature among several.</p>
 
-  <div class="demo">
-    <div class="dh"><b>Encoder</b><span>Uses the merges trained above</span></div>
-    <div class="db">
-      <div class="controls"><input type="text" id="encText" value="aaab abaa xyz" aria-label="Text to encode"></div>
-      <div class="toks" id="encOut"></div>
-      <div class="stat" id="encStat"></div>
-      <div class="log" id="encLog"></div>
-    </div>
+  <div class="part"><b>Practice</b><ul>
+    <li>On the example graph, write \(N(D)\), \(N(N(D))\) and \(C(D)\), and the full row of \(A^2\) for D. Check with <code>mutual_matrix</code>.</li>
+    <li>Prove that \((A^2)_{uu} = d_u\), and that the row sums of \(A^2\) are \(\sum_v (A^2)_{uv} = \sum_{f \in N(u)} \deg(f)\). (You will meet this sum again in R.4.)</li>
+    <li>From the table: how many times more likely is a pair with 2 mutual friends to become friends than a pair with 0? With 10 or more?</li>
+    <li>What is the largest share of future friendships that a PYMK using only two-hop candidates could ever suggest on this graph? What does that imply for the design?</li>
+    <li>Write five clarifying questions you would ask the interviewer, and for each, say which part of the design the answer changes.</li>
+  </ul></div>
+  <div class="part"><b>Problem variations</b><ul>
+    <li><b>Follows instead of friendships</b> (a directed graph, as in "who to follow"). Define the candidates and the count of two-step paths \(u \to w \to v\). Is the count still symmetric?</li>
+    <li><b>A new user</b> with no friends: \(C(u) = \varnothing\). What can PYMK show? (Groups, city, contacts uploaded with consent; Day 4.)</li>
+    <li><b>Weighted friendships</b> (how often two people interact). Generalize <var>m</var> to a weighted sum, and say what \((A^2)_{uv}\) becomes when <var>A</var> holds weights.</li>
+    <li>Change the population: compute P(future | <var>m</var>) only over pairs where <var>u</var> was active (degree ≥ 1) in the past. Which rates move, and why?</li>
+  </ul></div>
+  <details class="sol"><summary>Solution</summary><div>
+    <p><b>Neighbourhoods of D.</b> \(N(D) = \{B\}\), \(N(N(D)) = N(B) = \{\text{YOU}, C, D, E\}\), so \(C(D) = \{\text{YOU}, C, E\}\), each with one mutual friend (B). The row of \(A^2\) for D is \((1, 0, 1, 1, 1, 0)\): YOU, C and E get 1 through B, the diagonal is \(\deg(D) = 1\), and B and F get 0.</p>
+    <p><b>Diagonal and row sums.</b> \((A^2)_{uu} = \sum_w A_{uw}A_{wu} = \sum_w A_{uw}^2 = \sum_w A_{uw} = d_u\), using \(A_{wu} = A_{uw}\) and \(x^2 = x\) for \(x \in \{0, 1\}\). Row sum: \(\sum_v \sum_w A_{uw}A_{wv} = \sum_w A_{uw} \sum_v A_{wv} = \sum_{w \in N(u)} \deg(w)\). For YOU: \(2 + 1 + 1 + 1 + 2 + 1 = 8 = \deg(B) + \deg(C)\).</p>
+    <p><b>Ratios.</b> 0.594% / 0.020% ≈ 29×; 12.2% / 0.020% ≈ 596×.</p>
+    <p><b>Two-hop ceiling.</b> 53.2%: the share of future friendships with at least one past mutual friend. The other 46.8% need different candidate sources (groups, random walks, popular users nearby).</p>
+    <p><b>Clarifying questions.</b> Directed or undirected (changes the candidate definition); number of users and mean degree (storage and reads, R.6); requests per second (fleet size); latency target (online vs precomputed); freshness (batch vs incremental updates, Day 3); extra signals (features, Day 5).</p>
+    <p><b>Directed variation.</b> Two-step paths: \((A^2)_{uv}\) with a non-symmetric <var>A</var>. It is not symmetric: if 30 of the accounts you follow all follow a celebrity, you have 30 paths to the celebrity, but the celebrity, who follows few accounts, may have no path back to you.</p>
+  </div></details>
+  <div class="part"><b>Further reading</b><ul>
+    <li>David Easley and Jon Kleinberg, <a href="https://www.cs.cornell.edu/home/kleinber/networks-book/"><em>Networks, Crowds, and Markets</em></a>, chapters 2 (graphs), 3 (strong and weak ties, triadic closure) and 4 (closure measured in real networks). Free online.</li>
+    <li>Gueorgi Kossinets and Duncan Watts, "Empirical Analysis of an Evolving Social Network", <em>Science</em> 311 (2006): the rising closure curve on real data.</li>
+    <li>David Liben-Nowell and Jon Kleinberg, "The Link-Prediction Problem for Social Networks", <em>Journal of the American Society for Information Science and Technology</em> (2007): the temporal-split method and common neighbours as a predictor.</li>
+    <li>Mark Granovetter, "The Strength of Weak Ties", <em>American Journal of Sociology</em> (1973): where the triadic-closure argument comes from.</li>
+  </ul></div>
+
+  <h3>R.3 · The exact algorithm, by hand</h3>
+  <p><b>The question.</b> Given <var>u</var>, compute \(m(u, v)\) for every candidate <var>v</var> and return the 10 largest, without building \(A^2\).</p>
+  <p><b>First attempt.</b> Loop over all \(n - 1\) other users <var>v</var>, compute \(|N(u) \cap N(v)|\) for each, keep the best 10. It is correct, but it touches every user for every request: at a billion users that is a billion intersections per page view, almost all of them returning 0. Most users share no friend with you; we should never look at them.</p>
+  <p><b>The key idea: walk out from <var>u</var>, and let each friend vote.</b> Every mutual friend <var>f</var> of <var>u</var> and <var>v</var> is, by definition, a friend of <var>u</var> who has <var>v</var> in their list. So go through your friends one at a time, and for each friend go through their friends, adding one vote to each person you find. A person's total is the number of your friends who have them as a friend: their mutual count. Skip yourself and your own friends as you go. People with no mutual friend are never touched.</p>
+  <div class="idea">For each friend <var>f</var> of <var>u</var>, for each friend <var>v</var> of <var>f</var>: if <var>v</var> is not <var>u</var>, not a friend of <var>u</var> and not blocked, add 1 to count[<var>v</var>]. Then return the <var>k</var> users with the highest count, ties broken by smaller id.</div>
+  <p><b>By hand on the example.</b> \(N(\text{YOU}) = \{B, C\}\). The counter starts empty.</p>
+  <div class="dg"><div class="steps">
+    <div class="step"><span class="k">friend B</span><span class="seq"><span class="nd">YOU ✗</span><span class="nd">C ✗</span><span class="nd hot">D +1</span><span class="nd hot">E +1</span></span><span class="why"><b>Read N(B), 4 entries.</b> YOU is yourself, C is your friend: skip. count = {D: 1, E: 1}</span></div>
+    <div class="step"><span class="k">friend C</span><span class="seq"><span class="nd">YOU ✗</span><span class="nd">B ✗</span><span class="nd hot">E +1</span><span class="nd hot">F +1</span></span><span class="why"><b>Read N(C), 4 entries.</b> Skip YOU and B. count = {D: 1, E: 2, F: 1}</span></div>
+    <div class="step"><span class="k">top-k</span><span class="seq"><span class="nd new">E · 2</span><span class="nd new">D · 1</span><span class="nd">F · 1</span></span><span class="why"><b>Sort by (−count, id).</b> D and F tie at 1; D has the smaller id (3 &lt; 5). With <var>k</var> = 2: [E, D]</span></div>
+  </div><div class="cap">Filled = a vote added; outlined = returned with <var>k</var> = 2. The answer matches the row of \(A^2\) for YOU with friends and yourself masked: D = 1, E = 2, F = 1.</div></div>
+  <p>Three things to notice. <b>Skips cost reads:</b> 8 entries were read but only 4 votes cast; the other 4 were yourself and your friend. <b>Edges among candidates are never read:</b> adding a friendship D–F would change nothing for YOU. <b>Ties need a rule:</b> without "smaller id first", D and F could come out in either order from run to run, and tests could not check the answer. Day 1 writes this rule into the function's contract.</p>
+  <div class="code"><div class="ch"><span>pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>suggest(u, k):
+    count ← empty map from user to integer
+    for each f in N(u):                         <span class="c"># d_u friends</span>
+        for each v in N(f):                     <span class="c"># deg(f) entries</span>
+            if v ≠ u and v ∉ N(u) and v not blocked:
+                count[v] ← count[v] + 1
+    return the k keys of count with the largest value (ties: smaller id first)</code></pre></div>
+
+  <h3>R.4 · The code, its proof and its cost</h3>
+  <div class="code"><div class="ch"><span>pymk_exact.py · the exact baseline</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
+import heapq
+
+def suggest(adj, u, k=10, blocked=frozenset()):
+    """Top-k friends of friends of u by mutual-friend count. Ties: smaller id first."""
+    direct = adj[u]
+    count = Counter()                          # candidate -&gt; mutual friends seen so far
+    for f in direct:                           # d_u friends ...
+        for v in adj[f]:                       # ... deg(f) entries each: W(u) reads in all
+            if v != u and v not in direct and v not in blocked:
+                count[v] += 1                  # f is one more mutual friend of u and v
+    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), count
+
+def work(adj, u):
+    """W(u): adjacency entries the double loop reads = the sum of u's friends' degrees."""
+    return sum(len(adj[f]) for f in adj[u])
+
+# The 6-person example: YOU = 0, B = 1, C = 2, D = 3, E = 4, F = 5
+YOU, B, C, D, E, F = range(6)
+adj = [set() for _ in range(6)]
+for a, b in [(YOU, B), (YOU, C), (B, C), (B, D), (B, E), (C, E), (C, F)]:
+    adj[a].add(b); adj[b].add(a)
+
+top, count = suggest(adj, YOU, k=2)
+assert top == [E, D]                           # E has 2 mutuals; D and F tie at 1, D has the smaller id
+assert dict(count) == {D: 1, E: 2, F: 1}
+assert work(adj, YOU) == 8                     # deg(B) + deg(C) = 4 + 4
+assert suggest(adj, YOU, k=2, blocked={E})[0] == [D, F]</code></pre></div>
+  <p>The function also returns the full counter, because the app may want to show "2 mutual friends", and because the tests compare it entry by entry with \(A^2\). <code>adj</code> is a list of Python sets, so <code>v not in direct</code> is a hash lookup.</p>
+
+  <h4>Why it is correct</h4>
+  <p>Let the friends of <var>u</var> be processed in the order \(f_1, \dots, f_d\), and call <var>v</var> <b>eligible</b> if \(v \ne u\), \(v \notin N(u)\) and <var>v</var> is not blocked.</p>
+  <p><b>Invariant.</b> After the first <var>j</var> friends are processed, for every eligible <var>v</var>, \(\text{count}[v] = |\{f_1, \dots, f_j\} \cap N(v)|\) (a missing key means 0), and the counter has no other keys.</p>
+  <ul>
+    <li><b>Start</b> (\(j = 0\)): the counter is empty and the set \(\{\} \cap N(v)\) is empty, so both sides are 0.</li>
+    <li><b>Step</b> (\(j \to j + 1\)): the inner loop visits each <var>v</var> in \(N(f_{j+1})\) exactly once (it is a set) and adds 1 if <var>v</var> is eligible. Because friendship is symmetric, \(v \in N(f_{j+1}) \iff f_{j+1} \in N(v)\). So an eligible <var>v</var> gains exactly 1 if \(f_{j+1}\) is a friend of <var>v</var> and 0 otherwise, which is exactly how much the right-hand side grows. Ineligible users are never added, so no other keys appear.</li>
+    <li><b>End</b> (\(j = d\)): \(\text{count}[v] = |N(u) \cap N(v)| = m(u, v)\) for every eligible <var>v</var>, and the keys are exactly the eligible users with \(m \ge 1\): \(C(u)\) minus the blocked users.</li>
+  </ul>
+  <p><code>heapq.nsmallest(k, count, key=(−count, id))</code> returns the first <var>k</var> keys in the order "highest count first, then smaller id". Ids are distinct, so this order has no ties at all: the output is unique and deterministic. ∎</p>
+
+  <h4>What it costs</h4>
+  <ul>
+    <li><b>The double loop</b> runs its body once for each entry of each friend's list: \(\sum_{f \in N(u)} \deg(f)\) times. Name this the <b>work per request</b>:
+      <div class="eq">\[ W(u) \;=\; \sum_{f \in N(u)} \deg(f). \]</div>
+      Each run of the body does two set lookups and one counter update, each \(O(1)\) expected time with hashing. So the loop is \(O(W(u))\). (The outer loop's own \(d_u\) steps are included: every friend's list contains <var>u</var>, so \(\deg(f) \ge 1\) and \(W(u) \ge d_u\).) In the example, \(W(\text{YOU}) = 4 + 4 = 8\): exactly the 8 entries read by hand.</li>
+    <li><b>The top-k</b> keeps a heap of at most <var>k</var> items while it passes over the \(|C(u)|\) keys; each push or pop costs \(O(\log k)\). So \(O(|C(u)| \log k)\).</li>
+    <li><b>Space</b>: the counter holds \(|C(u)|\) keys, plus <var>k</var> for the heap.</li>
+  </ul>
+  <div class="eq">\[ \text{time} \;=\; O\bigl(W(u) + |C(u)| \log k\bigr), \qquad \text{space} \;=\; O\bigl(|C(u)| + k\bigr), \qquad |C(u)| \le W(u). \]</div>
+  <p>The last inequality holds because every key in the counter got at least one vote, and each vote is one of the \(W(u)\) reads. With \(k = 10\), \(\log k\) is a small constant, so the cost is set by \(W(u)\).</p>
+  <p><b>Your friends' degrees set the cost, not yours.</b> Look at the formula: \(W(u)\) adds up the degrees of <var>u</var>'s friends. A user with only 9 friends, one of whom has 1,480 friends, must read at least 1,480 entries. The bound \(W(u) \le d_u \cdot \max_f \deg(f)\) shows that one popular friend is enough to make a request expensive. And as the next section measures, the friends of a typical user are more popular than a typical user, which is Day 2's friendship paradox.</p>
+
+  <h3>R.5 · The workload, measured</h3>
+  <p><b>Confirm by measuring.</b> \(W(u)\) for each of the 10,000 users of the week's (full) graph, where the mean degree is 20 and the median 15:</p>
+  <div class="chart"><div class="t">Work per request <var>W</var>(<var>u</var>) = Σ deg(friends): share of the 10,000 users</div>
+    <div class="br"><span>&lt; 250</span><span class="tr"><i style="width:34%"></i></span><span class="v">9.1%</span></div>
+    <div class="br"><span>250–499</span><span class="tr"><i style="width:67%"></i></span><span class="v">17.6%</span></div>
+    <div class="br"><span>500–999</span><span class="tr"><i style="width:86%"></i></span><span class="v">22.7%</span></div>
+    <div class="br"><span>1,000–1,999</span><span class="tr"><i style="width:100%"></i></span><span class="v">26.4%</span></div>
+    <div class="br"><span>2,000–3,999</span><span class="tr"><i style="width:75%"></i></span><span class="v">19.7%</span></div>
+    <div class="br"><span>4,000–7,999</span><span class="tr"><i style="width:14%;--c:var(--muted)"></i></span><span class="v">3.6%</span></div>
+    <div class="br"><span>8,000+</span><span class="tr"><i style="width:3.4%;--c:var(--muted)"></i></span><span class="v">0.9%</span></div>
+    <div class="cap">Buckets double in width. Mean 1,477; median 1,023; p90 3,015; p95 3,870; p99 7,284; maximum 51,806 (the user with the most friends, 1,480).</div>
   </div>
+  <div class="tablewrap"><table>
+    <tr><th>Quantity</th><th class="num">Value</th><th>What it shows</th></tr>
+    <tr><td>Mean <var>W</var> vs (mean degree)² = 20 × 20</td><td class="num">1,477 vs 400</td><td>3.7× more work than "my friends × their friends" with average numbers. A random friend has on average 73.8 friends, not 20 (Day 2 proves why: E[d²]/E[d]).</td></tr>
+    <tr><td>p99 / mean</td><td class="num">7,284 / 1,477</td><td>1 request in 100 does about 4.9× the average work. Latency budgets are set by this tail, not the mean.</td></tr>
+    <tr class="hi"><td>A user with 9 friends</td><td class="num"><var>W</var> = 3,243</td><td>User 570: friends' degrees 1,480, 1,108, 343, 174, 50, 38, 20, 17, 13. Two hub friends make a small user expensive.</td></tr>
+    <tr><td>The largest hub</td><td class="num"><var>W</var> = 51,806</td><td>35× the mean, from one request.</td></tr>
+    <tr><td>Candidates \(|C(u)|\)</td><td class="num">mean 1,191, median 888</td><td>81% as many distinct candidates as reads, on average: most reads find a new person. Ranking the top 10 out of about a thousand is the second cost.</td></tr>
+  </table></div>
+  <p><b>Where PYMK uses it.</b> These numbers set the budget. On a 10,000-user toy, the worst request reads 51,806 entries, which is fine. At a billion users the same shape is far worse (R.6), so Day 2 studies the skew, Day 3 spreads the reads over machines and caches the hot lists, and Day 4 caps the reads with sampling and approximation, measuring how much recall that costs.</p>
+
+  <div class="part"><b>Practice</b><ul>
+    <li>Type <code>pymk_exact.py</code> yourself (no pasting) and make every assert pass. Then add the friendship B–F: predict the new counts, <var>W</var>(YOU) and the top 2 before running.</li>
+    <li>Add the friendship D–F instead. Predict what changes for YOU, and explain using the invariant.</li>
+    <li>For a star (one centre with 1,000 friends who know no one else), compute <var>W</var> for the centre and for a leaf, and the number of candidates of a leaf. Which request is expensive, and why does the leaf's request read 1,000 entries although the leaf has 1 friend?</li>
+    <li><a href="https://leetcode.com/problems/get-watched-videos-by-your-friends/">LeetCode 1311 · Get Watched Videos by Your Friends</a>: people at distance exactly <var>k</var>, then count and sort with a tie rule. PYMK's walk with a different target.</li>
+    <li><a href="https://leetcode.com/problems/top-k-frequent-words/">LeetCode 692 · Top K Frequent Words</a>: the top-k with a deterministic tie rule, exactly the last line of <code>suggest</code>.</li>
+    <li>Using <code>mutual_matrix</code>, write a differential test: on 100 random small graphs, check that <code>suggest</code>'s counter equals the masked row of \(A^2\) for every user.</li>
+  </ul></div>
+  <div class="part"><b>Problem variations</b><ul>
+    <li><b>Show the names of the mutual friends</b> ("Ann, Bo and 10 others"). Store a list per candidate instead of a count. What happens to space, in terms of <var>W</var>(<var>u</var>)?</li>
+    <li><b>Only suggest people with at least 2 mutual friends.</b> Can you stop early, or skip work, and still be exact?</li>
+    <li><b>Three hops.</b> Count length-3 paths: \((A^3)_{uv}\). Write the cost as a sum, and estimate it for the hub with \(W = 51{,}806\).</li>
+    <li><b>Exclude people you dismissed</b> or were shown many times without acting. Is that a hard rule or a soft goal?</li>
+  </ul></div>
+  <details class="sol"><summary>Solution</summary><div>
+    <p><b>B–F added.</b> F now gets a vote from B and from C, so count = {D: 1, E: 2, F: 2}. E and F tie at 2; E has the smaller id, so the top 2 is [E, F]. \(W(\text{YOU}) = \deg(B) + \deg(C) = 5 + 4 = 9\).</p>
+    <p><b>D–F added.</b> Nothing changes for YOU. The edge is in N(D) and N(F), but the loop reads only N(B) and N(C), and the invariant says count[<var>v</var>] depends only on which of YOU's friends know <var>v</var>.</p>
+    <p><b>The star.</b> The centre's friends each have degree 1, so <var>W</var>(centre) = 1,000 and it has no candidates. A leaf's single friend has degree 1,000, so <var>W</var>(leaf) = 1,000 and it has 999 candidates, all with <var>m</var> = 1: one hub friend makes every leaf's request read the hub's whole list.</p>
+    <div class="code"><div class="ch"><span>star.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def star_work(n_leaves):
+    """W for the centre and for a leaf of a star with n_leaves leaves."""
+    adj = [set() for _ in range(n_leaves + 1)]
+    for leaf in range(1, n_leaves + 1):
+        adj[0].add(leaf); adj[leaf].add(0)
+    return work(adj, 0), work(adj, 1), len(suggest(adj, 1)[1])</code></pre></div>
+    <p><b>LeetCode 1311.</b> Breadth-first search (BFS) from <code>id</code>: a queue visits people in order of distance, so the first time someone is reached is their true distance (Day 1 proves it). Then count the videos of the people at distance exactly <code>level</code> and sort by (frequency, name). \(O(V + E + x \log x)\) for <var>x</var> distinct videos.</p>
+    <div class="code"><div class="ch"><span>lc1311.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import deque
+
+def watchedVideosByFriends(watchedVideos, friends, id, level):
+    """LeetCode 1311: videos watched by people at distance exactly `level`, by frequency then name."""
+    dist = {id: 0}
+    q = deque([id])
+    while q:                                   # BFS: the first time we reach a person is their distance
+        p = q.popleft()
+        if dist[p] == level:
+            continue                           # no need to look further out
+        for f in friends[p]:
+            if f not in dist:
+                dist[f] = dist[p] + 1
+                q.append(f)
+    freq = Counter(v for p, d in dist.items() if d == level for v in watchedVideos[p])
+    return sorted(freq, key=lambda v: (freq[v], v))</code></pre></div>
+    <p><b>LeetCode 692.</b> The key <code>(-freq, word)</code> puts higher counts first and breaks ties alphabetically, the same shape as <code>(-count[v], v)</code> in <code>suggest</code>.</p>
+    <div class="code"><div class="ch"><span>lc692.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topKFrequent(words, k):
+    """LeetCode 692: k most frequent words; ties by alphabetical order. O(n + u log k)."""
+    freq = Counter(words)
+    return heapq.nsmallest(k, freq, key=lambda w: (-freq[w], w))</code></pre></div>
+    <p><b>Differential test.</b> See <code>test_exact_vs_matrix</code> in the solutions file: for each user, the counter must equal \(\{v : (A^2)_{uv} > 0\}\) with yourself, friends and blocked users removed, and <code>work(g, u)</code> must equal the row sum of \(A^2\).</p>
+    <p><b>Names of mutual friends.</b> Each vote stores a friend id instead of adding 1, so space grows from \(O(|C(u)|)\) to \(O(W(u))\) minus the skipped reads. In practice store the count plus only the first few names.</p>
+  </div></details>
+  <div class="part"><b>Further reading</b><ul>
+    <li>Thomas Cormen, Charles Leiserson, Ronald Rivest and Clifford Stein, <em>Introduction to Algorithms</em> (CLRS), chapter on elementary graph algorithms (representations and BFS) and the chapter on heaps.</li>
+    <li>Stanford CS224W, <a href="https://web.stanford.edu/class/cs224w/">Machine Learning with Graphs</a>: the early lectures on graph properties and traditional link-prediction features.</li>
+    <li>Jure Leskovec, Anand Rajaraman and Jeffrey Ullman, <a href="http://www.mmds.org/"><em>Mining of Massive Datasets</em></a>, chapter 10 (mining social-network graphs). Free online.</li>
+  </ul></div>
+
+  <h3>R.6 · At a billion users, on paper</h3>
+  <p><b>The question.</b> Does the R.4 code survive a billion users? Answer with a <b>back-of-envelope estimate</b>: a calculation from round numbers, each one a labelled assumption, accurate to a factor of a few. Its job is to tell you which resource breaks first. Day 2 teaches this as a skill.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Assumption</th><th class="num">Value</th><th>Why this value</th></tr>
+    <tr><td>Users</td><td class="num">1,000,000,000</td><td>Given by the interviewer</td></tr>
+    <tr><td>Mean friends per user</td><td class="num">200</td><td>Assumed. For scale, a 2011 study of Facebook's graph reported 721 million active users and 69 billion friendships, a mean near 190 (Ugander et al., below)</td></tr>
+    <tr><td>Bytes per stored friend id</td><td class="num">8</td><td>A 64-bit integer, enough for any id space</td></tr>
+    <tr><td>Daily active users; PYMK requests each per day</td><td class="num">500M; 2</td><td>Assumed</td></tr>
+    <tr><td>Peak / average traffic</td><td class="num">3</td><td>Assumed: traffic follows the clock</td></tr>
+    <tr><td>RAM of one large server</td><td class="num">256 GB</td><td>Assumed</td></tr>
+  </table></div>
+  <p><b>Storage, derived.</b> By the handshake lemma (R.2), friendships = users × mean degree / 2 = 10⁹ × 200 / 2 = <b>10¹¹ (100 billion)</b>. Each friendship is stored twice, once in each person's list, so there are <b>2 × 10¹¹ (200 billion) adjacency entries</b>, and at 8 bytes each, <b>1.6 × 10¹² bytes = 1.6 TB</b>. That is about 7 large servers just to hold one copy in memory, before replicas, indexes or overhead. So the graph must be <b>sharded</b>: split across machines (Day 3).</p>
+  <p><b>Reads per request, derived.</b> A user with 200 friends, each with 200 friends: 200 × 200 = <b>40,000 reads per request</b>. But R.5 measured that on our graph the mean <var>W</var> is 3.7× (mean degree)², because friends are more popular than average. If the same ratio held, that would be about 148,000 reads (an assumption; Day 2 derives the formula \(\mathbb{E}[W \mid d_u] = d_u \cdot \mathbb{E}[d^2]/\mathbb{E}[d]\)). And these reads land on many machines: each friend's list may live on a different shard.</p>
+  <p><b>Traffic, derived.</b> 500M × 2 / 86,400 s ≈ 11,600 requests per second on average, about 35,000 at peak. At 40,000 reads each, that is about 1.4 × 10⁹ adjacency entries read per second at peak, before skew.</p>
+  <div class="code"><div class="ch"><span>estimate.py · every input is a labelled assumption</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># Back-of-envelope at 1B users. Every input is an ASSUMPTION, labelled.
+users     = 1_000_000_000        # assumption: registered users
+mean_deg  = 200                  # assumption: mean friends per user
+id_bytes  = 8                    # assumption: one 64-bit user id per adjacency entry
+dau       = 500_000_000          # assumption: daily active users
+opens     = 2                    # assumption: PYMK requests per active user per day
+peak      = 3                    # assumption: peak traffic / average traffic
+ram_gb    = 256                  # assumption: RAM of one large server
+skew      = 3.7                  # assumption: mean W / (mean degree)^2, as measured on our graph (R.5)
+
+friendships = users * mean_deg // 2              # each friendship adds 1 to two degrees
+entries     = 2 * friendships                    # stored in both users' lists
+storage_tb  = entries * id_bytes / 1e12
+reads_naive = mean_deg * mean_deg                # d_u friends x mean_deg entries each
+qps_avg     = dau * opens / 86_400
+qps_peak    = qps_avg * peak
+reads_skew  = reads_naive * skew                 # friends are more popular than average users
+reads_per_s = qps_peak * reads_naive
+machines    = -(-storage_tb * 1000 // ram_gb)    # ceiling: servers to hold ONE copy in RAM
+
+print(f"{friendships:.0e} friendships, {entries:.0e} entries, {storage_tb:.1f} TB")
+print(f"{reads_naive:,} reads/request, {qps_avg:,.0f} req/s avg, {qps_peak:,.0f} peak")
+print(f"{reads_skew:,.0f} reads/request with the measured skew")
+print(f"{reads_per_s:.1e} adjacency entries read per second at peak")
+print(f"{machines:.0f} servers of {ram_gb} GB just to hold one copy")</code></pre></div>
+  <p><b>What breaks first.</b> Not storage: 1.6 TB is large but ordinary across a few machines. The problem is <b>reads per request</b>: tens of thousands of entries, from many shards, inside a latency budget, tens of thousands of times a second, with a heavy tail. The rest of the week attacks that from three sides: spread and cache the reads (Day 3), read less with sampling and sketches (Day 4), or do the work before the request arrives (precompute, Day 3).</p>
+
+  <h3>R.7 · The architecture, as the map of the week</h3>
+  <p>A production recommender splits "find the right 10 out of a billion" into stages. Each stage sees fewer users and can afford more work per user. This is the standard shape of large recommenders (described publicly, for example, in YouTube's "Deep Neural Networks for YouTube Recommendations", RecSys 2016); here it is applied to PYMK as a hypothetical design. Every box answers a problem found above.</p>
+  <div class="dg"><div class="vflow">
+    <div class="vbox"><b>Request: suggest(u, k = 10)</b><span class="muted small">the page waits; p99 budget (R.1)</span></div>
+    <div class="varr">↓ read u's friends and their friends from the graph store (sharded, cached: Day 3)</div>
+    <div class="vbox"><b>1 · Candidate generation</b><span class="muted small">a billion → about a thousand. Two-hop counting (R.3, Day 1); capped and sampled for hubs, plus groups, MinHash and random walks (Day 4)</span></div>
+    <div class="varr">↓ for each candidate, look up features</div>
+    <div class="vbox"><b>2 · Features</b><span class="muted small">mutual count, Adamic–Adar, Jaccard, shared groups, same city, degrees; from a feature store, offline and online (Day 5)</span></div>
+    <div class="varr">↓ score each candidate</div>
+    <div class="vbox"><b>3 · Ranking</b><span class="muted small">a model of p(u, v), trained on the temporal split: logistic regression (Day 5)</span></div>
+    <div class="varr">↓ remove ineligible, keep the best k</div>
+    <div class="vbox" style="border-color:var(--accent)"><b>4 · Filtering and top-k</b><span class="muted small">exact hard rules on fresh data: self, friends, blocks, privacy (R.1, Day 1 contract); Bloom filters as a fast pre-check (Day 4); top-k with a heap (Days 1 and 5)</span></div>
+    <div class="varr">↓ return, log what was shown</div>
+    <div class="vbox"><b>5 · Serving</b><span class="muted small">cache, precomputed lists vs online, incremental updates (Day 3); tail latency under fan-out (Day 2); the full serving design and A/B tests (Day 5)</span></div>
+  </div><div class="cap">Funnel: each stage sees fewer users, so it can spend more per user. Only the filter is never approximate.</div></div>
+  <div class="tablewrap"><table>
+    <tr><th>Box</th><th>The problem it answers</th><th>Built on</th></tr>
+    <tr><td>Graph store</td><td>1.6 TB does not fit one machine; reads hit many shards; hub lists are hot (R.5, R.6)</td><td><a href="day_3.html">Day 3</a>: sharding, consistent hashing, caching, a graph store</td></tr>
+    <tr><td>Candidate generation</td><td>Scoring a billion users is impossible; two hops find 53% of future friendships (R.2); hubs make <var>W</var> explode (R.5)</td><td><a href="day_1.html">Day 1</a>: exact counting; <a href="day_2.html">Day 2</a>: skew and capping; <a href="day_4.html">Day 4</a>: sampling, MinHash, walks</td></tr>
+    <tr><td>Features and ranking</td><td><var>m</var> alone tops out at 12% (R.2) and ignores who the mutual friends are</td><td><a href="day_5.html">Day 5</a>: link prediction, logistic regression, AUC</td></tr>
+    <tr><td>Filter and top-k</td><td>Hard rules must hold on every response (R.1), even when upstream data is stale</td><td><a href="day_1.html">Day 1</a>: contract and tests; <a href="day_4.html">Day 4</a>: Bloom filters</td></tr>
+    <tr><td>Serving</td><td>Latency is set by the tail (R.5); freshness vs cost (R.1)</td><td><a href="day_2.html">Day 2</a>: tail at scale; <a href="day_3.html">Day 3</a>: precompute vs online; <a href="day_5.html">Day 5</a>: architecture, A/B tests</td></tr>
+  </table></div>
+  <p><b>Why the filter comes last and stays exact.</b> Candidates may be precomputed hours ago and the ranker may be approximate. In that time a user may have blocked someone or become their friend. Checking the hard rules once, at the end, on the freshest data, is what makes them hold on every response, whatever the earlier stages did. It is cheap: at most a few hundred lookups for the candidates that reach this stage.</p>
+
+  <div class="part"><b>Practice</b><ul>
+    <li>Run <code>estimate.py</code>. Then redo it with mean degree 500 and 4-byte ids: friendships, storage, naive reads per request.</li>
+    <li>Estimate the memory to precompute and store, for every user, their top 100 candidates as (8-byte id, 4-byte score) pairs. Compare with the 1.6 TB graph.</li>
+    <li>Draw the architecture from memory. For each box, say what goes wrong if you remove it.</li>
+    <li>Which numbers in R.6 are facts, which are assumptions, and which are derived? Mark each.</li>
+  </ul></div>
+  <div class="part"><b>Problem variations</b><ul>
+    <li><b>Batch only.</b> Compute every user's list once a night and serve it from a key-value store. What does R.1's freshness goal lose, and what must the final filter now catch?</li>
+    <li><b>Online only.</b> Compute everything per request. Which of R.6's numbers becomes the bottleneck?</li>
+    <li><b>Mean degree 1,000</b> (a professional network with many weak ties). Which conclusion of R.6 changes?</li>
+  </ul></div>
+  <details class="sol"><summary>Solution</summary><div>
+    <p><b>Degree 500, 4-byte ids.</b> 10⁹ × 500 / 2 = 2.5 × 10¹¹ friendships, 5 × 10¹¹ entries, × 4 bytes = 2.0 TB. Naive reads per request: 500 × 500 = 250,000, over 6 times more than at degree 200. Reads grow with the square of the degree; storage only linearly.</p>
+    <p><b>Precomputed top-100.</b> 10⁹ × 100 × (8 + 4) bytes = 1.2 TB: about the size of the graph itself, but each request becomes one key lookup. The cost moves from read time to a nightly batch job and to staleness (Day 3).</p>
+    <p><b>Removing boxes.</b> No candidate generation: scoring a billion users per request. No ranking: the 12% ceiling and hubs dominate. No final filter: a block or a new friendship leaks through a stale precomputed list. No cache or sharding: the graph does not fit, and hub lists are read by everyone.</p>
+    <p><b>Facts, assumptions, derived.</b> Fact: 1B users (given). Assumptions: 200 friends, 8 bytes, 500M daily users, 2 requests, peak factor 3, 256 GB. Derived: 100B friendships, 200B entries, 1.6 TB, 7 servers, 40,000 reads, 11,600 and 35,000 requests per second. The 3.7× skew is measured on our graph and only assumed to carry over.</p>
+  </div></details>
+  <div class="part"><b>Further reading</b><ul>
+    <li>Nathan Bronson et al., <a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">TAO: Facebook's Distributed Data Store for the Social Graph</a>, USENIX ATC 2013: a published design for storing and caching a social graph under a read-heavy workload (Day 3 reads it closely).</li>
+    <li>Johan Ugander, Brian Karrer, Lars Backstrom and Cameron Marlow, <a href="https://arxiv.org/abs/1111.4503">The Anatomy of the Facebook Social Graph</a> (2011): degrees, clustering and the friendship paradox measured on a very large real graph.</li>
+    <li>Pankaj Gupta et al., "WTF: The Who to Follow Service at Twitter", WWW 2013: a published account of a follow-recommendation system and its trade-offs.</li>
+    <li>Paul Covington, Jay Adams and Emre Sargin, "Deep Neural Networks for YouTube Recommendations", RecSys 2016: the candidate generation → ranking funnel.</li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, chapters 5 and 6 (replication and partitioning).</li>
+  </ul></div>
 
   <div class="check" data-check="reading">
     <div class="ch"><b>Checkpoint · main reading</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="r6" data-dim="ml"><span class="tx">Explain why <var>V</var> must be fixed before training (one row per id, the softmax needs a finite set, 2·<var>V</var>·<var>d</var> parameters), and why changing the tokenizer means retraining.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="r7" data-dim="ml"><span class="tx">Derive tokens ≥ <var>H</var> / log₂<var>V</var> from the number-base argument, say where the analogy stops, and explain sharing vs identity with <code>[un][happ][y]</code> vs <code>[unhappy]</code>.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="r1" data-dim="ml"><span class="tx">Write the objective and both constraints from memory, and say which requirement each encodes.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="r2" data-dim="dsa"><span class="tx">Train <code>aaabdaaabac</code> by hand to vocab 259, then check with the simulator.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="r3" data-dim="dsa"><span class="tx">Type the 50 lines of R.6 yourself (no pasting) and make both asserts pass.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="r4" data-dim="del"><span class="tx">Train on <code>alice.txt</code> at vocab 1,000 and check <code>decode(encode(x)) == x</code> on every line.</span><span class="dim del">Delivery</span></label>
-    <label class="ck"><input type="checkbox" data-id="r5" data-dim="ai"><span class="tx">Explain to a friend why encoding uses merge order and not frequency, using the <code>abaa</code> example.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr1" data-dim="sys"><span class="tx">State the product contract from memory: input, output, the four hard constraints and the four soft goals, and explain why the hard ones are checked by a final exact filter.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr2" data-dim="ml"><span class="tx">Define <var>N</var>(<var>u</var>), <var>C</var>(<var>u</var>) and <var>m</var>(<var>u</var>, <var>v</var>), prove <var>m</var> = (<var>A</var>²)<sub><var>uv</var></sub>, and explain why ranking by <var>m</var> is optimal only if the chance of friendship is an increasing function of <var>m</var>.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr3" data-dim="ml"><span class="tx">Explain the temporal split and the population of pairs, then quote and interpret the measurements: 53.2% of future friendships had a mutual friend; the rate rises from 0.020% (<var>m</var> = 0) to 12.2% (<var>m</var> ≥ 10).</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr4" data-dim="dsa"><span class="tx">Run the exact algorithm by hand on the 6-person graph, including the skipped reads and the tie between D and F.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr5" data-dim="dsa"><span class="tx">Type <code>suggest</code> yourself, pass the asserts, state its invariant and derive O(<var>W</var>(<var>u</var>) + |<var>C</var>(<var>u</var>)| log <var>k</var>).</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr6" data-dim="dsa"><span class="tx">Explain why your friends' degrees, not yours, set the cost, using the measured <var>W</var> distribution (mean 1,477 vs 400; user 570 with 9 friends and <var>W</var> = 3,243).</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr7" data-dim="del"><span class="tx">Write and run the differential test: <code>suggest</code> against the masked row of <var>A</var>² on 100 random small graphs.</span><span class="dim del">Delivery</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr8" data-dim="sys"><span class="tx">Redo the 1B-user estimate from its labelled assumptions (100B friendships, 1.6 TB, 40,000 reads per request, about 35,000 requests per second at peak) and say what breaks first.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="pr9" data-dim="sys"><span class="tx">Draw the five-stage architecture from memory and name, for each box, the problem it answers and the day that builds it.</span><span class="dim sys">System Design</span></label>
     <div class="next"><b>Watch or read next</b><ul>
-      <li>Andrej Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> (video, 2 h) and his <a href="https://github.com/karpathy/minbpe">minbpe</a> code</li>
-      <li>Hugging Face LLM course, <a href="https://huggingface.co/learn/llm-course/chapter6/5">Byte-Pair Encoding tokenization</a> (tutorial)</li>
-      <li>Imad Dabbura, <a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">Byte Pair Encoding from Scratch</a> (blog)</li>
-      <li>Sennrich, Haddow and Birch, <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (paper, sections 1–3)</li>
+      <li>Easley and Kleinberg, <a href="https://www.cs.cornell.edu/home/kleinber/networks-book/"><em>Networks, Crowds, and Markets</em></a>, chapter 3 (book)</li>
+      <li>Bronson et al., <a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">TAO</a>, sections 1–3 (paper)</li>
+      <li>Stanford CS224W, <a href="https://web.stanford.edu/class/cs224w/">Machine Learning with Graphs</a>, the lecture on traditional feature-based methods (course)</li>
     </ul></div>
   </div>
 </section>
 <section class="s" id="continue">
   <div class="shead"><span class="sno">THE REST OF THE WEEK</span></div>
-  <h2>Now go deeper, one day at a time</h2>
+  <h2>Now go deeper, one box of the design at a time</h2>
   <div class="daycards">
-    <a class="daycard" href="day_1.html"><b>Day 1 · Text as data</b><span>Zipf and Heaps' laws · hashing, top-k four ways, sliding windows, UTF-8 · the split pattern</span></a>
-    <a class="daycard" href="day_2.html"><b>Day 2 · Greedy and the objective</b><span>1/√n and model selection · greedy in full: proofs, matroids, when it fails, DP, approximation · the vocabulary budget</span></a>
-    <a class="daycard" href="day_3.html"><b>Day 3 · Information</b><span>Entropy from scratch and its estimation · Kraft and Huffman's proof · error bars with the bootstrap</span></a>
-    <a class="daycard" href="day_4.html"><b>Day 4 · Fast training</b><span>Sufficient statistics · the max of a changing set: heaps, lazy deletion, indexed heaps, streams · tests</span></a>
-    <a class="daycard" href="day_5.html"><b>Day 5 · Encoding and serving</b><span>Failure modes · linked-list encoder, LRU · heavy hitters, Count-Min, reservoir sampling · training on terabytes</span></a>
-    <a class="daycard hi" href="worksheet.html"><b>Weekend · Worksheet and learning checks</b><span>Build <code>tok.bpe</code>, measure the token tax, check yourself</span></a>
+    <a class="daycard" href="day_1.html"><b>Day 1 · Graphs and counting</b><span>Triadic closure · adjacency lists, CSR, traversal, set intersection three ways, top-k · the contract and its tests</span></a>
+    <a class="daycard" href="day_2.html"><b>Day 2 · Scale and skew</b><span>The friendship paradox · Σ deg², triangle counting · estimation, percentiles, tail at scale</span></a>
+    <a class="daycard" href="day_3.html"><b>Day 3 · The distributed graph</b><span>Percentiles with error bars · consistent hashing, scatter-gather, partitioning · graph stores, incremental updates</span></a>
+    <a class="daycard" href="day_4.html"><b>Day 4 · Approximation and candidates</b><span>Sampling estimators, recall@K · MinHash, LSH, Bloom filters, personalized PageRank · the candidate budget</span></a>
+    <a class="daycard" href="day_5.html"><b>Day 5 · Ranking with ML</b><span>Link prediction, Adamic–Adar, logistic regression, AUC · k-way merge · the serving architecture, A/B tests</span></a>
+    <a class="daycard hi" href="worksheet.html"><b>Weekend · Worksheet and learning checks</b><span>Ship a <code>pymk</code> package on the week's graph, measure recall and latency, check yourself</span></a>
+    <a class="daycard" href="talk.html"><b>The talk · slides</b><span>The whole design as a talk you can give: from friends of friends to a billion-user system</span></a>
   </div>
 </section>
-<div class="pager"><span></span><a class="btn pri" href="day_1.html">Text as data →</a></div>
+
+<div class="pager"><span></span><a class="btn pri" href="day_1.html">Graphs and counting →</a></div>
 <footer>
-  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
-  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
   <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
 </footer>
 
@@ -940,8 +997,8 @@ simInit(); simRender();
 }
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
-const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const KEY = "pymk-week1-progress-v1";
+const ITEMS = [{"id": "pr1", "dim": "sys", "page": "index.html"}, {"id": "pr2", "dim": "ml", "page": "index.html"}, {"id": "pr3", "dim": "ml", "page": "index.html"}, {"id": "pr4", "dim": "dsa", "page": "index.html"}, {"id": "pr5", "dim": "dsa", "page": "index.html"}, {"id": "pr6", "dim": "dsa", "page": "index.html"}, {"id": "pr7", "dim": "del", "page": "index.html"}, {"id": "pr8", "dim": "sys", "page": "index.html"}, {"id": "pr9", "dim": "sys", "page": "index.html"}, {"id": "p2a", "dim": "ml", "page": "day_2.html"}, {"id": "p2b", "dim": "ml", "page": "day_2.html"}, {"id": "p2c", "dim": "ml", "page": "day_2.html"}, {"id": "p2d", "dim": "dsa", "page": "day_2.html"}, {"id": "p2e", "dim": "dsa", "page": "day_2.html"}, {"id": "p2f", "dim": "dsa", "page": "day_2.html"}, {"id": "p2g", "dim": "sys", "page": "day_2.html"}, {"id": "p2h", "dim": "sys", "page": "day_2.html"}, {"id": "p2i", "dim": "sys", "page": "day_2.html"}, {"id": "p3a", "dim": "ml", "page": "day_3.html"}, {"id": "p3b", "dim": "dsa", "page": "day_3.html"}, {"id": "p3c", "dim": "dsa", "page": "day_3.html"}, {"id": "p3d", "dim": "dsa", "page": "day_3.html"}, {"id": "p3e", "dim": "sys", "page": "day_3.html"}, {"id": "p3f", "dim": "dsa", "page": "day_3.html"}, {"id": "p3g", "dim": "sys", "page": "day_3.html"}, {"id": "p3h", "dim": "sys", "page": "day_3.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

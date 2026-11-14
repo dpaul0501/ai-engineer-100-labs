@@ -1,6 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
-<title>BPE Week · Worksheet and checks</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+</style>
+<title>People You May Know · Worksheet and checks</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -265,116 +268,27 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
-  <div class="rail-label">Week 1 · Tokenization</div>
+  <div class="rail-label">Week 1 · People You May Know</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
-  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Graphs and counting</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Scale and skew</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>The distributed graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Approximation and candidates</a>
+  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Ranking with ML</a>
   <a href="worksheet.html" class="on" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
 <main><div class="page">
-<section class="s" id="build" data-sec="build">
-  <div class="shead"><span class="sno">WEEKEND · THE BUILD</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim ai">AI</span><span class="dim sys">Sys</span><span class="dim del">Delivery</span></span></div>
-  <h2>Ship <code>tok.bpe</code>, then use it to measure something real</h2>
-  <p>Everything from the week goes into one package: the lab's <code>week_01/tok/bpe.py</code> and its acceptance tests. Work in the order spec → contract → test → code. Each work item says what "done" means.</p>
-  <div class="dg"><div class="seq" style="justify-content:center">
-    <span class="nd">spec + failing tests</span><span class="lk">→</span><span class="nd">simple trainer</span><span class="lk">→</span><span class="nd">fast trainer</span><span class="lk">→</span><span class="nd">encode · decode · save</span><span class="lk">→</span><span class="nd hot">measure: sweep + token tax</span>
-  </div></div>
-
-  <div class="wi"><h4><span class="id">WI-1</span>Spec and failing tests <span class="dim del">Delivery</span></h4>
-    <p>Fill in the tokenizer part of <code>SPEC.md</code>: requirements, invariants I1–I5, special-token policy, and your estimate of training time on <em>Alice</em>. Write the golden, edge-case and round-trip tests. <span class="muted">(Day 4 design)</span></p>
-    <p class="acc"><b>Done when</b> a commit exists in which all your tests fail.</p></div>
-  <div class="wi"><h4><span class="id">WI-2</span>The simple tokenizer <span class="dim dsa">DSA</span></h4>
-    <p>The main-reading code, typed by you, with the Hindi-safe pattern decision documented. <span class="muted">(Main reading, Day 1)</span></p>
-    <p class="acc"><b>Done when</b> the golden test passes and the round trip holds on every line of <code>alice.txt</code>.</p></div>
-  <div class="wi"><h4><span class="id">WI-3</span>The fast trainer <span class="dim dsa">DSA</span></h4>
-    <p>Index, heap, lazy deletion, remove–rewrite–add. <span class="muted">(Day 4)</span></p>
-    <p class="acc"><b>Done when</b> the differential test passes on <code>alice.txt</code> and <code>records.txt</code> at three sizes, and <em>Alice</em> at vocab 2,000 trains in under a second.</p></div>
-  <div class="wi"><h4><span class="id">WI-4</span>Encode, decode, save, load <span class="dim del">Delivery</span></h4>
-    <p class="acc"><b>Done when</b> the Hypothesis round trip passes on 1,000 examples, <code>load(save(t))</code> encodes identically, and an unknown <code>format_version</code> is rejected.</p></div>
-  <div class="wi"><h4><span class="id">WI-5</span>Performance report <span class="dim sys">Sys</span></h4>
-    <p>Σ A<sub>k</sub>, stale pops, peak heap size, training time, encoder tokens per second. <span class="muted">(Days 4–5)</span></p>
-    <p class="acc"><b>Done when</b> your write-up has the Day 4 chart for your own runs, with any estimate off by more than 3× explained.</p></div>
-  <div class="wi"><h4><span class="id">WI-6</span>The vocabulary sweep <span class="dim ml">ML</span></h4>
-    <p>Held-out bytes per token, unigram bits per byte, train–test gap, rare-token share, from 256 to the maximum. <span class="muted">(Days 2–3)</span></p>
-    <p class="acc"><b>Done when</b> you can name your corpus's knee and justify it.</p></div>
-  <div class="wi"><h4><span class="id">WI-7</span>The token tax, with error bars <span class="dim ai">AI</span> <span class="dim ml">ML</span></h4>
-    <p>On FLORES+ <code>devtest</code>: tokens per sentence for English, Hindi, Tamil, Bengali and one language of your choice, with <code>gpt2</code>, <code>cl100k_base</code>, <code>o200k_base</code> and your tokenizer. Paired ratios to English with bootstrap 95% intervals. <span class="muted">(Day 3 design)</span></p>
-    <p class="acc"><b>Done when</b> the table has intervals and names the pattern change that helped Hindi most.</p></div>
-  <div class="wi"><h4><span class="id">WI-8</span>Stretch: match tiktoken <span class="dim ai">AI</span> <span class="dim dsa">DSA</span></h4>
-    <p>Rebuild GPT-2's merges from tiktoken's ranks (<code>BPE.from_tiktoken("gpt2")</code>), with the Day 5 linked-list encoder.</p>
-    <p class="acc"><b>Done when</b> your encoder matches tiktoken on 10,000 random lines.</p></div>
-
-  <div class="check" data-check="build">
-    <div class="ch"><b>Work items</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="w1" data-dim="del"><span class="tx">WI-1 Spec and failing tests</span><span class="dim del">Delivery</span></label>
-    <label class="ck"><input type="checkbox" data-id="w2" data-dim="dsa"><span class="tx">WI-2 The simple tokenizer</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="w3" data-dim="dsa"><span class="tx">WI-3 The fast trainer</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="w4" data-dim="del"><span class="tx">WI-4 Encode, decode, save, load</span><span class="dim del">Delivery</span></label>
-    <label class="ck"><input type="checkbox" data-id="w5" data-dim="sys"><span class="tx">WI-5 Performance report</span><span class="dim sys">System Design</span></label>
-    <label class="ck"><input type="checkbox" data-id="w6" data-dim="ml"><span class="tx">WI-6 The vocabulary sweep</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="w7" data-dim="ai"><span class="tx">WI-7 The token tax, with error bars</span><span class="dim ai">AI</span></label>
-    <label class="ck"><input type="checkbox" data-id="w8" data-dim="ai"><span class="tx">WI-8 Stretch: match tiktoken</span><span class="dim ai">AI</span></label>
-  </div>
-</section>
-<section class="s" id="checks" data-sec="checks">
-  <div class="shead"><span class="sno">LEARNING CHECKS</span></div>
-  <h2>Can you answer these without looking?</h2>
-  <p>Answer each one aloud or on paper first, then open it. If an answer surprises you, go back to the day in brackets.</p>
-  <div class="check" data-check="checks">
-    <div class="ch"><b>Learning checks</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="c1" data-dim="ml"><span class="tx">Why must a model's vocabulary be fixed before training? (Reading)</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="c2" data-dim="ml"><span class="tx">Write BPE's objective and its two constraints. Which requirement does each encode? (Reading)</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="c3" data-dim="dsa"><span class="tx">Why is the most frequent pair the best single merge, and when does its count overstate the gain? (Reading, Day 2)</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="c4" data-dim="dsa"><span class="tx">Why is greedy BPE not optimal, and why is it used anyway? (Day 2)</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="c5" data-dim="ml"><span class="tx">Why compare tokenizers in bits per byte and not per-token perplexity? (Day 3)</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="c6" data-dim="dsa"><span class="tx">Why is Huffman's greedy optimal when BPE's isn't? (Day 3)</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="c7" data-dim="dsa"><span class="tx">State the invariant that makes lazy deletion correct. (Day 4)</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="c8" data-dim="ai"><span class="tx">Why does encoding replay merges by rank instead of using frequencies or longest match? (Reading, Day 5)</span><span class="dim ai">AI</span></label>
-    <label class="ck"><input type="checkbox" data-id="c9" data-dim="ai"><span class="tx">Why does GPT-2 cut most Hindi words in two, and what fixes it? (Day 1)</span><span class="dim ai">AI</span></label>
-    <label class="ck"><input type="checkbox" data-id="c10" data-dim="sys"><span class="tx">Which part of tokenizer training parallelizes, and which doesn't? (Day 5)</span><span class="dim sys">System Design</span></label>
-    <label class="ck"><input type="checkbox" data-id="c11" data-dim="del"><span class="tx">Name four kinds of test for a tokenizer and the bug each catches. (Day 4)</span><span class="dim del">Delivery</span></label>
-  </div>
-  <details class="sol" style="--c:var(--accent)"><summary>Answers</summary><div>
-    <ol>
-      <li>The input layer has one learned vector per id and the output layer scores every id, so both are sized by V when the model is built. Changing the tokenizer changes what every id means: the model must be retrained.</li>
-      <li>Minimize total tokens Σ f(w)·|s<sub>V</sub>(w)| (short, R4), subject to |V| ≤ 256 + K (a budget, without which every chunk becomes a token) and every token appearing at least τ times (learnable, R5). Keeping all 256 bytes gives lossless and total (R1, R2).</li>
-      <li>Each non-overlapping replacement turns two tokens into one and changes nothing else, so the gain equals the number of replacements. In a run like <code>aaaaa</code> the count is 4 but only 2 replacements fit.</li>
-      <li>An early merge changes which merges exist later: in <code>nan ×2, nab ×2, anan ×3</code>, greedy's first merge (gain 8) cuts <code>nan</code> badly and two merges give 13 tokens, while 7 then 5 gives 12. The optimum is APX-complete to find; greedy is within a constant factor, cheap, deterministic, and on Zipf-shaped text much better than its worst case.</li>
-      <li>Tokenizing is lossless, so the text's information is fixed; bigger tokens carry more bits each. Bits per byte = bits per token × tokens per byte is comparable across tokenizers; per-token perplexity is not.</li>
-      <li>Huffman has the greedy-choice property: some optimal tree has the two rarest symbols as deepest siblings (an exchange argument), and merging them leaves a smaller problem of the same kind. BPE's merges interact: one merge can destroy another's occurrences, so the exchange fails.</li>
-      <li>Every live pair always has one heap entry whose count equals its true count. Then the first popped entry that matches <code>counts</code> is the true maximum; stale entries are skipped.</li>
-      <li>Training applied each merge to text where all earlier merges had already happened; replaying the same order reproduces the splits the model was trained on. Frequencies belong to the training corpus, and longest match can give a different split.</li>
-      <li>Hindi vowel signs are Unicode marks (<code>\p{M}</code>), not letters, so <code> ?\p{L}+</code> stops at them and the marks become separate chunks that can never merge back. Including <code>\p{M}</code> in the word class (as <code>o200k_base</code> does) keeps words whole.</li>
-      <li>Counting chunks parallelizes (map: count per shard; reduce: sum). The merge loop is sequential, since each merge depends on the previous counts; after deduplication it fits on one machine.</li>
-      <li>Golden (tie-break and order), property round trip (per-token decoding, emoji, overlaps), differential fast vs simple (incremental bookkeeping), compatibility with tiktoken (pattern and rank order).</li>
-    </ol></div></details>
-</section>
-<section class="s" id="further" data-sec="further">
-  <div class="shead"><span class="sno">FURTHER STUDY</span><span class="pill">reference</span></div>
-  <h2>The best material, in one place</h2>
-  <div class="tablewrap"><table>
-    <tr><th>Kind</th><th>Resource</th><th>Best for</th></tr>
-    <tr><td>Video</td><td>Karpathy, <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Let's build the GPT Tokenizer</a> · code: <a href="https://github.com/karpathy/minbpe">minbpe</a></td><td>Building it alongside an expert</td></tr>
-    <tr><td>Video</td><td>Vsauce, <a href="https://www.youtube.com/watch?v=fCn8zs912OE">The Zipf Mystery</a> · Tom Scott, <a href="https://www.youtube.com/watch?v=JsTptu56GM8">Huffman Coding</a> · 3Blue1Brown, <a href="https://www.youtube.com/watch?v=v68zYyaEmEA">Wordle and information theory</a></td><td>Intuition for Days 1 and 3</td></tr>
-    <tr><td>Tutorial</td><td>Hugging Face LLM course: <a href="https://huggingface.co/learn/llm-course/chapter6/5">BPE</a>, <a href="https://huggingface.co/learn/llm-course/chapter6/6">WordPiece</a>, <a href="https://huggingface.co/learn/llm-course/chapter6/7">Unigram</a></td><td>Short worked examples of each method</td></tr>
-    <tr><td>Blog</td><td>Imad Dabbura, <a href="https://imaddabbura.github.io/posts/nlp/BPE-Tokenizer.html">BPE from Scratch</a> · Chris Olah, <a href="https://colah.github.io/posts/2015-09-Visual-Information/">Visual Information Theory</a> · Joel Spolsky, <a href="https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses/">Unicode</a></td><td>A second explanation of each idea</td></tr>
-    <tr><td>Paper</td><td>Sennrich et al., <a href="https://arxiv.org/abs/1508.07909">Subword Units</a> · Kozma and Voderholzer, <a href="https://arxiv.org/abs/2411.08671">Theoretical Analysis of BPE</a> · Zouhar et al., <a href="https://arxiv.org/abs/2306.16837">Formal Perspective</a>, <a href="https://arxiv.org/abs/2306.16842">Noiseless Channel</a></td><td>Origin, hardness, approximation, efficiency</td></tr>
-    <tr><td>Paper</td><td>Petrov et al., <a href="https://arxiv.org/abs/2305.15425">Unfairness Between Languages</a> · <a href="https://arxiv.org/abs/2405.05417">Fishing for Magikarp</a> · <a href="https://arxiv.org/abs/1910.13267">BPE-Dropout</a> · <a href="https://arxiv.org/abs/1808.06226">SentencePiece</a> · <a href="https://arxiv.org/abs/2105.13626">ByT5</a></td><td>Fairness, failure modes, alternatives</td></tr>
-    <tr><td>Standard</td><td><a href="https://www.unicode.org/reports/tr44/#General_Category_Values">Unicode general categories</a> · <a href="https://unicode.org/reports/tr15/">Normalization forms</a></td><td><code>\p{L}</code>, <code>\p{M}</code>, NFC</td></tr>
-    <tr><td>Tool</td><td><a href="https://tiktokenizer.vercel.app/">Tiktokenizer</a> · <a href="https://github.com/openai/tiktoken">tiktoken</a> · <a href="https://github.com/huggingface/tokenizers">HF tokenizers</a></td><td>Seeing and using production tokenizers</td></tr>
-  </table></div>
-</section><div class="pager"><a class="btn" href="day_5.html">← Encoding and serving</a><a class="btn" href="../">Guide home</a></div>
+<section class="s" id="todo"><h2>Worksheet and checks</h2><p>Coming next.</p></section>
+<div class="pager"><a class="btn" href="day_5.html">← Ranking with ML</a><a class="btn" href="../">Guide home</a></div>
 <footer>
-  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
-  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
   <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
 </footer>
 
@@ -550,8 +464,8 @@ simInit(); simRender();
 }
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
-const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const KEY = "pymk-week1-progress-v1";
+const ITEMS = [{"id": "pr1", "dim": "sys", "page": "index.html"}, {"id": "pr2", "dim": "ml", "page": "index.html"}, {"id": "pr3", "dim": "ml", "page": "index.html"}, {"id": "pr4", "dim": "dsa", "page": "index.html"}, {"id": "pr5", "dim": "dsa", "page": "index.html"}, {"id": "pr6", "dim": "dsa", "page": "index.html"}, {"id": "pr7", "dim": "del", "page": "index.html"}, {"id": "pr8", "dim": "sys", "page": "index.html"}, {"id": "pr9", "dim": "sys", "page": "index.html"}, {"id": "p2a", "dim": "ml", "page": "day_2.html"}, {"id": "p2b", "dim": "ml", "page": "day_2.html"}, {"id": "p2c", "dim": "ml", "page": "day_2.html"}, {"id": "p2d", "dim": "dsa", "page": "day_2.html"}, {"id": "p2e", "dim": "dsa", "page": "day_2.html"}, {"id": "p2f", "dim": "dsa", "page": "day_2.html"}, {"id": "p2g", "dim": "sys", "page": "day_2.html"}, {"id": "p2h", "dim": "sys", "page": "day_2.html"}, {"id": "p2i", "dim": "sys", "page": "day_2.html"}, {"id": "p3a", "dim": "ml", "page": "day_3.html"}, {"id": "p3b", "dim": "dsa", "page": "day_3.html"}, {"id": "p3c", "dim": "dsa", "page": "day_3.html"}, {"id": "p3d", "dim": "dsa", "page": "day_3.html"}, {"id": "p3e", "dim": "sys", "page": "day_3.html"}, {"id": "p3f", "dim": "dsa", "page": "day_3.html"}, {"id": "p3g", "dim": "sys", "page": "day_3.html"}, {"id": "p3h", "dim": "sys", "page": "day_3.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

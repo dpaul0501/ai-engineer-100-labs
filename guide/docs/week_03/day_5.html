@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
+<title>BPE Week · Encoding and serving</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* A chapter notebook: problem → formulation → theory → structures → algorithm → design → project.
+   Every section ends with a checkpoint; checkpoints fill the coverage bars. */
+:root{
+  --bg:#f2f5f4; --panel:#ffffff; --ink:#14201e; --muted:#5a6a66; --line:#d6dfdc;
+  --accent:#0c6a65; --accent-soft:#e0eeec; --trace:#ad5d17; --trace-soft:#f5e8db;
+  --code-bg:#eaf0ee; --good:#1d7a4c; --good-soft:#e1f1e8; --bad:#b03838; --bad-soft:#f7e3e3;
+  --dsa:#0c6a65; --ml:#1d7a4c; --ai:#ad5d17; --sys:#b03838; --del:#5a49b0; --del-soft:#ebe8f7;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Serif 4",Charter,"Iowan Old Style",Georgia,serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --rail:16.5rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1312; --panel:#131c1a; --ink:#e2eae7; --muted:#93a5a0; --line:#24322e;
+  --accent:#5cc4ba; --accent-soft:#16302d; --trace:#e39d58; --trace-soft:#33251a;
+  --code-bg:#17211f; --good:#5ac78d; --good-soft:#15291f; --bad:#ee7b7b; --bad-soft:#331a1a;
+  --dsa:#5cc4ba; --ml:#5ac78d; --ai:#e39d58; --sys:#ee7b7b; --del:#a99cf0; --del-soft:#241f3d; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:1.0625rem/1.65 var(--f-body)}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,.mono{font-family:var(--f-mono);font-variant-ligatures:none}
+code{background:var(--code-bg);padding:.08em .35em;border-radius:4px;font-size:.86em}
+pre{background:var(--code-bg);color:var(--ink);padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font-size:.8rem;line-height:1.55;border:1px solid var(--line);margin:.6rem 0 1rem}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--muted)}
+h1,h2,h3,h4{font-family:var(--f-display);text-wrap:balance;line-height:1.15;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,4vw,2.8rem);font-weight:800;margin:.3rem 0 .8rem}
+h2{font-size:1.6rem;font-weight:800;margin:0 0 .4rem}
+h3{font-size:1.12rem;font-weight:700;margin:1.8rem 0 .3rem}
+h4{font-size:.95rem;font-weight:700;margin:1.2rem 0 .2rem}
+p,li{max-width:70ch}
+.layout{display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+nav.rail{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:1.4rem .7rem 2rem}
+.brand{font:800 1rem var(--f-display);padding:0 .6rem .8rem;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+.rail-label{font:700 .66rem var(--f-display);color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:1rem .6rem .3rem}
+nav.rail a{display:flex;gap:.55rem;align-items:baseline;padding:.3rem .6rem;border-radius:6px;color:var(--ink);text-decoration:none;font:500 .84rem var(--f-display)}
+nav.rail a:hover{background:var(--accent-soft)}
+nav.rail a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+nav.rail a .n{font:600 .68rem var(--f-mono);color:var(--muted);min-width:1.3rem}
+nav.rail a .ok{margin-left:auto;font:700 .7rem var(--f-mono);color:var(--good)}
+main{padding-block:2rem 5rem;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
+.page{max-width:56rem;margin:0 auto}
+.eyebrow{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+.lead{font-size:1.18rem;color:var(--muted);max-width:62ch}
+.muted{color:var(--muted)}.small{font-size:.86rem}
+section.s{padding:2.6rem 0 1rem;border-top:1px solid var(--line);scroll-margin-top:.5rem}
+.shead{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem 1rem;flex-wrap:wrap;margin-bottom:.4rem}
+.sno{font:700 .74rem var(--f-mono);color:var(--accent);letter-spacing:.08em}
+.pill{font:600 .72rem var(--f-display);border:1px solid var(--line);border-radius:99px;padding:.15rem .6rem;color:var(--muted);white-space:nowrap}
+.dims{display:flex;gap:.35rem;flex-wrap:wrap}
+.dim{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.08em;padding:.12rem .45rem;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.dim.dsa,.t-dsa{color:var(--dsa)}.dim.ml,.t-ml{color:var(--ml)}.dim.ai,.t-ai{color:var(--ai)}.dim.sys,.t-sys{color:var(--sys)}.dim.del,.t-del{color:var(--del)}
+.idea{font-size:1.12rem;border-left:3px solid var(--accent);padding:.2rem 0 .2rem 1rem;margin:1rem 0;max-width:66ch}
+.math{font:1rem/1.9 var(--f-mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem 1rem;margin:.8rem 0;overflow-x:auto;white-space:pre}
+.math .c{color:var(--muted)}
+.watch{background:var(--trace-soft);border-radius:8px;padding:.7rem 1rem;margin:1rem 0;max-width:72ch}
+.watch>b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.watch ul{margin:.3rem 0 0;padding-left:1.2rem}
+.tablewrap{overflow-x:auto;margin:.8rem 0 1.2rem}
+table{border-collapse:collapse;width:100%;font:.86rem/1.45 var(--f-display);background:var(--panel)}
+th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:700;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--bg)}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-size:.8rem;font-variant-numeric:tabular-nums}
+tr.hi td{background:var(--accent-soft)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:1.2rem 0;font:600 .8rem var(--f-display)}
+.flow .b{padding:.4rem .65rem;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.flow .b.hi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.flow .ar{color:var(--muted)}
+/* Fundamentals cards: self-contained concept + deeper + practice */
+.fund{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:1.4rem 0;overflow:hidden}
+.fund .fh{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:.55rem 1rem;border-bottom:1px solid var(--line);background:var(--bg)}
+.fund .fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))}
+.fund .f{padding:.8rem 1rem;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0;font-size:.95rem}
+.fund .f p{margin:.35rem 0}
+.ft{font:700 .72rem var(--f-display);text-transform:uppercase;letter-spacing:.08em}
+.fl{font:.82rem/1.7 var(--f-display);margin:.4rem 0 0}
+.fl b{font-weight:700;color:var(--muted);margin-right:.3rem}
+a.lc{display:inline-block;font:600 .74rem var(--f-display);padding:.08rem .45rem;margin:.1rem .15rem .1rem 0;border-radius:4px;background:var(--accent-soft);text-decoration:none;white-space:nowrap}
+a.lc:hover{background:var(--accent);color:var(--panel)}
+/* Checkpoints */
+.check{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:var(--panel);margin:1.6rem 0 .6rem;padding:.8rem 1rem}
+.check .ch{display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.check .ch b{font:700 .74rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--accent)}
+.check .ch span{font:600 .74rem var(--f-mono);color:var(--muted)}
+.check .grp{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.7rem 0 .2rem}
+label.ck{display:grid;grid-template-columns:1.3rem minmax(0,1fr) auto;gap:.5rem;align-items:start;padding:.32rem 0;border-bottom:1px dashed var(--line);font-size:.95rem;cursor:pointer}
+label.ck:last-child{border-bottom:0}
+label.ck input{margin:.32rem 0 0;accent-color:var(--accent);width:1rem;height:1rem}
+label.ck:has(input:checked) .tx{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.next{font:.86rem/1.65 var(--f-display);margin:.8rem 0 0;padding-top:.6rem;border-top:1px solid var(--line)}
+.next b{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:.15rem}
+.next ul{margin:0;padding-left:1.1rem}
+/* Progress */
+.prog{display:grid;gap:.45rem}
+.prow{display:grid;grid-template-columns:6.6rem minmax(0,1fr) 2.8rem;gap:.5rem;align-items:center;font:600 .74rem var(--f-display)}
+.prow .bar{height:.5rem;background:var(--line);border-radius:99px;overflow:hidden}
+.prow .bar i{display:block;height:100%;width:0;border-radius:99px;transition:width .3s}
+.prow .v{font:600 .7rem var(--f-mono);text-align:right;color:var(--muted)}
+.rail .prog{padding:0 .6rem}
+.progcard{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:1rem;margin:1.2rem 0}
+.progcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+.progcard .top b{font:800 1rem var(--f-display)}
+.linkbtn{font:600 .72rem var(--f-display);background:none;border:0;color:var(--muted);cursor:pointer;text-decoration:underline;padding:0}
+/* Coverage grid */
+.cov td,.cov th{text-align:center}
+.cov td:first-child,.cov th:first-child{text-align:left}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:currentColor}
+/* Demos */
+.demo{border:1px solid var(--trace);border-radius:12px;margin:1.4rem 0;background:var(--panel);overflow:hidden}
+.demo>.dh{background:var(--trace-soft);padding:.55rem 1rem;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline}
+.demo>.dh b{font:700 .9rem var(--f-display)}
+.demo>.dh span{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--trace)}
+.demo .db{padding:1rem}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;margin-bottom:.8rem;font:500 .84rem var(--f-display)}
+.controls label{display:flex;align-items:center;gap:.45rem}
+.controls input[type=text],.controls textarea{font:500 .86rem var(--f-mono);padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.btn{font:600 .8rem var(--f-display);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:.38rem .7rem;border-radius:7px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn.pri:hover{color:var(--panel);opacity:.9}
+.toks{display:flex;flex-wrap:wrap;gap:.25rem;margin:.3rem 0}
+.tk{font:500 .8rem var(--f-mono);padding:.1rem .36rem;border-radius:4px;background:var(--accent-soft);color:var(--ink);white-space:pre;border:1px solid transparent}
+.tk.new{border-color:var(--accent);background:var(--accent);color:var(--panel)}
+.tk.mk{background:var(--bad-soft);color:var(--bad)}
+.stat{font:500 .8rem var(--f-mono);color:var(--muted);margin:.5rem 0 0;font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink)}
+.simgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.box{border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;min-width:0;background:var(--bg)}
+.box>.k{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.3rem;display:flex;justify-content:space-between;gap:.4rem}
+.box>.k code{text-transform:none;letter-spacing:0;font-size:.95em}
+.wrow{display:grid;grid-template-columns:2.4rem minmax(0,1fr);gap:.4rem;align-items:center;padding:.12rem .2rem;border-radius:4px}
+.wrow.hit{background:var(--trace-soft)}
+.wrow .f{font:600 .72rem var(--f-mono);color:var(--muted);text-align:right}
+.mini{width:100%;font:.76rem var(--f-mono);border-collapse:collapse;background:none}
+.mini td{padding:.14rem .3rem;border-bottom:1px solid var(--line)}
+.mini td.r{text-align:right}
+.ok-t{color:var(--good)}
+.up{color:var(--good);font-weight:600}.down{color:var(--bad);font-weight:600}
+.stale td{color:var(--muted);text-decoration:line-through}
+.log{font:.8rem/1.6 var(--f-mono);background:var(--code-bg);border-radius:8px;padding:.6rem .8rem;margin-top:.8rem;max-height:14rem;overflow:auto}
+.log div{padding:.05rem 0}
+.log .h{color:var(--accent);font-weight:600}
+.log .s{color:var(--muted)}
+details{margin:1rem 0;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+details>summary{cursor:pointer;padding:.6rem 1rem;font:600 .86rem var(--f-display)}
+details>div{padding:0 1rem .8rem}
+.obj{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.8rem;margin:1rem 0}
+.obj>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;min-width:0}
+.obj ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:.92rem}
+.obj li{margin:.25rem 0}
+.wi{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:.8rem 1rem;margin:.8rem 0}
+.wi h4{margin:0 0 .3rem;display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.wi h4 .id{font:700 .74rem var(--f-mono);color:var(--accent)}
+.wi p,.wi ul{font-size:.95rem;margin:.3rem 0}
+.wi .acc{font:.86rem/1.6 var(--f-display)}
+.wi .acc b{font:700 .66rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:var(--muted);font:.85rem/1.6 var(--f-display)}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  nav.rail{position:sticky;top:0;z-index:5;height:auto;display:flex;gap:.2rem;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:.45rem max(16px,env(safe-area-inset-right,0px)) .45rem max(16px,env(safe-area-inset-left,0px));padding-top:calc(.45rem + env(safe-area-inset-top,0px))}
+  nav.rail .brand,nav.rail .rail-label,nav.rail .prog{display:none}
+  nav.rail a{white-space:nowrap}
+  .simgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .prow{grid-template-columns:5.6rem minmax(0,1fr) 2.6rem}
+  label.ck{grid-template-columns:1.3rem minmax(0,1fr)}
+  label.ck .dim{grid-column:2;justify-self:start}
+}
+
+/* Week layout: main reading, then days of ML / Algorithms / Design blocks, then the build */
+.weekmap td{font-size:.84rem}
+.weekmap td:first-child{font:700 .78rem var(--f-mono);white-space:nowrap;color:var(--accent)}
+.dayhead{display:flex;gap:.6rem 1rem;align-items:baseline;flex-wrap:wrap}
+.blk{border:1px solid var(--line);border-top:3px solid var(--c,var(--accent));border-radius:12px;background:var(--panel);padding:1rem 1.1rem .6rem;margin:1.4rem 0}
+.blk.ml{--c:var(--ml)}.blk.alg{--c:var(--dsa)}.blk.des{--c:var(--sys)}
+.blk>.bh{display:flex;justify-content:space-between;gap:.4rem 1rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.2rem}
+.blk>.bh .kind{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--c)}
+.blk>h3{margin:.1rem 0 .5rem}
+.part{margin:1rem 0 .2rem;padding-top:.7rem;border-top:1px dashed var(--line)}
+.part>b{display:block;font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.25rem}
+.part ul{margin:.2rem 0;padding-left:1.15rem;font-size:.95rem}
+.part li{margin:.2rem 0}
+details.sol{border-color:var(--c,var(--line));background:var(--bg)}
+details.sol>summary{color:var(--c,var(--ink))}
+details.sol>div{padding-top:.2rem}
+
+/* Visual components: metric cards, code cards, bar charts, diagrams, equations */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.7rem;margin:1.2rem 0}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;min-width:0}
+.metric .v{font:800 1.7rem/1.15 var(--f-display);letter-spacing:-.03em;color:var(--accent)}
+.metric .l{font:.8rem/1.4 var(--f-display);color:var(--muted);margin-top:.2rem}
+.code{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.8rem 0 1.1rem;background:var(--code-bg)}
+.code>.ch{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.32rem .5rem .32rem .85rem;background:var(--panel);border-bottom:1px solid var(--line);font:600 .72rem var(--f-mono);color:var(--muted)}
+.code>pre{margin:0;border:0;border-radius:0}
+button.copy{font:600 .68rem var(--f-display);border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:6px;padding:.15rem .5rem;cursor:pointer}
+button.copy:hover{color:var(--accent);border-color:var(--accent)}
+.token.comment{color:var(--muted);font-style:italic}
+.token.keyword,.token.boolean{color:var(--del)}
+.token.string,.token.triple-quoted-string{color:var(--ml)}
+.token.number{color:var(--ai)}
+.token.function{color:var(--accent)}
+.token.builtin,.token.class-name{color:var(--sys)}
+.token.operator,.token.punctuation{color:var(--ink);opacity:.8}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;margin:1rem 0}
+.chart>.t{font:700 .76rem var(--f-display);color:var(--ink);margin-bottom:.45rem}
+.chart .sub{font:700 .64rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:.6rem 0 .15rem}
+.br{display:grid;grid-template-columns:minmax(6rem,11rem) minmax(0,1fr) 5rem;gap:.6rem;align-items:center;font:.8rem var(--f-display);padding:.14rem 0}
+.br>span:first-child{min-width:0;overflow-wrap:anywhere}
+.br .tr{height:.72rem;background:var(--line);border-radius:99px;overflow:hidden}
+.br .tr i{display:block;height:100%;background:var(--c,var(--accent));border-radius:99px}
+.br .v{font:600 .76rem var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chart .cap,.dg .cap{font:.8rem/1.5 var(--f-display);color:var(--muted);margin-top:.55rem}
+.dg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem;margin:1rem 0;overflow-x:auto}
+.seq{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.nd{font:600 .84rem var(--f-mono);padding:.28rem .5rem;border-radius:6px;background:var(--accent-soft);border:1px solid transparent;white-space:pre;color:var(--ink)}
+.nd.hot{background:var(--accent);color:var(--panel)}
+.nd.new{border-color:var(--accent);color:var(--accent);background:var(--panel)}
+.lk{color:var(--muted);font:.8rem var(--f-mono)}
+.pp{font:600 .76rem var(--f-mono);padding:.1rem .42rem;border-radius:4px;white-space:nowrap}
+.pp.rm{background:var(--bad-soft);color:var(--bad);text-decoration:line-through}
+.pp.add{background:var(--good-soft);color:var(--good)}
+.vflow{display:grid;justify-items:center;gap:.25rem}
+.vbox{border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;background:var(--bg);text-align:center;font:.84rem/1.45 var(--f-display);width:100%;max-width:34rem;min-width:0}
+.vbox b{display:block;font-weight:700}
+.varr{color:var(--accent);font:600 .78rem var(--f-display)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.steps{display:grid;gap:.55rem}
+.step{display:grid;grid-template-columns:3.2rem minmax(0,1fr) minmax(0,15rem);gap:.8rem;align-items:center;padding:.55rem 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border-bottom:0}
+.step .k{font:700 .7rem var(--f-mono);color:var(--muted)}
+.step .why{font:.78rem/1.45 var(--f-display);color:var(--muted)}
+.step .why b{color:var(--ink)}
+.cycle{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.4rem}
+.eq{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.5rem 1rem;margin:.8rem 0;overflow-x:auto;overflow-y:hidden}
+.eq mjx-container{margin:.4em 0!important}
+mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
+@media (max-width:640px){.step{grid-template-columns:2.6rem minmax(0,1fr)}.step .why{grid-column:2}.grid2{grid-template-columns:minmax(0,1fr)}.br{grid-template-columns:minmax(5rem,7.5rem) minmax(0,1fr) 4.2rem}}
+
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+.daycards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:.7rem;margin:1rem 0}
+.daycard{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;text-decoration:none;color:var(--ink);min-width:0}
+.daycard:hover{border-color:var(--accent)}
+.daycard b{display:block;font:700 .95rem var(--f-display);color:var(--accent);margin-bottom:.2rem}
+.daycard span{font:.84rem/1.45 var(--f-display);color:var(--muted)}
+.daycard.hi{border-color:var(--accent);background:var(--accent-soft)}
+.weekmap a{font-weight:700}
+</style>
+<div class="layout">
+<nav class="rail" aria-label="Week 3">
+  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="rail-label">Coverage, whole week</div>
+  <div class="prog" data-prog></div>
+  <div class="rail-label">Week 3 · Tokenization</div>
+  <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
+  <a href="day_5.html" class="on" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="../"><span class="n">↩</span>Guide home</a>
+</nav>
+
+<main><div class="page">
+<section class="s" id="day5" data-sec="day5">
+  <div class="shead"><span class="sno">DAY 5 · ENCODING AND SERVING</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim ai">AI</span><span class="dim sys">Sys</span></span></div>
+  <h2>From a trained merge list to a production tokenizer</h2>
+  <p class="lead">Training produced a merge list. Today covers what happens after: how a model goes wrong because of its tokenizer, how to encode a chunk fast, how to count when the data is too big to count exactly, and how to train and serve a tokenizer at scale.</p>
+
+  <!-- ===================== ML ===================== -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · failure modes and their mechanisms</span></div>
+
+    <h4>The question</h4>
+    <p>Some model failures have nothing to do with the network. They come from how the text was cut into tokens. Why does each one happen, mechanically, and what is the fix?</p>
+
+    <h4>The first principle behind most of them</h4>
+    <p>An embedding row is a vector of numbers, one row per token id. It changes only when its token appears in the model's training data: each appearance contributes one gradient update. On Day 2 we derived that a token seen \(n\) times has an embedding whose noise falls like \(1/\sqrt{n}\). When \(n\) is near zero, the row carries almost no signal. It stays close to its random initial value, minus whatever weight decay removed. The model has never learned what it means.</p>
+    <p>The tokenizer and the model are trained on different data, at different times. The tokenizer decides which tokens <em>exist</em> (from its corpus). The model decides what they <em>mean</em> (from its corpus). Every failure below is a mismatch between those two, or between the token boundary and the boundary the user cares about.</p>
+
+    <h4>The failure modes</h4>
+    <ul>
+      <li><b>Token tax.</b> <em>What you see:</em> the same sentence costs many more tokens in some languages. The week reading measured 6.9× more tokens for Hindi than English with GPT-2's tokenizer. <em>Why:</em> merges are chosen by frequency in the tokenizer's corpus. A script with little text there contributes few pairs to the counts, so few merges are learned for it, and its text stays close to raw bytes (Devanagari is 3 bytes per code point in UTF-8). <em>Cost to the user:</em> more money per request (billing is per token), less text in a fixed context window, more decoding steps per word. <em>Fix:</em> rebalance the tokenizer's training mix by language (see Design).</li>
+      <li><b>Glitch tokens.</b> <em>What you see:</em> <code> SolidGoldMagikarp</code> is a single GPT-2 token, and the model behaved strangely on it (refusing to repeat it, or answering with an unrelated word). <em>Why:</em> the string was frequent in the tokenizer's corpus (a Reddit username), so it earned a merge. It was nearly absent from the model's training data, so \(n \approx 0\) and its row never moved from initialization. <em>Fix:</em> train the tokenizer on the same mixture as the model, and check for such rows before release.</li>
+      <li><b>Under-trained intermediate tokens.</b> <em>What you see:</em> tokens that are in the vocabulary but are almost never produced by the encoder. <em>Why:</em> BPE learns a long token through shorter ones. Once the longer merge exists, the encoder applies it, so the shorter token is used only where the longer one does not fit. Measured on <em>Alice</em> with a 2,000-token vocabulary: of the 1,744 learned tokens, <b>122 are never emitted</b> when encoding Alice itself, and <b>437 are emitted at most 4 times</b>. Those rows get \(n \le 4\) updates from this text. <em>Fix:</em> find them (smallest embedding norms, or zero counts when encoding the training data; Land and Bartolo 2024 do this for real models) and prune or retrain.</li>
+      <li><b>Streaming decode prints &#xFFFD;.</b> <em>What you see:</em> a chat interface shows &#xFFFD; (U+FFFD, the replacement character) mid-word, then the right text. <em>Why:</em> byte-level tokens are byte strings, not characters. A token can end inside a multi-byte character. In the Alice vocabulary, one learned token is <code>b"\xe2\x80"</code>: the first two of the three bytes of the curly apostrophe ’ (U+2019). Decoding that token alone with <code>errors="replace"</code> produces &#xFFFD;. <em>Fix:</em> an incremental decoder that holds back an incomplete tail until the next token completes it (code below).</li>
+      <li><b>Spelling and counting letters.</b> The model never sees the letters inside <code> strawberry</code>; it sees one or two ids. "How many r's?" asks about something it observed only indirectly.</li>
+      <li><b>Prompt boundaries.</b> A prompt ending mid-word (<code>"https:"</code>) is split differently from the same text in training, where the colon was usually merged with the characters after it. "Token healing" backs up one token and constrains the next one to start with the removed text.</li>
+      <li><b>Digits.</b> GPT-2 merges digit strings however the counts fell, so <code>1234</code> and <code>1235</code> can split differently. Later split patterns cap digit groups at 3, which gives arithmetic a consistent unit.</li>
+    </ul>
+
+    <h4>BPE-dropout: making the model see more than one split</h4>
+    <p><b>The question.</b> Deterministic BPE gives each word exactly one split. A typo (<code> unhapiness</code>) produces a split the model has never seen. How can the model learn that different splits mean the same text?</p>
+    <p><b>The key idea.</b> While the <em>model</em> trains, encode each chunk with randomness: at every step, each candidate merge is skipped with probability \(p\). The lowest-rank surviving merge is applied. The model then sees a word's pieces as well as its usual split.</p>
+    <p><b>Why it is safe.</b> Each step still merges two adjacent tokens into the token whose bytes are their concatenation, so the decoded bytes never change: the encoding stays lossless. With \(p = 0\) it is ordinary BPE. With \(p = 1\) no merge survives and it returns bytes.</p>
+    <p><b>Cost.</b> One random draw per candidate per step: the same O(\(L \cdot R\)) as the simple encoder (Algorithms, below). It is used only while training the model. At inference, encode deterministically.</p>
+    <p><b>Measured.</b> With \(p = 0.3\) and the 2,000-token Alice vocabulary, <code> unhappiness</code> encodes as <code> un|ha|pp|iness</code> deterministically. Over seeds 0 to 4, dropout gave that split three times, <code> un|ha|pp|in|es|s</code> once and <code> un|ha|pp|in|ess</code> once.</p>
+
+    <h4>Other tokenizer families</h4>
+    <div class="tablewrap"><table>
+      <tr><th>Method</th><th>Training rule</th><th>Encoding</th><th>Used by</th></tr>
+      <tr><td>BPE (byte-level)</td><td>Merge the most frequent pair</td><td>Replay merges by rank</td><td>GPT-2/4/4o, Llama 3</td></tr>
+      <tr><td>WordPiece</td><td>Merge the pair maximizing count(ab) / (count(a) · count(b))</td><td>Longest match from the left</td><td>BERT</td></tr>
+      <tr><td>Unigram LM</td><td>Start big, prune tokens that hurt likelihood least</td><td>Most likely split (Viterbi), or sampled</td><td>T5, many SentencePiece models</td></tr>
+      <tr><td>Bytes only</td><td>None</td><td>Identity</td><td>ByT5</td></tr>
+    </table></div>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Implement BPE-dropout and print ten splits of <code> unhappiness</code> at \(p = 0.1, 0.3, 0.5\). Check that every split decodes to the same bytes.</li>
+      <li>Count, for your Alice tokenizer, how many learned tokens are emitted 0 times when encoding the text. Which ones are they, and which longer token absorbs each?</li>
+      <li>Find a word that <code>gpt2</code>, <code>cl100k_base</code> and <code>o200k_base</code> split three different ways, and explain each from its pattern.</li>
+      <li>Write a streaming decoder and test it on a token stream that splits ’ across two tokens.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Unigram LM encoding: given token log-probabilities, find the most likely split with dynamic programming (Viterbi).</li>
+      <li>Detect under-trained tokens in a model you can load: which tokens have the smallest embedding norms? Do they match the tokens with the lowest encoder counts?</li>
+      <li>Train the tokenizer on one half of Alice and count the zero-count tokens on the other half. Is the number larger? Why?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <div class="code"><div class="ch"><span>bpe.py · BPE-dropout</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def encode_dropout(data, ranks, p, rng):
+    ids = list(data)
+    while len(ids) &gt;= 2:
+        cands = [(ranks[q], q) for q in zip(ids, ids[1:]) if q in ranks and rng.random() &gt;= p]
+        if not cands:
+            break
+        r, pair = min(cands)
+        ids = merge(ids, pair, r)
+    return ids</code></pre></div>
+    <p><code>merge</code> is the function from the week reading. Every step joins two neighbours, so <code>b"".join(vocab[t] for t in out)</code> equals the input for every seed; the tests check this.</p>
+    <div class="code"><div class="ch"><span>stream.py · streaming decode without &#xFFFD;</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import codecs
+
+class StreamDecoder:
+    """Turn token ids into text as they arrive, never printing a half character."""
+    def __init__(self, vocab):                   # vocab: id -&gt; bytes
+        self.vocab = vocab
+        self.dec = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    def feed(self, token_id):
+        return self.dec.decode(self.vocab[token_id])   # holds back an incomplete tail
+    def close(self):
+        return self.dec.decode(b"", final=True)        # a truncated tail becomes one U+FFFD</code></pre></div>
+    <p>The incremental decoder keeps the bytes of an incomplete UTF-8 sequence until the next call. Feeding <code>b"\xe2\x80"</code> returns an empty string; feeding <code>b"\x99s"</code> next returns <code>’s</code>. Only a stream that ends mid-character yields &#xFFFD;, at <code>close()</code>.</p></div></details>
+    <div class="part"><b>Further reading and watching</b><ul>
+      <li>Rumbelow and Watkins, <a href="https://www.lesswrong.com/posts/aPeJE8bSo6rAFoLqg/solidgoldmagikarp-plus-prompt-generation">SolidGoldMagikarp</a> (post) · Land and Bartolo, <a href="https://arxiv.org/abs/2405.05417">Fishing for Magikarp</a> (paper)</li>
+      <li>Provilkov et al., <a href="https://arxiv.org/abs/1910.13267">BPE-Dropout</a> · Kudo, <a href="https://arxiv.org/abs/1804.10959">Subword Regularization</a> · Xue et al., <a href="https://arxiv.org/abs/2105.13626">ByT5</a></li>
+      <li>Hugging Face LLM course: <a href="https://huggingface.co/learn/llm-course/chapter6/6">WordPiece</a> and <a href="https://huggingface.co/learn/llm-course/chapter6/7">Unigram</a> · <a href="https://tiktokenizer.vercel.app/">Tiktokenizer</a> to compare splits</li>
+    </ul></div>
+  </div>
+
+  <!-- ===================== ALG 1 ===================== -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · the fast encoder and the LRU cache</span></div>
+
+    <h4>The question</h4>
+    <p>Given a chunk of \(L\) byte ids and a merge list where each merge has a rank (its position in the list, which is also the id of the token it creates), produce exactly the tokens the training rule implies: repeatedly apply the lowest-rank merge present, left to right, until no merge applies.</p>
+
+    <h4>First attempt: replay the merges, O(L · R)</h4>
+    <p>The week reading's encoder scans the whole chunk for the lowest-rank adjacent pair, rebuilds the list with every occurrence merged, and repeats. One round costs O(\(L\)): one scan, one rebuild. The number of rounds is \(R\), the number of distinct merges that apply to this chunk. So a chunk costs O(\(L \cdot R\)).</p>
+    <p>For a normal chunk this is fine: <code> rabbit</code> has \(L = 7\) and a few rounds. It breaks on long chunks with no spaces (URLs, base64, minified code, other scripts). Both factors grow together: a longer chunk contains more distinct pairs, so more merges apply. To stand in for such an input, feed the first 10,000 bytes of <code>alice.txt</code> to the encoder as one chunk, whitespace kept and no pattern split (2,000-token vocabulary): the simple encoder needs <b>951 rounds</b>, each rescanning thousands of tokens.</p>
+
+    <h4>The key idea: a linked list to splice, a heap to choose</h4>
+    <p>Two operations repeat: "find the lowest-rank pair" and "replace two neighbours by one token". Give each its own structure.</p>
+    <p><b>Doubly linked list.</b> Each token is a node holding four things: its token id, the index of the previous live node, the index of the next live node, and an <code>alive</code> flag. Merging node \(i\) with its right neighbour \(j\) means: set <code>ids[i]</code> to the new token, mark \(j\) dead, and point \(i\)'s <code>next</code> at \(j\)'s <code>next</code> (and that node's <code>prev</code> back at \(i\)). That is three pointer writes, O(1), whatever the chunk length. In an array the same removal shifts every later element: O(\(L\)). The code stores the list as parallel arrays <code>prev</code>, <code>nxt</code>, <code>alive</code> indexed by original position, which avoids allocating node objects.</p>
+    <p><b>Min-heap of (rank, position).</b> For every adjacent pair that is in the merge list, push the entry (rank, position of its left node). The heap's minimum is the next merge to apply. Ties on rank pop by position, so occurrences of the same merge come out left to right.</p>
+    <p><b>Lazy invalidation.</b> A merge changes the neighbourhood of \(i\): the pairs (prev, \(i\)) and (\(i\), next) are new, and old entries that mention \(i\) or \(j\) now describe pairs that no longer exist. Instead of finding and deleting those entries (a binary heap cannot do that cheaply; Day 4 compares the options), leave them in the heap and check each entry when it is popped. An entry \((r, i)\) is <em>valid</em> exactly when \(i\) is alive, \(i\) has a next node \(j\), and the pair (<code>ids[i]</code>, <code>ids[j]</code>) has rank \(r\). Invalid entries are skipped. After a merge, push at most two entries: the two new neighbouring pairs, if they are in the merge list.</p>
+
+    <h4>Worked example</h4>
+    <p>Merges: <code>aa</code> = 256 (rank 256), <code>ab</code> = 257, <code>aa</code>+<code>ab</code> = 258. Chunk: <code>aaab</code>, positions 0 to 3.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">start</span><span class="seq"><span class="nd">a·0</span><span class="lk">⇄</span><span class="nd">a·1</span><span class="lk">⇄</span><span class="nd">a·2</span><span class="lk">⇄</span><span class="nd">b·3</span></span><span class="why"><b>Heap:</b> <span class="pp">(256, 0)</span> <span class="pp">(256, 1)</span> <span class="pp">(257, 2)</span>. Three adjacent pairs, all in the merge list.</span></div>
+      <div class="step"><span class="k">pop 1</span><span class="seq"><span class="nd hot">aa·0</span><span class="lk">⇄</span><span class="nd">a·2</span><span class="lk">⇄</span><span class="nd">b·3</span></span><span class="why"><b>(256, 0) valid.</b> Node 0 absorbs node 1; node 1 is dead. New pair (aa, a) is not a merge: push nothing.</span></div>
+      <div class="step"><span class="k">pop 2</span><span class="seq"><span class="nd">aa·0</span><span class="lk">⇄</span><span class="nd">a·2</span><span class="lk">⇄</span><span class="nd">b·3</span></span><span class="why"><b><span class="pp rm">(256, 1)</span> stale:</b> node 1 is dead. Skip. This is the overlap rule: <code>aaa</code> gives <code>aa</code>, <code>a</code>, as in the simple encoder.</span></div>
+      <div class="step"><span class="k">pop 3</span><span class="seq"><span class="nd">aa·0</span><span class="lk">⇄</span><span class="nd hot">ab·2</span></span><span class="why"><b>(257, 2) valid.</b> Node 2 absorbs node 3. New pair (aa, ab) has rank 258: push <span class="pp add">(258, 0)</span>.</span></div>
+      <div class="step"><span class="k">pop 4</span><span class="seq"><span class="nd new">aaab·0</span></span><span class="why"><b>(258, 0) valid.</b> One token. The heap is empty: done.</span></div>
+    </div><div class="cap"><code>a·0</code> means token <code>a</code> in the node at position 0. Four pops, three merges, one stale entry skipped. Walking <code>nxt</code> from position 0 reads the output: <code>[258]</code>.</div></div>
+
+    <h4>Why it gives the same output as the simple encoder</h4>
+    <p>The simple encoder processes ranks in increasing order: for the lowest rank present, it merges all its non-overlapping occurrences left to right, then looks again. We show the fast encoder does the same, by induction over the merges it applies.</p>
+    <ol>
+      <li><b>Invariant: the heap holds a valid entry for every current mergeable pair.</b> True at the start (all pairs pushed). A merge creates only two new adjacent pairs, and both are pushed. Every other adjacent pair is unchanged, and its entry is still in the heap.</li>
+      <li><b>A merge never creates a pair of lower or equal rank.</b> The new pairs contain the new token \(r\). A merge involving token \(r\) can only have been learned after token \(r\) existed, so its rank is greater than \(r\). Hence once the minimum rank in the heap is \(r\), every occurrence of rank \(r\) that will ever exist is already present.</li>
+      <li><b>Same order within a rank.</b> Equal ranks pop by position, so occurrences of rank \(r\) are processed left to right. When two occurrences overlap (<code>aaa</code>), the left one merges first and the right one's entry becomes stale because its node died: exactly the simple encoder's left-to-right, non-overlapping rule.</li>
+      <li><b>Stale entries are harmless.</b> A popped entry is applied only if it passes the validity check, which describes a pair that exists now with the rank the entry claims. A rank identifies one pair, so a valid entry is a correct merge.</li>
+    </ol>
+    <p>So the fast encoder applies the same merges at the same places in the same order, and its output is identical. The differential test in the solutions checks this on every Alice chunk and on 3,000 random strings.</p>
+
+    <h4>Cost</h4>
+    <p><b>Pushes:</b> at most \(L - 1\) at the start, and at most 2 per merge. A merge removes one node, so there are at most \(L - 1\) merges, and at most \(3L\) pushes in total. <b>Pops:</b> each push is popped at most once, so at most \(3L\) pops. Each heap operation costs O(\(\log L\)) because the heap never holds more than \(3L\) entries. Splices are O(1). Total: <b>O(\(L \log L\)) time</b>, O(\(L\)) space for the arrays and the heap. The rank lookups are hash-map lookups, expected O(1) (Day 1).</p>
+
+    <h4>Confirm by measuring</h4>
+    <div class="chart"><div class="t">First 10,000 bytes of <code>alice.txt</code> as one chunk, 2,000-token vocabulary, identical output</div>
+      <div class="sub">best of 3 runs, one core, CPython</div>
+      <div class="br"><span>rescan encoder</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">0.69 s</span></div>
+      <div class="br"><span>linked list + heap</span><span class="tr"><i style="width:1.1%"></i></span><span class="v">0.0079 s</span></div>
+    </div>
+    <p>About 87 times faster on this chunk, where the simple encoder needs 951 rounds over thousands of tokens.</p>
+
+    <h4>The LRU cache (146)</h4>
+    <p><b>The question.</b> Natural text repeats: <code> the</code> is encoded thousands of times. Store each chunk's encoding so a repeat costs one lookup. Memory is bounded, so keep at most \(C\) entries, and when full, evict the <em>least recently used</em> one. Both <code>get</code> and <code>put</code> must be O(1).</p>
+    <p><b>First attempt.</b> A hash map from chunk to (tokens, last-used time). Lookups are O(1), but eviction must scan all \(C\) entries for the oldest time: O(\(C\)). A list kept in recency order has the opposite problem: moving an entry to the front needs to find it first, O(\(C\)).</p>
+    <p><b>The key idea.</b> Use both, linked to each other. A doubly linked list holds the entries in recency order, most recent at the head. A hash map sends each key to its list node. <code>get</code>: look up the node in the map (O(1)), unlink it (O(1), it knows its neighbours), and relink it at the head (O(1)). <code>put</code>: the same, and if the size exceeds \(C\), unlink the tail node and delete its key from the map. Two sentinel nodes, a fixed head and tail, mean every real node always has both neighbours, so there are no empty-list special cases.</p>
+    <p><b>Why it is correct.</b> Invariant: the list order is the order of last use, and the map contains exactly the keys in the list. Each operation moves the touched key to the head and touches nothing else, so the order of the others is unchanged; the tail is therefore the least recently used key. Eviction removes it from both structures at once, so the invariant holds.</p>
+    <p><b>Cost.</b> O(1) expected per operation (the map is the only "expected" part). Space O(\(C\)): one node plus one map entry per key.</p>
+    <p><b>Measured on Alice</b>, encoding its 37,404 chunks in order (3,218 distinct): an LRU cache of 256 entries hits <b>71.9%</b> of lookups, 1,024 entries hit <b>86.8%</b>, 4,096 entries hit <b>91.4%</b>. The last number is the ceiling: the cache is larger than the number of distinct chunks, so only the 3,218 first sightings miss (1 − 3,218 / 37,404 = 0.914).</p>
+    <p><b>Where BPE uses it.</b> Production encoders put a lookup in front of the merge loop: Hugging Face <code>tokenizers</code> keeps a bounded cache of word encodings in its BPE model, and tiktoken first checks whether the whole chunk is itself a token. A cache must be bounded: an attacker (or a log file) can send millions of distinct chunks.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/lru-cache/">146 LRU Cache</a>: hash map plus doubly linked list, exactly the bounded chunk cache.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">23 Merge k Sorted Lists</a>: a heap choosing among linked lists, the same pairing as the encoder.</li>
+      <li>Implement the linked-list encoder and check it against the simple one on every Alice chunk and on random strings.</li>
+      <li>Instrument your encoder: on the 10,000-byte chunk, how many pops are stale? Compare with the bound \(3L\).</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Cache by chunk vs by whole line: hit rates on <code>alice.txt</code>?</li>
+      <li>LFU instead of LRU (<a href="https://leetcode.com/problems/lfu-cache/">460 LFU Cache</a>): which suits a tokenizer cache better, given Zipf's law (Day 1)?</li>
+      <li>Replace the heap by a bucket array indexed by rank. What is the cost now, and when is it better?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <div class="code"><div class="ch"><span>146 · LRU cache</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Node:
+    __slots__ = ("key", "val", "prev", "next")
+    def __init__(self, key=0, val=0):
+        self.key, self.val, self.prev, self.next = key, val, None, None
+
+class LRUCache:
+    def __init__(self, capacity):
+        self.cap, self.map = capacity, {}
+        self.head, self.tail = Node(), Node()            # sentinels: no edge cases
+        self.head.next, self.tail.prev = self.tail, self.head
+    def _remove(self, n):
+        n.prev.next, n.next.prev = n.next, n.prev
+    def _push_front(self, n):
+        n.prev, n.next = self.head, self.head.next
+        self.head.next.prev = n; self.head.next = n
+    def get(self, key):
+        if key not in self.map: return -1
+        n = self.map[key]; self._remove(n); self._push_front(n)
+        return n.val
+    def put(self, key, value):
+        if key in self.map: self._remove(self.map[key])
+        n = Node(key, value); self.map[key] = n; self._push_front(n)
+        if len(self.map) &gt; self.cap:
+            lru = self.tail.prev; self._remove(lru); del self.map[lru.key]</code></pre></div>
+    <div class="code"><div class="ch"><span>bpe.py · O(L log L) encoder</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def encode_chunk_fast(data, ranks):                  # ranks: pair -&gt; new id (= rank order)
+    ids = list(data); n = len(ids)
+    if n &lt; 2: return ids
+    prev = list(range(-1, n - 1)); nxt = list(range(1, n + 1)); nxt[-1] = -1
+    alive = [True] * n
+    heap = [(ranks[(ids[i], ids[i + 1])], i) for i in range(n - 1) if (ids[i], ids[i + 1]) in ranks]
+    heapq.heapify(heap)
+    while heap:
+        r, i = heapq.heappop(heap)
+        j = nxt[i]
+        if not alive[i] or j == -1 or ranks.get((ids[i], ids[j])) != r:
+            continue                                     # stale entry
+        ids[i] = r; alive[j] = False                     # i absorbs j
+        nxt[i] = nxt[j]
+        if nxt[j] != -1: prev[nxt[j]] = i
+        for a in (prev[i], i):                           # the two new neighbouring pairs
+            if a != -1 and nxt[a] != -1 and (ids[a], ids[nxt[a]]) in ranks:
+                heapq.heappush(heap, (ranks[(ids[a], ids[nxt[a]])], a))
+    out, i = [], 0
+    while i != -1:
+        out.append(ids[i]); i = nxt[i]
+    return out</code></pre></div>
+    <p>The order argument in one line: equal ranks pop left to right (the position is the second tuple field), and a newly created pair always has a higher rank than the merge that created it, because its token was learned later.</p></div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li><a href="https://github.com/openai/tiktoken">tiktoken</a> and Hugging Face <a href="https://github.com/huggingface/tokenizers">tokenizers</a>: production encoders in Rust</li>
+      <li><a href="https://en.wikipedia.org/wiki/Doubly_linked_list">Doubly linked list</a> and <a href="https://en.wikipedia.org/wiki/Cache_replacement_policies">Cache replacement policies</a> (Wikipedia)</li>
+      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>: the chapters on linked lists, heaps and hash tables</li>
+    </ul></div>
+  </div>
+
+  <!-- ===================== ALG 2 ===================== -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · streams and scale: counting what you cannot store</span></div>
+
+    <h4>The question</h4>
+    <p>BPE's first step is "find the most frequent adjacent pair". On Alice that is easy: 119,226 pair occurrences, 665 distinct pairs, one <code>Counter</code>. On a 10 TB corpus, the objects we count (chunks, or pairs over a large vocabulary) number in the billions, and one exact counter per distinct object does not fit in memory. Can we find the most frequent items in one pass over a stream, with memory that does not grow with the number of distinct items, and say exactly how wrong the counts can be?</p>
+    <p><b>Definitions.</b> A <em>stream</em> is a sequence \(x_1, \dots, x_n\) read once, in order. The <em>frequency</em> \(f(x)\) is how many times \(x\) occurs, so \(\sum_x f(x) = n\). A <em>heavy hitter</em> for threshold \(1/k\) is an item with \(f(x) > n/k\). There can be fewer than \(k\) of them, since \(k\) items each above \(n/k\) would sum to more than \(n\).</p>
+    <p><b>First attempt.</b> A hash map of exact counts: O(1) per item, but memory O(number of distinct items), which is the problem. Sampling a fraction of the stream and counting the sample saves memory but gives no worst-case guarantee. The algorithms below give guarantees that hold for every stream.</p>
+
+    <h4>(a) Majority vote: Boyer–Moore (169) and its n/3 version (229)</h4>
+    <p><b>The question.</b> One value occurs more than \(n/2\) times. Find it with O(1) memory.</p>
+    <p><b>The idea.</b> Keep one candidate and a count. For each item: if the count is 0, the item becomes the candidate. If the item equals the candidate, add 1; otherwise subtract 1.</p>
+    <p><b>Why it is correct: cancellation.</b> Each time the count goes down, pair the arriving item with one stored copy of the candidate. The two are different values, and both are now "cancelled". At any moment the items read so far split into (i) cancelled pairs, each holding two <em>different</em> values, and (ii) <code>count</code> uncancelled copies of the candidate. Let \(m\) be the majority value, \(f(m) > n/2\). A pair contains at most one copy of \(m\), and there are at most \(n/2\) pairs. If \(m\) were not the final candidate, every copy of \(m\) would sit in a pair, so \(f(m) \le n/2\): a contradiction. So the final candidate is \(m\). If the input might have no majority, a second pass counts the candidate to check.</p>
+    <p><b>Extending to \(n/3\) (229).</b> Keep two candidates with two counts. An item that matches neither, when both counts are positive, decrements both: it cancels together with one copy of each candidate, so each cancellation removes three different values. There are at most \(n/3\) such rounds, and each removes at most one copy of any value. A value with \(f > n/3\) therefore keeps \(f - n/3 > 0\) copies, so it must be a final candidate. Candidates can be false, so a second pass checks both.</p>
+    <p><b>Cost.</b> O(\(n\)) time, O(1) space (O(1) per candidate).</p>
+
+    <h4>(b) Misra–Gries: the same cancellation with k − 1 counters</h4>
+    <p><b>The algorithm.</b> Keep at most \(k - 1\) (item, counter) entries. For each arriving \(x\): if \(x\) has a counter, add 1. Else if fewer than \(k - 1\) counters exist, give \(x\) a counter of 1. Else <em>decrement every counter by 1</em>, delete counters that reach 0, and drop \(x\). The estimate \(\hat f(x)\) is \(x\)'s counter, or 0. With \(k = 2\) this is exactly Boyer–Moore.</p>
+    <p><b>Worked example</b>, \(k = 3\) (two counters), stream <code>a b a c a b d a</code>, \(n = 8\):</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">a b a</span><span class="seq"><span class="nd">a:2</span><span class="nd">b:1</span></span><span class="why">Two counters, room for both.</span></div>
+      <div class="step"><span class="k">c</span><span class="seq"><span class="nd">a:1</span><span class="pp rm">b:0</span><span class="pp rm">c</span></span><span class="why"><b>Decrement round 1.</b> Full, <code>c</code> is new: <code>a</code>, <code>b</code>, <code>c</code> each lose one copy (3 = \(k\) distinct items).</span></div>
+      <div class="step"><span class="k">a b</span><span class="seq"><span class="nd">a:2</span><span class="nd">b:1</span></span><span class="why"><code>a</code> increments; <code>b</code> takes the free counter.</span></div>
+      <div class="step"><span class="k">d</span><span class="seq"><span class="nd">a:1</span><span class="pp rm">b:0</span><span class="pp rm">d</span></span><span class="why"><b>Decrement round 2.</b></span></div>
+      <div class="step"><span class="k">a</span><span class="seq"><span class="nd new">a:2</span></span><span class="why">End. True counts: a 4, b 2, c 1, d 1. Estimates: a 2, others 0. Every error is at most \(D = 2 \le n/k = 2.67\).</span></div>
+    </div></div>
+    <p><b>Why every estimate is within \(n/k\): proof.</b> Let \(D\) be the number of decrement rounds. In one round, the dropped arrival and the \(k - 1\) stored items each lose one unit of count: \(k\) units, from \(k\) distinct items. Counters only grow by 1 per arrival, so at the end the counters sum to \(n - kD\). That sum is at least 0, so</p>
+    <div class="eq">\[ D \le \frac{n}{k}. \]</div>
+    <p>Now fix an item \(x\). Its counter is increased only by its own arrivals, so \(\hat f(x) \le f(x)\). It falls short of \(f(x)\) only in decrement rounds, and each round takes at most one unit from \(x\): either \(x\) is the dropped arrival, or \(x\) holds a counter and loses 1, never both, because an arrival that already has a counter is incremented, not dropped. So</p>
+    <div class="eq">\[ f(x) - \frac{n}{k} \;\le\; f(x) - D \;\le\; \hat f(x) \;\le\; f(x). \]</div>
+    <p><b>Consequence.</b> Every item with \(f(x) > n/k\) has \(\hat f(x) > 0\), so it holds a counter at the end: the \(k - 1\) counters contain every heavy hitter. A second pass over the data with exact counts for these \(k - 1\) items removes the false ones.</p>
+    <p><b>Cost.</b> Space: \(k - 1\) counters. Time: O(1) per increment, O(\(k\)) per decrement round; since there are at most \(n/k\) rounds, the total decrement work is O(\(n\)), so O(1) amortized per item.</p>
+
+    <h4>(c) Space-Saving: overestimate instead of underestimate</h4>
+    <p><b>The algorithm</b> (Metwally, Agrawal and El Abbadi, 2005). Keep \(k\) (item, count, error) entries. For each arriving \(x\): if \(x\) is stored, add 1 to its count. Else if fewer than \(k\) entries exist, store \(x\) with count 1, error 0. Else find the entry \(y\) with the smallest count \(m\), <em>replace</em> \(y\) by \(x\), and set count \(m + 1\), error \(m\). Misra–Gries throws information away; Space-Saving hands the evicted count to the newcomer.</p>
+    <p><b>Worked example</b>, \(k = 3\), the same stream <code>a b a c a b d a</code>: after <code>a b a c a b</code> the entries are a:3, b:2, c:1, all exact. <code>d</code> arrives with the table full; the minimum is c:1, so <code>d</code> takes it over with count 2, error 1. The final <code>a</code> makes a:4. Result: a 4 (true 4), b 2 (true 2), d 2 with error 1 (true 1).</p>
+    <p><b>Why it is correct: proof by induction on the stream.</b> Let \(\mu\) be the smallest stored count once the table is full. We show three facts hold after every step:</p>
+    <ol>
+      <li>the stored counts sum to \(n\) (each arrival adds exactly 1 to some count, including a takeover: \(m \to m + 1\));</li>
+      <li>for a stored \(x\): \(f(x) \le \hat c(x) \le f(x) + \text{err}(x)\), and \(\text{err}(x) \le \mu\);</li>
+      <li>for an item not stored: \(f(x) \le \mu\).</li>
+    </ol>
+    <p>\(\mu\) never decreases, since counts only grow and a takeover raises the minimum entry from \(m\) to \(m + 1\). An arrival of a stored \(x\) raises \(f\) and \(\hat c\) together, which keeps (2). When the table is full and an unstored \(x\) arrives, (3) says \(f(x) \le m\) before the arrival; afterwards \(f(x)\) is at most \(m + 1 = \hat c(x)\), and \(\hat c(x) - f(x) \le m = \text{err}(x) \le \mu\). The evicted \(y\) had \(f(y) \le \hat c(y) = m \le \mu\), which is (3) for \(y\). Fact (1) and \(k\) counts give \(\mu \le n/k\). Together:</p>
+    <div class="eq">\[ f(x) \;\le\; \hat c(x) \;\le\; f(x) + \mu \;\le\; f(x) + \frac{n}{k}. \]</div>
+    <p>Every item with \(f(x) > \mu\) is stored (by fact 3), and the stored error field gives a per-item bound that is usually much tighter than \(n/k\). The two algorithms are known to be equivalent (Agarwal et al., <em>Mergeable Summaries</em>, 2012): subtract the smallest Space-Saving count (with \(k\) counters) from every Space-Saving count, drop the non-positive ones, and you get exactly the Misra–Gries counters (with \(k - 1\)). The tests check this on 300 random streams. So Misra–Gries underestimates by at most \(\mu\), Space-Saving overestimates by at most \(\mu\); on Alice the largest Misra–Gries underestimate on the top 20 equals the Space-Saving minimum counter for every \(k\) we tried.</p>
+    <p><b>Cost.</b> \(k\) entries. With a dictionary and a linear scan for the minimum (the code below), a takeover costs O(\(k\)). The paper's "stream summary" (a linked list of buckets, one per distinct count, each holding a linked list of items) makes every step O(1), because a count only ever moves to the next bucket.</p>
+
+    <h4>(d) Count-Min sketch: hashing, with a probabilistic bound</h4>
+    <p><b>The question.</b> Misra–Gries and Space-Saving answer well only for heavy items. Can we estimate \(f(x)\) for <em>any</em> \(x\), with error at most \(\varepsilon n\), using memory independent of the number of distinct items?</p>
+    <p><b>The structure</b> (Cormode and Muthukrishnan, 2005). A table of \(d\) rows and \(w\) columns of counters, all 0, and one hash function per row, \(h_j\) mapping items to columns \(0 \dots w - 1\). To add \(x\): for every row \(j\), add 1 to \(C[j][h_j(x)]\). To estimate: \(\hat f(x) = \min_j C[j][h_j(x)]\).</p>
+    <p><b>Worked example</b>, \(d = 2\), \(w = 4\), stream <code>a a b c a</code>, hashes chosen by hand: row 1 sends a→0, b→1, c→0; row 2 sends a→2, b→2, c→3.</p>
+    <div class="tablewrap"><table>
+      <tr><th></th><th class="num">col 0</th><th class="num">col 1</th><th class="num">col 2</th><th class="num">col 3</th></tr>
+      <tr><td>row 1</td><td class="num">4 (a×3 + c)</td><td class="num">1 (b)</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr><td>row 2</td><td class="num">0</td><td class="num">0</td><td class="num">4 (a×3 + b)</td><td class="num">1 (c)</td></tr>
+    </table></div>
+    <p>\(\hat f(a) = \min(4, 4) = 4\), true 3: <code>a</code> collides in both rows. \(\hat f(b) = \min(1, 4) = 1\) and \(\hat f(c) = \min(4, 1) = 1\), both exact: each collides in one row, and the other row rescues it. That is why we take the minimum over independent rows.</p>
+    <p><b>Why it is correct: the \((\varepsilon, \delta)\) bound.</b> Every cell that \(x\) touches contains all \(f(x)\) of \(x\)'s arrivals plus whatever else hashed there, so each row overestimates and \(\hat f(x) \ge f(x)\). Fix a row \(j\) and define its error</p>
+    <div class="eq">\[ X_j = C[j][h_j(x)] - f(x) = \sum_{y \ne x} f(y)\, \mathbf{1}[h_j(y) = h_j(x)]. \]</div>
+    <p>Choose \(h_j\) at random from a <em>universal</em> family: for any two different items, \(P(h_j(y) = h_j(x)) \le 1/w\). By linearity of expectation,</p>
+    <div class="eq">\[ \mathbb{E}[X_j] \le \sum_{y \ne x} f(y) \cdot \frac{1}{w} \le \frac{n}{w}. \]</div>
+    <p>\(X_j\) is non-negative, so Markov's inequality, \(P(X \ge a) \le \mathbb{E}[X]/a\), applies with \(a = e \cdot n/w\):</p>
+    <div class="eq">\[ P\!\left(X_j \ge \frac{e\,n}{w}\right) \le \frac{n/w}{e\,n/w} = \frac{1}{e}. \]</div>
+    <p>The rows use independent hash functions, so the minimum is large only if every row is large:</p>
+    <div class="eq">\[ P\!\left(\hat f(x) - f(x) \ge \frac{e\,n}{w}\right) = \prod_{j=1}^{d} P\!\left(X_j \ge \frac{e\,n}{w}\right) \le e^{-d}. \]</div>
+    <p>Now pick the sizes. With \(w = \lceil e/\varepsilon \rceil\) we get \(e\,n/w \le \varepsilon n\). With \(d = \lceil \ln(1/\delta) \rceil\) we get \(e^{-d} \le \delta\). So</p>
+    <div class="eq">\[ f(x) \;\le\; \hat f(x) \;\le\; f(x) + \varepsilon n \quad \text{with probability at least } 1 - \delta. \]</div>
+    <p><b>Cost.</b> \(w \cdot d = \lceil e/\varepsilon \rceil \lceil \ln(1/\delta) \rceil\) counters, independent of the number of distinct items. \(d\) hash evaluations per add and per query. The hash used below, \(h(x) = ((a x + b) \bmod p) \bmod w\) with \(p\) a prime and \(a \ne 0\), \(b\) random, is the classic universal family (CLRS, universal hashing). Two sketches with the same hash functions add cell by cell, so a sketch per shard merges into the sketch of the whole corpus. Unlike Misra–Gries, Count-Min also supports decrements.</p>
+
+    <h4>(e) Reservoir sampling: a uniform sample from a stream of unknown length</h4>
+    <p><b>The question.</b> Keep a uniformly random sample of \(k\) items from a stream whose length \(n\) is not known in advance, using O(\(k\)) memory. (Sampling documents for the tokenizer's training set is this problem.)</p>
+    <p><b>First attempt.</b> Store everything, then sample: O(\(n\)) memory. Keep each item with a fixed probability \(q\): the sample size is random, and \(q\) needs \(n\).</p>
+    <p><b>Algorithm R.</b> Keep the first \(k\) items. For the \(i\)-th item with \(i > k\): draw \(j\) uniformly from \(\{0, \dots, i - 1\}\); if \(j &lt; k\), replace slot \(j\) by the item. So item \(i\) enters with probability \(k/i\), and evicts a uniformly chosen slot.</p>
+    <p><b>Why it is correct: induction.</b> Claim: after \(i \ge k\) items, every one of them is in the reservoir with probability \(k/i\). Base \(i = k\): all are kept, probability \(1 = k/k\). Step from \(i\) to \(i + 1\): the new item enters with probability \(k/(i+1)\), as required. An old item is in the reservoir with probability \(k/i\) by the hypothesis. It is evicted only if the new item enters <em>and</em> picks its slot: probability \(\frac{k}{i+1} \cdot \frac{1}{k} = \frac{1}{i+1}\). So it survives with probability \(\frac{i}{i+1}\), and</p>
+    <div class="eq">\[ P(\text{old item kept after } i+1) = \frac{k}{i} \cdot \frac{i}{i+1} = \frac{k}{i+1}. \]</div>
+    <p>Example with \(k = 1\) and three items: item 3 is kept with probability \(1/3\); item 1 survives with probability \(1 \cdot \frac12 \cdot \frac23 = \frac13\).</p>
+    <p><b>Cost.</b> O(1) per item (one random draw), O(\(k\)) memory. <a class="lc" href="https://leetcode.com/problems/linked-list-random-node/">382 Linked List Random Node</a> is \(k = 1\) over a list whose length is unknown. <a class="lc" href="https://leetcode.com/problems/random-pick-index/">398 Random Pick Index</a> is \(k = 1\) over the sub-stream of indices whose value equals the target.</p>
+
+    <h4>Confirm by measuring on Alice</h4>
+    <p>The stream: every adjacent byte pair inside every chunk of <code>alice.txt</code> (the whole file as one text, split with the GPT-2 pattern), in reading order. \(n = 119{,}226\) pairs, 665 distinct. The true top pair is <code> t</code> (3,978), then <code>he</code> (3,686); the 20th has 1,130. "Recovered" counts how many of the true top 20 are among the summary's 20 largest counts.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Summary</th><th class="num">Memory (counters)</th><th class="num">True top-20 recovered</th><th class="num">Max error on the top 20</th><th class="num">Guarantee</th></tr>
+      <tr><td>Space-Saving, k = 50</td><td class="num">50</td><td class="num">13 / 20</td><td class="num">+1,145</td><td class="num">≤ n/k = 2,385</td></tr>
+      <tr><td>Space-Saving, k = 100</td><td class="num">100</td><td class="num">19 / 20</td><td class="num">+11</td><td class="num">≤ 1,192</td></tr>
+      <tr><td>Space-Saving, k = 200</td><td class="num">200</td><td class="num">20 / 20</td><td class="num">0</td><td class="num">≤ 596</td></tr>
+      <tr><td>Count-Min, ε = 0.01, δ = 0.01 (w = 272, d = 5)</td><td class="num">1,360</td><td class="num">n/a</td><td class="num">+108 to +321 (5 seeds)</td><td class="num">≤ εn = 1,192, p ≥ 0.99</td></tr>
+      <tr><td>Count-Min, ε = 0.001, δ = 0.01 (w = 2,719, d = 5)</td><td class="num">13,595</td><td class="num">n/a</td><td class="num">0 (5 seeds)</td><td class="num">≤ 119, p ≥ 0.99</td></tr>
+    </table></div>
+    <p>Every measured error is inside its guarantee, and usually far inside: the bounds are worst cases over all streams, and a Zipf-shaped stream (Day 1) puts most of its mass on a few items. The minimum Space-Saving counter, the a-posteriori bound, was 2,275, 975 and 294 for \(k\) = 50, 100, 200. The second Count-Min setting has more counters than there are distinct pairs, which is why it is exact here; at corpus scale the ratio is the other way round.</p>
+
+    <h4>Does an approximate top pair pick the same merge?</h4>
+    <p>Let \(p_1\) be the true top pair and \(p_2\) the runner-up, with gap \(g = f(p_1) - f(p_2)\). Suppose every estimate satisfies \(f \le \hat f \le f + \text{err}\). Then \(\hat f(p_1) \ge f(p_1)\), and every other pair has \(\hat f(q) \le f(q) + \text{err} \le f(p_2) + \text{err}\). So if \(g > \text{err}\), the approximate argmax is \(p_1\): the same merge. If \(g \le \text{err}\), the summary may pick another pair.</p>
+    <p>On Alice, \(g = 3{,}978 - 3{,}686 = 292\). Space-Saving guarantees err \(\le n/k\), so the first merge is guaranteed once \(k \ge 409\) (\(119{,}226 / 292 = 408.3\)); with \(k\) = 50, 100, 200 the guarantee does not cover it, although the measured top pair was right in all three. Count-Min with \(\varepsilon = 0.001\) (\(\varepsilon n = 119 &lt; 292\)) guarantees it with probability at least 0.99.</p>
+    <p>For the rest of training the answer is mostly no. We recorded the gap \(g_t\) and the total pair count \(n_t\) at each of the 1,744 merges of the Alice trainer. Only <b>9</b> merges have \(g_t > 0.001\, n_t\), and 7 of those are among the first 10. In <b>1,510</b> of the 1,744 merges, the top two counts are exactly tied (\(g_t = 0\)): late merges are decided by the tie-break rule, and any counting error can flip them. There is a second obstacle: after each merge the pair counts change, so a one-pass summary of the original stream does not describe step 2. Approximate counting can choose the first few merges and can shrink the input; it cannot replace the exact merge loop.</p>
+
+    <h4>Where BPE uses it</h4>
+    <p>Not inside the merge loop, as measured above. Before it: a Count-Min pass over a huge corpus finds the chunks that occur at least \(T\) times (it never underestimates, so no frequent chunk is lost), and only those get exact counters. Reservoir sampling draws a fixed-size uniform sample of documents per language for the tokenizer's training set. Both are covered in the Design block.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/majority-element/">169 Majority Element</a>: Boyer–Moore in O(1) space.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/majority-element-ii/">229 Majority Element II</a>: two candidates, then a verification pass.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/linked-list-random-node/">382 Linked List Random Node</a> and <a class="lc" href="https://leetcode.com/problems/random-pick-index/">398 Random Pick Index</a>: reservoir sampling with \(k = 1\).</li>
+      <li><a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">528 Random Pick with Weight</a>: sampling proportional to weight (prefix sums and binary search), the non-streaming version.</li>
+      <li>Run Space-Saving and Misra–Gries on Alice's pair stream for \(k\) = 50, 100, 200. Reproduce the table, and check that the Space-Saving minimum counter equals the Misra–Gries largest underestimate.</li>
+      <li>Prove that Misra–Gries with \(k = 2\) is Boyer–Moore, line by line.</li>
+      <li>Build a Count-Min sketch on Alice's pair stream for \(\varepsilon\) = 0.01 and 0.001. For what fraction of all 665 pairs is the error above \(\varepsilon n\)? Compare with \(\delta\).</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Weighted stream: each item arrives with a count (a chunk and its frequency). Extend Space-Saving to add \(c\) at once. Does the bound still hold with \(n = \sum c\)?</li>
+      <li>Merge two Misra–Gries summaries of size \(k - 1\): add counters, then subtract the \(k\)-th largest value from all and drop non-positive ones. Why does the error bound survive?</li>
+      <li>Conservative update for Count-Min: on add, raise only the cells equal to the current minimum. Why is it still never an underestimate, and why is it more accurate?</li>
+      <li>Weighted reservoir sampling: keep the \(k\) items with the largest \(u^{1/w}\), \(u\) uniform in (0, 1) (Efraimidis and Spirakis, 2006). Check on a small case that inclusion is proportional to weight for \(k = 1\).</li>
+      <li>Heavy hitters over a sliding window of the last \(W\) items: what breaks in Misra–Gries?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <div class="code"><div class="ch"><span>169 and 229 · majority vote</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def majority_element(nums):                      # 169: some value occurs more than n/2 times
+    cand, count = None, 0
+    for x in nums:
+        if count == 0:
+            cand = x                             # everything before has cancelled out
+        count += 1 if x == cand else -1          # a different value cancels one copy
+    return cand
+
+def majority_element_ii(nums):                   # 229: all values occurring more than n/3 times
+    c1, n1, c2, n2 = None, 0, None, 0
+    for x in nums:
+        if x == c1: n1 += 1
+        elif x == c2: n2 += 1
+        elif n1 == 0: c1, n1 = x, 1
+        elif n2 == 0: c2, n2 = x, 1
+        else: n1 -= 1; n2 -= 1                   # x, c1, c2: three distinct values cancel
+    return [c for c in (c1, c2) if c is not None and nums.count(c) &gt; len(nums) // 3]</code></pre></div>
+    <div class="code"><div class="ch"><span>stream.py · Misra–Gries</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def misra_gries(stream, k):
+    """k-1 counters. For every x: true(x) - n/k &lt;= cnt.get(x, 0) &lt;= true(x)."""
+    cnt = {}
+    for x in stream:
+        if x in cnt:
+            cnt[x] += 1
+        elif len(cnt) &lt; k - 1:
+            cnt[x] = 1
+        else:                                    # x plus k-1 stored items: k distinct, cancel one each
+            for y in list(cnt):
+                cnt[y] -= 1
+                if cnt[y] == 0:
+                    del cnt[y]
+    return cnt</code></pre></div>
+    <div class="code"><div class="ch"><span>stream.py · Space-Saving</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def space_saving(stream, k):
+    """k counters. For a stored x: true(x) &lt;= cnt[x] &lt;= true(x) + err[x], err[x] &lt;= min counter &lt;= n/k."""
+    cnt, err = {}, {}
+    for x in stream:
+        if x in cnt:
+            cnt[x] += 1
+        elif len(cnt) &lt; k:
+            cnt[x], err[x] = 1, 0
+        else:
+            y = min(cnt, key=cnt.get)            # O(k) here; the "stream summary" bucket list makes it O(1)
+            m = cnt.pop(y); del err[y]
+            cnt[x], err[x] = m + 1, m            # x inherits y's count, so it may be over by m
+    return cnt, err</code></pre></div>
+    <div class="code"><div class="ch"><span>stream.py · Count-Min sketch</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">P = (1 &lt;&lt; 61) - 1                                # a prime larger than any key
+
+class CountMin:
+    def __init__(self, eps, delta, seed=0):
+        self.w = math.ceil(math.e / eps)         # error &lt;= eps * n ...
+        self.d = math.ceil(math.log(1 / delta))  # ... with probability &gt;= 1 - delta
+        rng = random.Random(seed)
+        self.ab = [(rng.randrange(1, P), rng.randrange(P)) for _ in range(self.d)]
+        self.rows = [[0] * self.w for _ in range(self.d)]
+    def _cols(self, x):                          # x: a non-negative integer key
+        return [((a * x + b) % P) % self.w for a, b in self.ab]
+    def add(self, x, c=1):
+        for row, col in zip(self.rows, self._cols(x)):
+            row[col] += c
+    def estimate(self, x):                       # never below the true count
+        return min(row[col] for row, col in zip(self.rows, self._cols(x)))
+    def merge(self, other):                      # same seed =&gt; same hashes: add cell by cell
+        for r1, r2 in zip(self.rows, other.rows):
+            for i, v in enumerate(r2):
+                r1[i] += v</code></pre></div>
+    <div class="code"><div class="ch"><span>stream.py · reservoir sampling (algorithm R)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def reservoir_sample(stream, k, rng):
+    res = []
+    for i, x in enumerate(stream, start=1):      # x is the i-th item
+        if i &lt;= k:
+            res.append(x)
+        else:
+            j = rng.randrange(i)                 # uniform in 0 .. i-1
+            if j &lt; k:                            # probability k / i
+                res[j] = x                       # evicts a uniformly chosen slot
+    return res</code></pre></div>
+    <div class="code"><div class="ch"><span>382 · Linked List Random Node</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Solution:                                  # 382 Linked List Random Node (reservoir, k = 1)
+    def __init__(self, head):
+        self.head = head
+    def getRandom(self):
+        chosen, i, node = None, 0, self.head
+        while node:
+            i += 1
+            if random.randrange(i) == 0:         # keep the i-th node with probability 1/i
+                chosen = node.val
+            node = node.next
+        return chosen</code></pre></div>
+    <div class="code"><div class="ch"><span>398 · Random Pick Index</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Solution:                                  # 398 Random Pick Index
+    def __init__(self, nums):
+        self.nums = nums
+    def pick(self, target):
+        chosen, seen = -1, 0
+        for i, x in enumerate(self.nums):
+            if x == target:
+                seen += 1
+                if random.randrange(seen) == 0:  # reservoir over the matching indices only
+                    chosen = i
+        return chosen</code></pre></div>
+    <p>The tests check the worked examples, the bounds \(f - n/k \le \hat f \le f\) (Misra–Gries) and \(f \le \hat c \le f + \text{err} \le f + n/k\) (Space-Saving) on 300 random heavy-tailed streams, that Count-Min never underestimates on Alice's pairs and that two half-stream sketches merge to the whole-stream sketch, and that reservoir sampling keeps each of 10 items with frequency 0.3 ± 0.02 over 20,000 runs.</p></div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Misra and Gries, "Finding repeated elements", <em>Science of Computer Programming</em>, 1982 · Boyer and Moore, "MJRTY: a fast majority vote algorithm", 1991 · Wikipedia: <a href="https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_majority_vote_algorithm">Boyer–Moore majority vote</a>, <a href="https://en.wikipedia.org/wiki/Misra%E2%80%93Gries_summary">Misra–Gries summary</a></li>
+      <li>Metwally, Agrawal and El Abbadi, "Efficient computation of frequent and top-k elements in data streams", ICDT 2005 (Space-Saving)</li>
+      <li>Cormode and Muthukrishnan, "An improved data stream summary: the count-min sketch and its applications", <em>Journal of Algorithms</em>, 2005 · <a href="https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch">Count–min sketch</a> (Wikipedia)</li>
+      <li>Vitter, "Random sampling with a reservoir", <em>ACM Transactions on Mathematical Software</em>, 1985 · <a href="https://en.wikipedia.org/wiki/Reservoir_sampling">Reservoir sampling</a> (Wikipedia)</li>
+      <li>Agarwal, Cormode, Huang, Phillips, Wei and Yi, "Mergeable summaries", PODS 2012 · Cormode and Yi, <em>Small Summaries for Big Data</em> (Cambridge University Press, 2020)</li>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/">Mining of Massive Datasets</a>, chapter 4 (mining data streams), free online</li>
+    </ul></div>
+  </div>
+
+  <!-- ===================== DESIGN ===================== -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">Design · training on terabytes, serving at scale</span></div>
+    <p>Prompt: <em>train a tokenizer on a 10 TB multilingual corpus, then serve encoding for an API handling 50,000 requests per second.</em></p>
+
+    <h4>Training: what parallelizes and what does not</h4>
+    <p><b>Map: count chunks per shard.</b> Each worker reads one shard, splits it with the pattern, and counts chunks. Chunk counts are a sufficient statistic for training (Day 4): the merge loop never needs the raw text again. <b>Reduce: sum the counters.</b> Addition is associative and commutative, so the shard counters can be combined in any order or in a tree. This is word count, the classic MapReduce job. Then drop chunks seen fewer than a few times.</p>
+    <p><b>The merge loop is sequential.</b> Merge \(t\) is the argmax of the pair counts <em>after</em> merge \(t - 1\) has been applied. Each merge changes the counts of the pairs around it, so merge \(t\) cannot be chosen before merge \(t - 1\) is known. Distributing it would need a global synchronization per merge, 200,000 of them for a 200k vocabulary. After deduplication the chunk counter is small enough for one machine, so the loop runs there.</p>
+    <div class="dg"><div class="vflow">
+      <div class="grid2" style="width:100%;max-width:32rem"><div class="vbox"><b>shard 1</b><span class="small muted">chunk + count</span></div><div class="vbox"><b>shard n</b><span class="small muted">chunk + count</span></div></div>
+      <div class="varr">↓ map (parallel)</div>
+      <div class="vbox"><b>reduce: sum counters</b><span class="small muted">then drop chunks seen fewer than a few times</span></div>
+      <div class="varr">↓ one machine</div>
+      <div class="vbox" style="border-color:var(--accent)"><b>merge loop</b><span class="small muted">sequential: each merge depends on the last</span></div>
+      <div class="varr">↓</div>
+      <div class="vbox"><b>merges file + hash</b><span class="small muted">shipped with the model; checked at load</span></div>
+    </div><div class="cap">Counting is embarrassingly parallel. Choosing merges is not: each needs the counts the previous one left.</div></div>
+    <div class="tablewrap"><table>
+      <tr><th>Estimate</th><th class="num">Value</th><th>Working</th></tr>
+      <tr><td>Chunks in the corpus</td><td class="num">≈ 2 × 10<sup>12</sup></td><td>10 TB ÷ ~5 bytes per chunk</td></tr>
+      <tr><td>Unique chunks after pruning</td><td class="num">≈ 10<sup>8</sup></td><td>an assumption: measure on a sample</td></tr>
+      <tr><td>Merge-loop memory</td><td class="num">≈ 5–10 GB</td><td>10<sup>8</sup> × (~10 ids × 4 bytes + index overhead), compact language</td></tr>
+      <tr><td>Serving load</td><td class="num">≈ 5 × 10<sup>7</sup> tokens/s</td><td>50,000 req/s × ~1,000 tokens</td></tr>
+    </table></div>
+
+    <h4>Where sketches and sampling fit</h4>
+    <ul>
+      <li><b>Pruning before exact counting.</b> If the unique chunks of a shard do not fit in memory, first build a Count-Min sketch per shard, merge them by addition, and keep exact counters only for chunks whose estimate is at least the pruning threshold \(T\). Count-Min never underestimates, so no chunk with true count \(\ge T\) is lost; the cost is a few false positives, which the exact pass then counts correctly.</li>
+      <li><b>Top chunks per shard.</b> Space-Saving or Misra–Gries summaries are mergeable, so per-shard summaries combine into a summary of the corpus with the same kind of guarantee: useful for monitoring what dominates the data.</li>
+      <li><b>The training mix.</b> Reservoir sampling draws a fixed number of documents per language from a stream of unknown length, which sets the language balance of the tokenizer's corpus. That balance decides the token tax (ML block).</li>
+      <li><b>Not the merge loop.</b> On Alice, 1,510 of 1,744 merges were exact ties and only 9 had a gap above \(0.001\,n_t\). Approximate counts would change the merge list.</li>
+    </ul>
+
+    <h4>Serving a tokenizer</h4>
+    <ul>
+      <li><b>Determinism.</b> The same text must always give the same ids: no dropout at inference, a fixed tie-break, and the regex and Unicode versions pinned (a new Unicode version can reclassify characters and change the split).</li>
+      <li><b>The tokenizer is part of the model's contract.</b> Token ids index the embedding table. Ship the merges file with the model, store its SHA-256 in the model config, and refuse to start on a mismatch.</li>
+      <li><b>Caching.</b> A bounded LRU cache of chunk encodings, as in 146. On Alice, 1,024 entries already hit 87% of chunks. Bound it: unique strings (logs, base64) would otherwise exhaust memory.</li>
+      <li><b>Throughput.</b> Tokenize in the API layer, before the GPU queue: the token count is needed for routing, rate limits and billing. Use compiled code (tiktoken and <code>tokenizers</code> are in Rust) and the O(\(L \log L\)) encoder so that a long chunk cannot stall a worker.</li>
+    </ul>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Write the map and reduce for chunk counting and check they give the same counter as a single pass.</li>
+      <li>Benchmark your encoder's tokens per second on one core, with and without the cache; size the serving fleet.</li>
+      <li>Prune Alice's chunks at count ≥ 5 using only a Count-Min sketch plus an exact second pass. How many false positives did the sketch let through?</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>How many unique chunks does a 100 MB sample have, and how many survive pruning at count ≥ 2, 5, 10? Redo the memory estimate.</li>
+      <li>Design how a model server detects a tokenizer that doesn't match the model.</li>
+      <li>Sampling weights per language: what is the trade-off between natural frequencies and upsampling?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <div class="code"><div class="ch"><span>count.py · map and reduce</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
+from multiprocessing import Pool
+
+def map_shard(lines):                            # PATTERN: the split regex from the week reading
+    return Counter(c for line in lines for c in PATTERN.findall(line))
+
+def reduce_counts(counters):
+    total = Counter()
+    for c in counters:
+        total.update(c)
+    return total
+
+if __name__ == "__main__":                       # required where workers are spawned (macOS, Windows)
+    lines = open("data/alice.txt").read().splitlines()
+    with Pool(4) as pool:
+        total = reduce_counts(pool.map(map_shard, [lines[i::4] for i in range(4)]))
+    assert total == map_shard(lines)             # same counter as one pass</code></pre></div>
+    <p>The <code>__main__</code> guard matters: on macOS and Windows, worker processes re-import the script, and without the guard each worker would start its own pool.</p>
+    <p>Fleet sizing: if one core encodes \(t\) tokens/s on real traffic (measure it; the cache hit rate dominates), the fleet needs \(5 \times 10^7 / t\) cores, plus headroom for peaks (×2) and failures (+1 zone). Mismatch detection: the model's config stores the SHA-256 of the merges file; the server hashes the tokenizer it loads and refuses to start on a difference.</p></div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/">Mining of Massive Datasets</a>, chapter 2 (MapReduce), free online</li>
+      <li>Dean and Ghemawat, "MapReduce: simplified data processing on large clusters", OSDI 2004</li>
+    </ul></div>
+  </div>
+
+  <div class="check" data-check="day5">
+    <div class="ch"><b>Checkpoint · Day 5</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d5a" data-dim="dsa"><span class="tx">Implement the O(L log L) encoder, pass a differential test against the simple one, and explain why lazy invalidation keeps the same output.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5b" data-dim="dsa"><span class="tx">Solve 146 LRU Cache and state its invariant.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5c" data-dim="dsa"><span class="tx">Solve 169 and 229, and prove the Misra–Gries bound f − n/k ≤ f̂ ≤ f.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5d" data-dim="dsa"><span class="tx">Run Space-Saving and Count-Min on Alice's pair stream and check every error against its bound.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5e" data-dim="dsa"><span class="tx">Solve 382 and 398, and prove by induction that reservoir sampling keeps each item with probability k/n.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5f" data-dim="ml"><span class="tx">Implement BPE-dropout and show that every split decodes to the same bytes.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5g" data-dim="ai"><span class="tx">Explain the mechanism of three tokenizer-caused failures (for example token tax, glitch tokens, streaming &#xFFFD;), one example each.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5h" data-dim="sys"><span class="tx">MapReduce chunk counting, a fleet estimate from your own benchmark, and why the merge loop stays sequential.</span><span class="dim sys">System Design</span></label>
+  </div>
+</section><div class="pager"><a class="btn" href="day_4.html">← Fast training</a><a class="btn pri" href="worksheet.html">Worksheet and checks →</a></div>
+<footer>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 3</a></p>
+</footer>
+
+</div></main>
+</div>
+<script>window.MathJax = {tex: {inlineMath: [["\\(", "\\)"]]}, svg: {fontCache: "global"}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
+const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
+const chunk = (t, p) => t.match(p) || [];
+const simChunks = t => $("simMode").value === "words" ? t.split(/\s+/).filter(Boolean) : chunk(t, PAT);
+function show(bytes) {
+  try { return dec.decode(new Uint8Array(bytes)).replace(/ /g, "·").replace(/\n/g, "⏎"); }
+  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
+}
+const span = (bytes, cls = "") => `<span class="tk${cls}">${esc(show(bytes))}</span>`;
+
+/* ---------- Chunker ---------- */
+function chRender() {
+  const t = $("chText").value, marks = $("chMarks").checked;
+  const cs = chunk(t, marks ? PAT_M : PAT);
+  $("chOut").innerHTML = cs.map(c => {
+    const lone = /^\p{M}/u.test(c);
+    return `<span class="tk${lone ? " mk" : ""}" title="${enc.encode(c).length} bytes">${esc(c.replace(/ /g, "·"))}</span>`;
+  }).join("");
+  const lone = cs.filter(c => /^\p{M}/u.test(c)).length;
+  $("chStat").innerHTML = `<b>${cs.length}</b> chunks` + (lone ? ` · <b>${lone}</b> start with a mark (red): a word was cut in two` : "");
+}
+if ($("chText")) {
+  $("chText").addEventListener("input", chRender);
+  $("chMarks").addEventListener("change", chRender);
+  chRender();
+}
+
+/* ---------- Min-heap of [negCount, a, b] ---------- */
+const less = (x, y) => x[0] !== y[0] ? x[0] < y[0] : x[1] !== y[1] ? x[1] < y[1] : x[2] < y[2];
+function hpush(h, v) { h.push(v); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(h[i], h[p])) break; [h[i], h[p]] = [h[p], h[i]]; i = p; } }
+function sift(h, i) { const n = h.length; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < n && less(h[l], h[m])) m = l; if (r < n && less(h[r], h[m])) m = r; if (m === i) return; [h[i], h[m]] = [h[m], h[i]]; i = m; } }
+function hpop(h) { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; sift(h, 0); } return top; }
+function heapify(h) { for (let i = (h.length >> 1) - 1; i >= 0; i--) sift(h, i); }
+
+/* ---------- Trainer, written exactly like the Python ---------- */
+const K = (a, b) => a + "," + b;
+const unK = k => k.split(",").map(Number);
+function mergeIds(ids, a, b, id) {
+  const out = [];
+  for (let i = 0; i < ids.length;) {
+    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
+    else { out.push(ids[i]); i += 1; }
+  }
+  return out;
+}
+let S;
+function simInit() {
+  const cnt = new Map();
+  for (const c of simChunks($("simText").value)) cnt.set(c, (cnt.get(c) || 0) + 1);
+  const words = [...cnt].map(([c, f]) => ({ids: [...enc.encode(c)], f}));
+  const vocab = new Map(); for (let i = 0; i < 256; i++) vocab.set(i, [i]);
+  const counts = new Map(), where = new Map();
+  words.forEach((w, wi) => {
+    for (let i = 0; i + 1 < w.ids.length; i++) {
+      const k = K(w.ids[i], w.ids[i + 1]);
+      counts.set(k, (counts.get(k) || 0) + w.f);
+      if (!where.has(k)) where.set(k, new Set());
+      where.get(k).add(wi);
+    }
+  });
+  const heap = [...counts].map(([k, c]) => [-c, ...unK(k)]); heapify(heap);
+  const bytes = words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  S = {words, vocab, counts, where, heap, merges: [], done: false, bytes, delta: new Map(), visited: new Set(), last: -1, stalePops: 0, pops: 0, log: []};
+  S.log.push(`<div class="s">${words.length} unique chunks, ${counts.size} distinct pairs, heap of ${heap.length}. Press "Next merge".</div>`);
+}
+function simStep() {
+  if (S.done) return false;
+  S.delta = new Map(); S.visited = new Set();
+  for (;;) {
+    if (!S.heap.length) { S.done = true; S.log.push(`<div class="h">Stop: the heap is empty. Every chunk is one token.</div>`); return false; }
+    const [neg, a, b] = hpop(S.heap); S.pops++;
+    const k = K(a, b), live = S.counts.get(k) || 0;
+    if (live !== -neg) {
+      S.stalePops++;
+      S.log.push(`<div class="s">pop (${-neg}, ${esc(show(S.vocab.get(a)))}+${esc(show(S.vocab.get(b)))}) · live count is ${live}, not ${-neg} → stale, throw away</div>`);
+      continue;
+    }
+    if (live < 2) { S.done = true; S.log.push(`<div class="h">Stop: the best pair occurs ${live} time. Nothing is worth merging.</div>`); return false; }
+    const id = 256 + S.merges.length;
+    S.vocab.set(id, S.vocab.get(a).concat(S.vocab.get(b)));
+    S.merges.push({a, b, id, count: live}); S.last = id;
+    const wis = [...(S.where.get(k) || [])];
+    for (const wi of wis) {
+      const w = S.words[wi], old = w.ids, nw = mergeIds(old, a, b, id);
+      w.ids = nw; S.visited.add(wi);
+      for (let i = 0; i + 1 < old.length; i++) { const q = K(old[i], old[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) - w.f); S.where.get(q)?.delete(wi); }
+      for (let i = 0; i + 1 < nw.length; i++) { const q = K(nw[i], nw[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) + w.f); if (!S.where.has(q)) S.where.set(q, new Set()); S.where.get(q).add(wi); }
+    }
+    const pushed = [];
+    for (const [q, d] of S.delta) {
+      if (!d) continue;
+      const c = (S.counts.get(q) || 0) + d; S.counts.set(q, c);
+      if (c > 0) { hpush(S.heap, [-c, ...unK(q)]); pushed.push(q); }
+    }
+    S.counts.delete(k); S.where.delete(k);
+    const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+    S.log.push(`<div class="h">merge #${S.merges.length}: ${esc(show(S.vocab.get(a)))} + ${esc(show(S.vocab.get(b)))} → ${esc(show(S.vocab.get(id)))} (id ${id}, count ${live})</div>` +
+      `<div>visited ${wis.length} of ${S.words.length} chunks via where[pair] · pushed ${pushed.length} new counts · corpus now ${tokens} tokens</div>`);
+    return true;
+  }
+}
+function simRender() {
+  const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
+  $("simStat").innerHTML = `<b>${S.bytes}</b> bytes → <b>${tokens}</b> tokens · ${S.merges.length} merges · stale pops ${S.stalePops} of ${S.pops} · heap ${S.heap.length}`;
+  $("simVisited").textContent = S.visited.size ? `${S.visited.size} visited` : "";
+  $("simWords").innerHTML = S.words.map((w, wi) =>
+    `<div class="wrow${S.visited.has(wi) ? " hit" : ""}"><span class="f">×${w.f}</span><span class="toks" style="margin:0">${w.ids.map(i => span(S.vocab.get(i), i === S.last ? " new" : "")).join("")}</span></div>`).join("");
+  const rows = [...S.counts].filter(([k, c]) => c > 0 || S.delta.get(k));
+  rows.sort((x, y) => y[1] - x[1] || (unK(x[0])[0] - unK(y[0])[0]) || (unK(x[0])[1] - unK(y[0])[1]));
+  $("simCounts").innerHTML = rows.slice(0, 10).map(([k, c]) => {
+    const [a, b] = unK(k), d = S.delta.get(k) || 0;
+    return `<tr><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${c}</td><td class="r ${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" + d : d < 0 ? d : ""}</td></tr>`;
+  }).join("") || `<tr><td class="muted">no pairs left</td></tr>`;
+  const top = [...S.heap].sort((x, y) => less(x, y) ? -1 : less(y, x) ? 1 : 0).slice(0, 10);
+  $("simHeap").innerHTML = top.map(([neg, a, b]) => {
+    const live = S.counts.get(K(a, b)) || 0, stale = live !== -neg;
+    return `<tr class="${stale ? "stale" : ""}"><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${-neg}</td><td class="r">${stale ? "live " + live : "current"}</td></tr>`;
+  }).join("") || `<tr><td class="muted">empty</td></tr>`;
+  $("simMerges").innerHTML = S.merges.slice(-10).map(m =>
+    `<tr><td class="r">${m.id}</td><td>${span(S.vocab.get(m.a))} + ${span(S.vocab.get(m.b))}</td><td>→ ${span(S.vocab.get(m.id), m.id === S.last ? " new" : "")}</td></tr>`).join("") || `<tr><td class="muted">none yet: the vocabulary is the 256 bytes</td></tr>`;
+  $("simLog").innerHTML = S.log.slice(-40).join("");
+  $("simLog").scrollTop = $("simLog").scrollHeight;
+  encRender();
+}
+if ($("simText")) {
+$("simStep").onclick = () => { simStep(); simRender(); };
+$("simAll").onclick = () => { let n = 0; while (n++ < 500 && simStep()); simRender(); };
+$("simReset").onclick = () => { simInit(); simRender(); };
+$("simText").addEventListener("input", () => { simInit(); simRender(); });
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { $("simText").value = b.dataset.preset; $("simMode").value = b.dataset.mode; simInit(); simRender(); });
+$("simMode").addEventListener("change", () => { simInit(); simRender(); });
+
+/* ---------- Encoder: replay merges by rank ---------- */
+var encRender = function () {
+  const ranks = new Map(S.merges.map(m => [K(m.a, m.b), m.id]));
+  const out = [], log = [];
+  for (const c of simChunks($("encText").value)) {
+    let ids = [...enc.encode(c)];
+    const steps = [];
+    while (ids.length >= 2) {
+      let best = null, br = Infinity;
+      for (let i = 0; i + 1 < ids.length; i++) { const r = ranks.get(K(ids[i], ids[i + 1])); if (r !== undefined && r < br) { br = r; best = [ids[i], ids[i + 1]]; } }
+      if (!best) break;
+      ids = mergeIds(ids, best[0], best[1], br);
+      steps.push(`rank ${br - 256}: ${esc(show(S.vocab.get(br)))}`);
+    }
+    out.push(...ids);
+    log.push(`<div><b>${esc(c.replace(/ /g, "·"))}</b> <span class="s">${steps.length ? steps.join(" → ") : "no learned pair: stays bytes"}</span></div>`);
+  }
+  $("encOut").innerHTML = out.map(i => span(S.vocab.get(i))).join("");
+  const nb = enc.encode($("encText").value).length;
+  $("encStat").innerHTML = `<b>${nb}</b> bytes → <b>${out.length}</b> tokens with ${S.merges.length} learned merges`;
+  $("encLog").innerHTML = log.join("");
+};
+$("encText").addEventListener("input", encRender);
+simInit(); simRender();
+}
+
+/* ---------- Progress: checkpoints fill the coverage bars ---------- */
+const KEY = "bpe-week3-progress-v1";
+const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
+const boxes = [...document.querySelectorAll("label.ck input")];
+function save() { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch {} }
+function progRender() {
+  const html = DIMS.map(([d, name]) => {
+    const all = ITEMS.filter(it => it.dim === d), n = all.filter(it => done.has(it.id)).length;
+    const pct = all.length ? Math.round(100 * n / all.length) : 0;
+    return `<div class="prow"><span class="t-${d}">${name}</span><span class="bar"><i style="width:${pct}%;background:var(--${d})"></i></span><span class="v">${n}/${all.length}</span></div>`;
+  }).join("");
+  document.querySelectorAll("[data-prog]").forEach(el => el.innerHTML = html);
+  const n = ITEMS.filter(it => done.has(it.id)).length;
+  document.querySelectorAll("[data-total]").forEach(el => el.textContent = `${n} of ${ITEMS.length} checks done this week`);
+  document.querySelectorAll(".check").forEach(c => {
+    const bs = [...c.querySelectorAll("input")], k = bs.filter(b => b.checked).length;
+    c.querySelector("[data-count]").textContent = `${k}/${bs.length}`;
+  });
+  document.querySelectorAll("nav.rail a[data-page]").forEach(link => {
+    const mine = ITEMS.filter(it => it.page === link.dataset.page), all = mine.length && mine.every(it => done.has(it.id));
+    let ok = link.querySelector(".ok");
+    if (all && !ok) { ok = document.createElement("span"); ok.className = "ok"; ok.textContent = "✓"; link.append(ok); }
+    else if (!all && ok) ok.remove();
+  });
+}
+boxes.forEach(b => {
+  b.checked = done.has(b.dataset.id);
+  b.addEventListener("change", () => { b.checked ? done.add(b.dataset.id) : done.delete(b.dataset.id); save(); progRender(); });
+});
+document.querySelectorAll("[data-reset]").forEach(btn => {
+  let armed = false, t;
+  btn.addEventListener("click", () => {
+    if (!armed) { armed = true; btn.textContent = "Click again to clear"; t = setTimeout(() => { armed = false; btn.textContent = "Reset"; }, 3000); return; }
+    clearTimeout(t); armed = false; btn.textContent = "Reset";
+    done.clear(); boxes.forEach(b => b.checked = false); save(); progRender();
+  });
+});
+progRender();
+
+/* ---------- Copy buttons on code cards ---------- */
+document.querySelectorAll(".code").forEach(card => {
+  const btn = card.querySelector("button.copy"), code = card.querySelector("code");
+  if (!btn || !code) return;
+  btn.addEventListener("click", () => {
+    const done = t => { btn.textContent = t; setTimeout(() => btn.textContent = "Copy", 1500); };
+    navigator.clipboard.writeText(code.textContent).then(() => done("Copied"), () => {
+      const r = document.createRange(); r.selectNodeContents(code);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done("Selected: press Ctrl/Cmd+C");
+    });
+  });
+});
+
+})();
+</script>
+
+</body></html>

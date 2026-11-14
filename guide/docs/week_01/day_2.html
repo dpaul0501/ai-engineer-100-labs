@@ -1,6 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
-<title>BPE Week · Greedy and the objective</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}
+.pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
+.pager .btn{text-decoration:none}
+</style>
+<title>People You May Know · Scale and skew</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -265,468 +268,518 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">BPE <span>from first principles</span></div>
+  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
-  <div class="rail-label">Week 1 · Tokenization</div>
+  <div class="rail-label">Week 1 · People You May Know</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Text as data</a>
-  <a href="day_2.html" class="on" data-page="day_2.html"><span class="n">D2</span>Greedy and the objective</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Information</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Fast training</a>
-  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Encoding and serving</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Graphs and counting</a>
+  <a href="day_2.html" class="on" data-page="day_2.html"><span class="n">D2</span>Scale and skew</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>The distributed graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Approximation and candidates</a>
+  <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>Ranking with ML</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
+  <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
 <main><div class="page">
 <section class="s" id="day2" data-sec="day2">
-  <div class="shead"><span class="sno">DAY 2 · GREEDY AND THE OBJECTIVE</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">Sys</span></span></div>
-  <h2>When the best next step is the best plan, and when it isn't</h2>
-  <p>BPE training has an objective: with a budget of <var>k</var> merges, make the training corpus as short as possible. It chases that objective greedily, one most-frequent pair at a time. Today asks two questions about this. Is the objective the right one for a model that has to learn from the tokens (ML)? And does the greedy method actually reach the best plan (Algorithms)? Answering the second means learning greedy algorithms as a subject: how to prove one correct, the theory of when greedy always works, and what to do when it doesn't.</p>
+  <div class="shead"><span class="sno">DAY 2 · SCALE AND SKEW</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">System Design</span></span></div>
+  <h2>Why a few users cost most of the work</h2>
+  <p><b>Where we are in the design.</b> Day 1 built the exact baseline: for user <var>u</var>, walk to every friend, read every friend's friend list, count mutual friends, keep the top 10. That is the <em>candidate generation</em> box of the architecture (R.7). Today asks what that box costs, on average and in the worst case, once degrees are as uneven as they are in real social networks. The answer explains most of what the rest of the week builds: precomputation and caching (Day 3), sampling and hub capping (Day 4), and the serving budget (Day 5).</p>
+  <p>Three facts carry the day. Your friends have more friends than you do, by a margin you can compute from the degree distribution. The cost of counting mutual friends for everyone is \(\sum_v \deg(v)^2\), which a few hubs dominate. And a request that waits for many calls is slow far more often than any single call.</p>
 
+  <div class="metrics">
+    <div class="metric"><div class="v">73.8 vs 20</div><div class="l">mean degree of a friend vs mean degree of a user, on the week's graph</div></div>
+    <div class="metric"><div class="v">1% → 69%</div><div class="l">the 100 best-connected users hold 11% of friendships but cause 69% of all-pairs counting work</div></div>
+    <div class="metric"><div class="v">7.7×</div><div class="l">fewer checks to count triangles once edges point from low to high degree</div></div>
+    <div class="metric"><div class="v">63%</div><div class="l">of requests are slow when each waits for 100 calls that are each slow 1% of the time</div></div>
+  </div>
+
+  <!-- ============================================================ ML -->
   <div class="blk ml">
-    <div class="bh"><span class="kind">ML · length vs learnability</span></div>
+    <div class="bh"><span class="kind">ML · heavy tails and the friendship paradox</span></div>
 
-    <h4>The question</h4>
-    <p>A model gives every token a vector (its embedding) and learns that vector from the places where the token appears. If a token appears 5 times in the training data and another appears 5,000 times, how much worse is the first one's vector? The answer decides how large a vocabulary a corpus can support.</p>
+    <h4>1 · The question</h4>
+    <p>How much work does one PYMK request do? The exact scan reads the friend list of each of <var>u</var>'s friends, so the number of entries it reads is</p>
+    <div class="eq">\[ W(u) \;=\; \sum_{f \in N(u)} \deg(f). \]</div>
+    <p>Here <var>N</var>(<var>u</var>) is the set of <var>u</var>'s friends and \(\deg(f) = |N(f)|\) is the number of friends <var>f</var> has (its <b>degree</b>). To size the servers we need the typical value of <var>W</var> and its worst values.</p>
 
-    <h4>First attempt: let the objective choose</h4>
-    <p>The tokenizer's own objective cannot choose the vocabulary size. Each merge replaces at least two adjacent tokens with one, so on the training corpus every extra merge makes the text shorter, or at worst no longer. "Fewest tokens" always says "more merges". Something else has to push back, and that something is learnability.</p>
+    <h4>2 · First attempt: plug in the average</h4>
+    <p>The week's graph has 10,000 users and 100,000 friendships, so the mean degree is 2 · 100,000 / 10,000 = 20. "A user has 20 friends, each with 20 friends, so a request reads 20 × 20 = 400 entries." Measured, the mean of <var>W</var> is 1,477, 3.7 times more. The estimate is wrong because it assumes that a friend is a typical user. A friend is not: you reach a user by following a friendship, and a user with 1,000 friendships is 1,000 times easier to reach that way than a user with one. The rest of this block makes that precise.</p>
 
-    <h4>The key idea, derived: a vector learned from <var>n</var> occurrences has noise ∝ 1/√<var>n</var></h4>
-    <p><b>Which gradients reach a token's row.</b> The embedding table <var>E</var> has one row per token. Looking up token <var>t</var> is the same as multiplying a one-hot vector by <var>E</var>, so the gradient of the loss with respect to <var>E</var> is zero on every row except the rows of tokens that were looked up. Row <var>e<sub>t</sub></var> therefore receives exactly one gradient term per occurrence of <var>t</var>: if <var>t</var> appears <var>n</var> times, its row is shaped by <var>n</var> terms and by nothing else.</p>
-    <p><b>A one-dimensional toy.</b> Suppose each occurrence <var>i</var> pulls the vector towards a target \(y_i = \mu + \varepsilon_i\): \(\mu\) is the "true meaning" all contexts agree on, and \(\varepsilon_i\) is what is particular to that one context, with mean 0 and variance \(\sigma^2\), independent across occurrences. With the squared loss, the best vector is the one that minimizes</p>
-    <div class="eq">\[ \sum_{i=1}^{n} \tfrac12 (e - y_i)^2 \quad\Rightarrow\quad \frac{d}{de} = \sum_{i=1}^{n} (e - y_i) = 0 \quad\Rightarrow\quad \hat e = \frac1n \sum_{i=1}^{n} y_i . \]</div>
-    <p>The learned vector is the average of the <var>n</var> targets. Its error is the average of the noise terms, and the variance of an average of <var>n</var> independent terms is</p>
-    <div class="eq">\[ \operatorname{Var}(\hat e - \mu) = \operatorname{Var}\!\Big(\frac1n \sum_i \varepsilon_i\Big) = \frac{1}{n^2}\sum_i \operatorname{Var}(\varepsilon_i) = \frac{\sigma^2}{n}, \qquad \mathrm{SE}(\hat e) = \frac{\sigma}{\sqrt n}. \]</div>
-    <p><b>The general case.</b> A real loss is not quadratic, but near the ideal vector \(e^{*}\) it is close to one. Write each occurrence's gradient as \(g_i(e) \approx H(e - e^{*}) + \xi_i\), where <var>H</var> is the curvature of the expected loss and \(\xi_i\) is that occurrence's zero-mean noise with covariance \(\Sigma\). Training drives the sum of gradients to zero:</p>
-    <div class="eq">\[ \sum_{i=1}^{n} \big(H(\hat e - e^{*}) + \xi_i\big) = 0 \;\Rightarrow\; \hat e - e^{*} = -H^{-1}\,\frac1n\sum_{i=1}^n \xi_i \;\Rightarrow\; \operatorname{Cov}(\hat e) = \frac{H^{-1}\Sigma H^{-1}}{n}. \]</div>
-    <p>It is the same algebra with matrices: the error is a fixed matrix times an average of <var>n</var> noise terms, so every coordinate's standard deviation falls like \(1/\sqrt n\). The assumption doing the work is that occurrences are roughly independent. Repeated near-identical contexts count for less than their number.</p>
-    <div class="eq">\[ \frac{\mathrm{SE}(n=100)}{\mathrm{SE}(n=10{,}000)} = \sqrt{\frac{10{,}000}{100}} = 10 \quad\Rightarrow\quad \text{halving the noise costs } 4\times \text{ the occurrences.} \]</div>
-
-    <h4>Vocabulary size as model selection</h4>
-    <p><b>Model selection</b> means choosing a setting that controls a model's capacity, such as polynomial degree, tree depth or here the vocabulary size <var>V</var>, by its performance on data the model did not train on. It is needed whenever the training fit improves with capacity no matter what, which is exactly the situation above.</p>
-    <p>The <b>bias–variance</b> view makes the trade-off concrete. A small <var>V</var> has high <em>bias</em>: its units are generic (bytes, short pieces), sequences are long, a fixed context window covers less text, and the model must rebuild every word from parts. A large <var>V</var> has high <em>variance</em>: it adds <var>V</var>·<var>d</var> parameters and splits a fixed amount of text among more entries, so each is seen fewer times. If the corpus has <var>N</var> tokens and token frequencies follow Zipf's law (Day 1), the token of rank <var>r</var> has probability \(1/(r H_V)\) with \(H_V = \sum_{r\le V} 1/r \approx \ln V + 0.58\), so the rarest token in the vocabulary is seen about</p>
-    <div class="eq">\[ n_V \approx \frac{N}{V\,H_V} \quad\text{times, with noise} \;\propto\; \frac{1}{\sqrt{n_V}} = \sqrt{\frac{V H_V}{N}} . \]</div>
-    <p>Bias falls as <var>V</var> grows; variance rises. Held-out quality is the sum of both effects, so it improves, flattens and eventually gets worse. The best <var>V</var> sits near the knee, and the knee moves right as <var>N</var> grows. As a rough rule, if every token must be seen at least <var>τ</var> times, then \(V H_V \le N/\tau\). This is an estimate: BPE tokens are only roughly Zipfian.</p>
-
-    <h4>Confirm by measuring</h4>
-    <p>Hold out every 10th document of <em>Alice</em>, train the tokenizer on the other 90%, and measure on the held-out 10%:</p>
-    <div class="chart"><div class="t">Train on 90% of <em>Alice</em>, measure on the other 10%</div>
-      <div class="sub">Bytes per token on held-out text (higher = shorter sequences)</div>
-      <div class="br"><span>vocab 256</span><span class="tr"><i style="width:27%"></i></span><span class="v">1.00</span></div>
-      <div class="br"><span>vocab 500</span><span class="tr"><i style="width:61%"></i></span><span class="v">2.26</span></div>
-      <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:79%"></i></span><span class="v">2.94</span></div>
-      <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:92%"></i></span><span class="v">3.45</span></div>
-      <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%"></i></span><span class="v">3.73</span></div>
-      <div class="sub">New tokens used fewer than 10 times (higher = more unlearnable tokens)</div>
-      <div class="br"><span>vocab 500</span><span class="tr"><i style="width:3%;--c:var(--bad)"></i></span><span class="v">3%</span></div>
-      <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:11%;--c:var(--bad)"></i></span><span class="v">11%</span></div>
-      <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:68%;--c:var(--bad)"></i></span><span class="v">68%</span></div>
-      <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:86%;--c:var(--bad)"></i></span><span class="v">86%</span></div>
-      <div class="sub">Train → test gap, bits per token (higher = overfitting)</div>
-      <div class="br"><span>vocab 256</span><span class="tr"><i style="width:18%;--c:var(--ai)"></i></span><span class="v">0.06</span></div>
-      <div class="br"><span>vocab 500</span><span class="tr"><i style="width:15%;--c:var(--ai)"></i></span><span class="v">0.05</span></div>
-      <div class="br"><span>vocab 1,000</span><span class="tr"><i style="width:24%;--c:var(--ai)"></i></span><span class="v">0.08</span></div>
-      <div class="br"><span>vocab 2,000</span><span class="tr"><i style="width:50%;--c:var(--ai)"></i></span><span class="v">0.17</span></div>
-      <div class="br"><span>vocab 3,208 (max)</span><span class="tr"><i style="width:100%;--c:var(--ai)"></i></span><span class="v">0.34</span></div>
-      <div class="cap">3,208 is where training stops by itself: no pair occurs twice any more.</div>
+    <h4>3 · The degree distribution, and why averages mislead</h4>
+    <p><b>Definitions.</b> The <b>degree distribution</b> is \(p_k\) = the fraction of users with exactly <var>k</var> friends. Its mean is \(E[d] = \sum_k k\,p_k\) and its second moment is \(E[d^2] = \sum_k k^2 p_k\). The <b>variance</b> is \(\operatorname{Var}(d) = E[d^2] - E[d]^2\). The <b>complementary cumulative distribution</b> (CCDF) is \(P(D \ge k)\), the fraction of users with at least <var>k</var> friends. A distribution is <b>heavy-tailed</b> when its CCDF falls much more slowly than an exponential, for example like a power \(P(D \ge k) \approx c\,k^{-\alpha}\). On log-log axes a power law is a straight line with slope −<var>α</var>.</p>
+    <p>Degrees span three orders of magnitude, so we bucket them by powers of two. For each bucket the chart shows two shares: of users, and of <b>friend ends</b>. Each friendship has two ends, one at each user, so user <var>v</var> owns \(\deg(v)\) of the 200,000 ends.</p>
+    <div class="chart"><div class="t">Degree buckets on the week's graph (10,000 users, 100,000 friendships)</div>
+      <div class="sub">Share of users</div>
+      <div class="br"><span>1</span><span class="tr"><i style="width:0.1%"></i></span><span class="v">0.03%</span></div>
+      <div class="br"><span>2–3</span><span class="tr"><i style="width:1%"></i></span><span class="v">0.5%</span></div>
+      <div class="br"><span>4–7</span><span class="tr"><i style="width:15.1%"></i></span><span class="v">7.6%</span></div>
+      <div class="br"><span>8–15</span><span class="tr"><i style="width:86.5%"></i></span><span class="v">43.3%</span></div>
+      <div class="br"><span>16–31</span><span class="tr"><i style="width:77.9%"></i></span><span class="v">38.9%</span></div>
+      <div class="br"><span>32–63</span><span class="tr"><i style="width:14.7%"></i></span><span class="v">7.3%</span></div>
+      <div class="br"><span>64–127</span><span class="tr"><i style="width:3.5%"></i></span><span class="v">1.7%</span></div>
+      <div class="br"><span>128–255</span><span class="tr"><i style="width:0.9%"></i></span><span class="v">0.47%</span></div>
+      <div class="br"><span>256–511</span><span class="tr"><i style="width:0.3%"></i></span><span class="v">0.12%</span></div>
+      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:0.2%"></i></span><span class="v">0.07%</span></div>
+      <div class="sub">Share of friend ends (where a random friendship leads)</div>
+      <div class="br"><span>1–3</span><span class="tr"><i style="width:0.2%;--c:var(--trace)"></i></span><span class="v">0.07%</span></div>
+      <div class="br"><span>4–7</span><span class="tr"><i style="width:4.5%;--c:var(--trace)"></i></span><span class="v">2.3%</span></div>
+      <div class="br"><span>8–15</span><span class="tr"><i style="width:50.6%;--c:var(--trace)"></i></span><span class="v">25.3%</span></div>
+      <div class="br"><span>16–31</span><span class="tr"><i style="width:81.4%;--c:var(--trace)"></i></span><span class="v">40.7%</span></div>
+      <div class="br"><span>32–63</span><span class="tr"><i style="width:30.3%;--c:var(--trace)"></i></span><span class="v">15.1%</span></div>
+      <div class="br"><span>64–127</span><span class="tr"><i style="width:14.6%;--c:var(--trace)"></i></span><span class="v">7.3%</span></div>
+      <div class="br"><span>128–255</span><span class="tr"><i style="width:7.9%;--c:var(--trace)"></i></span><span class="v">4.0%</span></div>
+      <div class="br"><span>256–511</span><span class="tr"><i style="width:3.8%;--c:var(--trace)"></i></span><span class="v">1.9%</span></div>
+      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:6.7%;--c:var(--trace)"></i></span><span class="v">3.4%</span></div>
+      <div class="cap">The 7 users with 512 or more friends are 0.07% of users and own 3.4% of friend ends, 48 times their share. The top 1% (100 users) own 11.1% of ends; the top 10% own 32.1%.</div>
     </div>
-    <p>The curve has the predicted shape. The first 744 new tokens buy 2.9× compression; the next 2,208 buy only 27% more, while most of them are seen fewer than 10 times and the train–test gap grows. On 130 KB of text the knee is near 1,000. On a corpus 10,000× larger the same curve bends much later, which is why production vocabularies are 50k–200k.</p>
-    <p>The trade-off has a name: <b>generalization</b> (handle any input with pieces seen many times) versus <b>identity</b> (give each meaningful unit its own token). Too much identity gives rare, under-trained tokens; too much generalization gives long sequences. The vocabulary size sets the dial; the training corpus decides <em>whose</em> words get identity.</p>
+    <p>Four numbers show why the mean misleads. The mean is 20, the median 15, and 69% of users are below the mean. The standard deviation, 32.8, is larger than the mean. The 99th percentile is 100 and the maximum is 1,480, 74 times the mean. On the tail the CCDF is close to a straight line on log-log axes: \(P(D \ge 100) = 1.0\%\), \(P(D \ge 200) = 0.27\%\), \(P(D \ge 500) = 0.07\%\), and a least-squares line through \(\log P(D \ge k)\) against \(\log k\) for <var>k</var> from 20 to 480 has slope −1.90. Treat that as a rough description. Fitting power laws properly is harder than drawing a line (Clauset, Shalizi and Newman, below).</p>
+    <p><b>Why the tail matters more than the middle.</b> With \(P(D \ge k) \approx c\,k^{-\alpha}\), the second moment is dominated by the largest degrees whenever \(\alpha \le 2\): the users with degree near <var>k</var> number about \(n\,c\,k^{-\alpha}\), each contributes \(k^2\), so the contribution \(n c k^{2-\alpha}\) does not shrink as <var>k</var> grows. Then \(E[d^2]\) is set by the few largest hubs, and it keeps growing as the network grows and its largest hub gets larger. Every cost on this page is a second moment.</p>
 
-    <h4>Leakage: split before training the tokenizer</h4>
-    <p>Training a tokenizer is fitting a model to data: the merges are its parameters. So the held-out text must be set aside <em>before</em> the tokenizer is trained. If it is not, the held-out documents' own words become tokens and the held-out score measures memorization. Measured on <em>Alice</em>: a tokenizer trained on all documents, test set included, scores 3.66 bytes per token on the test set at <var>V</var> = 2,000, against 3.45 for the clean one, 6.0% better for no real reason. At <var>V</var> = 1,000 the inflation is only 1.5% (2.98 vs 2.94). It grows with <var>V</var> because the later merges are the rare, document-specific ones, the same merges the variance argument warns about.</p>
-    <p><b>Cost.</b> One sweep needs only one training run. The trainer is deterministic and adds merges one at a time, so the first <var>V</var> − 256 merges of a long run are exactly the merges a shorter run would learn. Train once at the largest size and slice the merge list.</p>
-    <p><b>Where BPE uses it.</b> This is why the vocabulary size is a hyperparameter you pick on held-out text, and why BPE's training objective is only a proxy. Fewer tokens is good only up to the point where the tokens stop being learnable.</p>
+    <h4>4 · Where heavy tails come from: preferential attachment, derived</h4>
+    <p><b>The question.</b> Why do social graphs have hubs at all? If people made friends uniformly at random, would the maximum degree be 74 times the mean?</p>
+    <p><b>Model.</b> Users arrive one at a time. User number <var>t</var> arrives at time <var>t</var> and makes <var>m</var> friendships with existing users. Two rules for choosing whom:</p>
+    <ul>
+      <li><b>Uniform attachment:</b> each existing user is equally likely.</li>
+      <li><b>Preferential attachment</b> ("rich get richer"): existing user <var>i</var> is chosen with probability proportional to its current degree \(k_i\). This is the Barabási–Albert model.</li>
+    </ul>
+    <p><b>Derivation for preferential attachment.</b> At time <var>t</var> there are about <var>mt</var> friendships, so the degrees sum to 2<var>mt</var>. Each of the <var>m</var> new friendships lands on <var>i</var> with probability \(k_i / 2mt\), so <var>i</var>'s degree grows on average at rate</p>
+    <div class="eq">\[ \frac{dk_i}{dt} = m \cdot \frac{k_i}{2mt} = \frac{k_i}{2t}. \]</div>
+    <p>Treat <var>k</var> as continuous (the <b>mean-field</b> approximation) and separate variables. User <var>i</var> arrived at time \(t_i\) with degree <var>m</var>:</p>
+    <div class="eq">\[ \int_m^{k_i} \frac{dk}{k} = \int_{t_i}^{t} \frac{ds}{2s} \;\Rightarrow\; \ln\frac{k_i}{m} = \frac12 \ln\frac{t}{t_i} \;\Rightarrow\; k_i(t) = m\sqrt{t / t_i}. \]</div>
+    <p>Early arrivals grow fastest. To get the distribution, note that arrival times are uniform on \([0, t]\), so \(P(t_i \le x) = x/t\). Then</p>
+    <div class="eq">\[ P(k_i \ge k) = P\!\Big(m\sqrt{t/t_i} \ge k\Big) = P\!\Big(t_i \le \frac{m^2 t}{k^2}\Big) = \frac{m^2}{k^2}, \qquad p_k = -\frac{d}{dk}\frac{m^2}{k^2} = \frac{2m^2}{k^3}. \]</div>
+    <p>A power law with CCDF exponent 2 (density exponent 3). The oldest user's degree grows like \(m\sqrt{t}\) without limit.</p>
+    <p><b>Uniform attachment, for contrast.</b> Now each new friendship lands on <var>i</var> with probability 1/<var>t</var>, so \(dk_i/dt = m/t\) and \(k_i(t) = m\,(1 + \ln(t/t_i))\). Then \(P(k_i \ge k) = P\big(t_i \le t\,e^{-(k-m)/m}\big) = e^{-(k-m)/m}\): an exponential tail. Degrees well above the mean are exponentially rare, and the maximum grows only like \(m \ln t\).</p>
+    <p><b>Confirm by simulating.</b> Both models with 10,000 users and <var>m</var> = 10 (so the mean degree is 20, as on the week's graph):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Model</th><th class="num">median</th><th class="num">p99</th><th class="num">max</th><th class="num">E[d²]/E[d]</th></tr>
+      <tr><td>Uniform attachment</td><td class="num">17</td><td class="num">58</td><td class="num">92</td><td class="num">25.5</td></tr>
+      <tr class="hi"><td>Preferential attachment</td><td class="num">14</td><td class="num">102</td><td class="num">475</td><td class="num">48.5</td></tr>
+    </table></div>
+    <p>For preferential attachment the theory \(P(D \ge k) = (m/k)^2\) predicts 25.0%, 6.25% and 1.56% at <var>k</var> = 20, 40, 80; the simulation gives 26.1%, 6.98% and 1.69%, and its log-log CCDF slope over 20–160 is −1.97 against the predicted −2.</p>
+    <p><b>Measured on the week's graph.</b> Use the temporal split: count each user's friends among the first 80,000 friendships (the "past degree") and the friendships it gains in the last 20,000. If attachment is preferential, new friends should grow in proportion to past degree.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Past degree</th><th class="num">users</th><th class="num">mean new friends</th><th class="num">new per past friend</th></tr>
+      <tr><td>1–3</td><td class="num">178</td><td class="num">1.79</td><td class="num">0.70</td></tr>
+      <tr><td>4–7</td><td class="num">1,620</td><td class="num">2.25</td><td class="num">0.39</td></tr>
+      <tr><td>8–15</td><td class="num">5,045</td><td class="num">2.91</td><td class="num">0.26</td></tr>
+      <tr><td>16–31</td><td class="num">2,553</td><td class="num">4.58</td><td class="num">0.22</td></tr>
+      <tr><td>32–63</td><td class="num">446</td><td class="num">9.91</td><td class="num">0.24</td></tr>
+      <tr><td>64–127</td><td class="num">111</td><td class="num">21.39</td><td class="num">0.25</td></tr>
+      <tr><td>128–255</td><td class="num">29</td><td class="num">41.90</td><td class="num">0.25</td></tr>
+      <tr><td>256+</td><td class="num">13</td><td class="num">125.85</td><td class="num">0.23</td></tr>
+    </table></div>
+    <p>From degree 16 up, new friendships per existing friendship are flat at 0.22–0.25: growth is proportional to degree, which is preferential attachment. Below 16 the rate is higher, so the real rule looks like \(\text{rate} \propto k + k_0\) with an offset \(k_0\), a known variant that still gives a power-law tail. Two mechanisms in the generator produce it. Each user has a heavy-tailed "sociability" that sets how often it starts friendships (a fixed advantage, not a growing one). And triadic closure is preferential attachment in disguise: picking a friend of a friend reaches user <var>v</var> through any of its \(\deg(v)\) friendships, so well-connected users are reached more often.</p>
+
+    <h4>5 · The friendship paradox, proved</h4>
+    <p><b>The question.</b> Pick a friendship at random and look at one of its two ends. How many friends does that person have, on average? This is "the mean degree of a friend", and it is exactly what the two-hop scan pays for.</p>
+    <p><b>Definitions.</b> Let <var>n</var> be the number of users and <var>m</var> the number of friendships, so \(\sum_v \deg(v) = 2m\) (each friendship adds 1 to two degrees). Choose one of the 2<var>m</var> friend ends uniformly. User <var>v</var> owns \(\deg(v)\) of them, so the end belongs to <var>v</var> with probability \(\deg(v)/2m\). This is <b>size-biased sampling</b>: each user is weighted by its degree.</p>
+    <p><b>Theorem (Feld, 1991).</b> The mean degree of a friend is \(E[d^2]/E[d]\), and it is at least the mean degree \(E[d]\), with equality only when every user has the same degree.</p>
+    <p><b>Proof.</b> Using the probabilities above,</p>
+    <div class="eq">\[ E[\deg \text{ of a friend}] = \sum_v \deg(v)\cdot\frac{\deg(v)}{2m} = \frac{\sum_v \deg(v)^2}{\sum_v \deg(v)} = \frac{\tfrac1n\sum_v \deg(v)^2}{\tfrac1n\sum_v \deg(v)} = \frac{E[d^2]}{E[d]}. \]</div>
+    <p>Substitute \(E[d^2] = E[d]^2 + \operatorname{Var}(d)\):</p>
+    <div class="eq">\[ \frac{E[d^2]}{E[d]} = E[d] + \frac{\operatorname{Var}(d)}{E[d]} \;\ge\; E[d], \]</div>
+    <p>because a variance is never negative. The gap is \(\operatorname{Var}(d)/E[d]\), which is 0 exactly when all degrees are equal. ∎</p>
+    <p><b>By hand on a star.</b> One centre with 4 friends, each of whom has only the centre. Degrees 4, 1, 1, 1, 1: \(E[d] = 8/5 = 1.6\). The 8 friend ends are 4 at the centre (degree 4) and 4 at the leaves (degree 1), so the mean degree of a friend is \((4\cdot4 + 4\cdot1)/8 = 2.5\). Check: \(E[d^2] = (16+4)/5 = 4\), and \(4/1.6 = 2.5\).</p>
+    <p><b>The per-user version.</b> A different question: for each user, average the degrees of <em>their</em> friends, then average over users. Is this also at least \(E[d]\)? Yes. Write the sum over users as a sum over friendships; friendship {<var>u</var>, <var>v</var>} contributes \(\deg(v)/\deg(u)\) to <var>u</var>'s average and \(\deg(u)/\deg(v)\) to <var>v</var>'s:</p>
+    <div class="eq">\[ \sum_u \frac{1}{\deg u}\sum_{f\in N(u)} \deg f \;=\; \sum_{\{u,v\}\in E}\Big(\frac{\deg v}{\deg u} + \frac{\deg u}{\deg v}\Big) \;\ge\; \sum_{\{u,v\}\in E} 2 \;=\; 2m, \]</div>
+    <p>using \(x/y + y/x \ge 2\) for positive <var>x</var>, <var>y</var> (it is \((x-y)^2 \ge 0\) divided by <var>xy</var>). Divide by <var>n</var>: the average over users is at least \(2m/n = E[d]\). (With isolated users, average over the others; the bound only gets stronger.) On the star it is \((1 + 4\cdot4)/5 = 3.4\).</p>
+    <p><b>Measured.</b> On the week's graph \(E[d] = 20.00\), \(E[d^2] = 1{,}476.8\), \(\operatorname{Var}(d) = 1{,}076.8\), so</p>
+    <div class="eq">\[ \frac{E[d^2]}{E[d]} = 20 + \frac{1076.8}{20} = 73.84 . \]</div>
+    <p>The per-user version is 76.22. And 96.5% of users have fewer friends than their friends have on average; 73.8% are below the <em>median</em> degree of their friends, so the paradox is not only an effect of a few hubs pulling averages up.</p>
+
+    <h4>6 · Expected work per request</h4>
+    <p><b>Claim 1 (exact).</b> Averaged over users, \(E_u[W(u)] = E[d^2]\).</p>
+    <p><b>Proof, by double counting.</b> The total \(\sum_u W(u) = \sum_u \sum_{f\in N(u)} \deg(f)\) adds \(\deg(f)\) once for every pair (<var>u</var>, <var>f</var>) with <var>f</var> a friend of <var>u</var>. A fixed <var>f</var> appears in exactly \(\deg(f)\) such pairs, once per friend. So</p>
+    <div class="eq">\[ \sum_u W(u) = \sum_f \deg(f)\cdot\deg(f) = \sum_f \deg(f)^2 \quad\Rightarrow\quad E_u[W] = \frac1n \sum_f \deg(f)^2 = E[d^2]. \;∎ \]</div>
+    <p>That is why the "20 × 20 = 400" estimate fails: it computes \(E[d]^2\) where the truth is \(E[d^2] = E[d]^2 + \operatorname{Var}(d)\). Measured: mean <var>W</var> = 1,476.8 = \(E[d^2]\) to the last digit.</p>
+    <p><b>Claim 2 (a model).</b> If the degrees of <var>u</var>'s friends behave like independent size-biased draws, unrelated to \(\deg(u)\), then</p>
+    <div class="eq">\[ E[W(u) \mid \deg u = d] = d \cdot \frac{E[d^2]}{E[d]} \approx 73.8\, d . \]</div>
+    <p><b>Proof.</b> <var>W</var> is a sum of <var>d</var> terms, each with mean \(E[d^2]/E[d]\) by the theorem; the mean of a sum is the sum of the means. ∎ The assumption is that the graph has no <b>degree correlation</b>: whom you are friends with does not depend on how many friends you have. The random graph with a given degree sequence (the <b>configuration model</b>) has this property in the limit of large graphs. The week's graph almost does: the correlation between the degrees at the two ends of a friendship (the <b>assortativity</b>) is −0.037.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Degree of <var>u</var></th><th class="num">users</th><th class="num">mean W</th><th class="num">mean W / d</th><th class="num">model 73.8 · d</th></tr>
+      <tr><td>4–7</td><td class="num">756</td><td class="num">403</td><td class="num">67.4</td><td class="num">441</td></tr>
+      <tr><td>8–15</td><td class="num">4,325</td><td class="num">907</td><td class="num">77.5</td><td class="num">864</td></tr>
+      <tr><td>16–31</td><td class="num">3,893</td><td class="num">1,633</td><td class="num">78.1</td><td class="num">1,544</td></tr>
+      <tr><td>32–63</td><td class="num">733</td><td class="num">3,005</td><td class="num">72.7</td><td class="num">3,051</td></tr>
+      <tr><td>64–127</td><td class="num">173</td><td class="num">5,808</td><td class="num">69.0</td><td class="num">6,214</td></tr>
+      <tr><td>128–255</td><td class="num">47</td><td class="num">10,683</td><td class="num">63.2</td><td class="num">12,482</td></tr>
+      <tr><td>256–511</td><td class="num">12</td><td class="num">17,000</td><td class="num">53.6</td><td class="num">23,408</td></tr>
+      <tr class="hi"><td>512–1,480</td><td class="num">7</td><td class="num">37,461</td><td class="num">39.1</td><td class="num">70,835</td></tr>
+    </table></div>
+    <p>The model fits within 10% for degrees 4–127, which covers 98.8% of users. It overestimates hubs, for two reasons you can check. First, a user cannot be its own friend, but the size-biased draw includes <var>u</var>'s own ends. Removing them gives \(d\,(\sum_v \deg(v)^2 - d^2)/(2m - d)\), which for the top user (degree 1,480) lowers the prediction from 109,286 to 93,771. Second, there are only 7 users with degree above 500, and a user can be friends with each at most once. The 7 together own 3.4% of friend ends, so 1,480 size-biased draws would land on them about 49.7 times. The top user is friends with all 6 of the others, the most it can be. Its true <var>W</var> is 51,806. This limit has a name, the <b>structural cutoff</b>: in a graph without repeated friendships, hubs are forced to connect to ordinary users.</p>
+    <p><b>The tail of W.</b> Median 1,023, p90 3,015, p95 3,870, p99 7,284, p99.9 19,150, max 51,806. The most expensive request belongs to the top hub itself, and it is 35 times the mean. Day 3 turns this sample into latency percentiles with confidence intervals.</p>
+<div class="code"><div class="ch"><span>skew.py · the friendship paradox and the work per request</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def friend_degree_means(adj):
+    """Mean degree, and two ways to ask 'how many friends do my friends have?'."""
+    deg = [len(a) for a in adj]
+    n, two_m = len(adj), sum(deg)
+    mean_d = two_m / n                                   # E[d]
+    edge_end = sum(d * d for d in deg) / two_m           # E[d^2]/E[d]: end of a random friendship
+    users = [u for u in range(n) if deg[u]]
+    per_user = sum(sum(deg[f] for f in adj[u]) / deg[u] for u in users) / len(users)
+    return mean_d, edge_end, per_user
+
+def work(adj, u):
+    """Adjacency entries the exact two-hop scan reads for user u: W(u) = sum of friends' degrees."""
+    return sum(len(adj[f]) for f in adj[u])</code></pre></div>
+    <p><b>Cost.</b> Degrees cost O(<var>n</var> + <var>m</var>) to compute and O(<var>n</var>) to store. <code>friend_degree_means</code> touches each user once and each friend end once: O(<var>n</var> + <var>m</var>). <code>work(adj, u)</code> is O(\(\deg u\)) given stored degrees, which is why a server can predict a request's cost before running it.</p>
+
+    <h4>7 · Where PYMK uses it</h4>
+    <p>Every capacity estimate for candidate generation must use \(E[d^2]\), not \(E[d]^2\), and the worst requests come from hubs. Because <var>W</var>(<var>u</var>) is cheap to predict, the server can route or cap expensive requests before doing them (the Algorithms block and Day 4). The friendship paradox also shapes ranking: the mutual friend you share with a stranger is very likely a hub, because hubs are where friendships lead, and a hub is weak evidence that two of its 1,000 friends know each other (Adamic–Adar weighting, Day 5).</p>
 
     <div class="part"><b>Practice</b><ul>
-      <li>Reproduce the chart: hold out every 10th document, train once at the largest size, slice the merges, measure on the held-out part.</li>
-      <li>Reproduce the leakage numbers: train on all documents and measure on the same held-out 10%.</li>
-      <li>Simulate the toy model: draw <var>n</var> targets from a normal distribution, average them, repeat 1,000 times, and plot the spread against <var>n</var> on log-log axes. The slope should be −1/2.</li>
+      <li>Compute \(E[d]\), \(E[d^2]/E[d]\) and the per-user version on the week's graph and on the past graph (first 80,000 friendships). Does the gap grow as the graph grows?</li>
+      <li>Implement preferential attachment, measure \(P(D \ge k)\) for <var>k</var> = 20, 40, 80, and compare with \((m/k)^2\). Then switch to uniform attachment and fit \(e^{-(k-m)/m}\).</li>
+      <li>Reproduce the table of mean <var>W</var>/<var>d</var> by degree bucket, and add a column with the self-excluded prediction.</li>
+      <li>Prove that \(E[d^2]/E[d] \ge \max(1, E[d])\) for a graph with no isolated users.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>Repeat the sweep on <code>records.txt</code> (JSON). Where is its knee, and why is it different from prose?</li>
-      <li>Train on English only, measure on Hindi. What happens to bytes per token?</li>
-      <li>Two contexts of a token are exact copies of each other. How does that change the effective <var>n</var> in the derivation?</li>
+      <li>Shuffle the graph while keeping every degree (repeatedly pick two friendships <var>a</var>–<var>b</var>, <var>c</var>–<var>d</var> and rewire them to <var>a</var>–<var>d</var>, <var>c</var>–<var>b</var> when that creates no duplicate). Does \(E_u[W]\) change? Does the table by degree bucket?</li>
+      <li>Directed version (followers): which moment of which degree sets the cost of "people followed by the people you follow"?</li>
+      <li>A degree sequence is 1 user with degree <var>n</var> − 1 and <var>n</var> − 1 users with degree 1. Compute \(E[d]\), \(E[d^2]/E[d]\) and the per-user version as <var>n</var> grows.</li>
     </ul></div>
     <details class="sol"><summary>Solution</summary><div>
-<div class="code"><div class="ch"><span>sweep.py · held-out vocabulary sweep</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">docs = [d.strip() for d in open("data/alice.txt").read().split("&lt;|endoftext|&gt;") if d.strip()]
-train_txt = "\n".join(d for i, d in enumerate(docs) if i % 10)      # split FIRST
-test_txt  = "\n".join(d for i, d in enumerate(docs) if i % 10 == 0)
-for v in (256, 500, 1000, 2000, 4000):
-    m = train([train_txt], v)                                       # train sees train only
-    used = Counter(encode(train_txt, m))
-    rare = sum(1 for t in range(256, 256 + len(m)) if used[t] &lt; 10)
-    print(v, len(test_txt.encode()) / len(encode(test_txt, m)), rare / max(len(m), 1))</code></pre></div>
-    <p>It uses <code>train</code> and <code>encode</code> from the week reading (R.6) and prints the first two columns of the chart. The leakage version changes one line: train on <code>"\n".join(docs)</code> instead of <code>train_txt</code>. In the simulation the spread at <var>n</var> = 100 should be about a tenth of the spread at <var>n</var> = 1; exact copies add no new information, so <var>n</var> copies of one context count as one.</p></div></details>
+<div class="code"><div class="ch"><span>attach.py · preferential attachment in O(n·m)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def preferential_attachment(n, m, seed=0):
+    """Each new user befriends m existing users, chosen with probability proportional to degree."""
+    rng = random.Random(seed)
+    adj = [set() for _ in range(n)]
+    ends = []                                  # user v appears here deg(v) times
+    for u in range(m + 1):                     # start from a small clique
+        for v in range(u):
+            adj[u].add(v); adj[v].add(u); ends += [u, v]
+    for u in range(m + 1, n):
+        while len(adj[u]) &lt; m:
+            v = rng.choice(ends)               # uniform over ends = proportional to degree
+            if v not in adj[u]:
+                adj[u].add(v); adj[v].add(u)
+        ends += [x for v in adj[u] for x in (u, v)]
+    return adj</code></pre></div>
+    <p>The list <code>ends</code> holds one entry per friend end, so a uniform choice from it is a degree-proportional choice of user, in O(1). Uniform attachment replaces the choice with <code>rng.randrange(u)</code>. The degree-preserving shuffle keeps \(\sum_v \deg(v)^2\), so \(E_u[W]\) is unchanged by Claim 1, but it destroys degree correlations, so the bucket table moves towards the model line. For the star with <var>n</var> users: \(E[d] = 2(n-1)/n \to 2\); \(E[d^2]/E[d] = ((n-1)^2 + (n-1)) / (2(n-1)) = n/2\); the per-user version is \(((n-1)\cdot(n-1) + 1)/n \approx n\). For the bound: \(E[d^2] \ge E[d]\) because \(d^2 \ge d\) for integer \(d \ge 1\), and \(E[d^2] \ge E[d]^2\) because the variance is non-negative.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li><a href="https://en.wikipedia.org/wiki/Standard_error">Standard error</a> and <a href="https://en.wikipedia.org/wiki/Bias%E2%80%93variance_tradeoff">Bias–variance tradeoff</a> (Wikipedia)</li>
-      <li>Hastie, Tibshirani and Friedman, <em>The Elements of Statistical Learning</em>, chapter 7 (model assessment and selection)</li>
-      <li>Petrov et al., <a href="https://arxiv.org/abs/2305.15425">Language Model Tokenizers Introduce Unfairness Between Languages</a> (paper)</li>
+      <li>Scott L. Feld, "Why Your Friends Have More Friends Than You Do", <em>American Journal of Sociology</em> 96(6), 1991 (the original paper); <a href="https://en.wikipedia.org/wiki/Friendship_paradox">Friendship paradox</a> (Wikipedia)</li>
+      <li>Albert-László Barabási, <a href="http://networksciencebook.com/"><em>Network Science</em></a>, chapters 4 (the scale-free property) and 5 (the Barabási–Albert model), free online</li>
+      <li>Barabási and Albert, "Emergence of Scaling in Random Networks", <em>Science</em> 286, 1999; <a href="https://en.wikipedia.org/wiki/Preferential_attachment">Preferential attachment</a> (Wikipedia)</li>
+      <li>Clauset, Shalizi and Newman, <a href="https://arxiv.org/abs/0706.1062">Power-law distributions in empirical data</a>, <em>SIAM Review</em>, 2009: how to fit and test a power law properly</li>
+      <li>Ugander, Karrer, Backstrom and Marlow, <a href="https://arxiv.org/abs/1111.4503">The Anatomy of the Facebook Social Graph</a>, 2011: measured degree distribution, friendship paradox and degree correlations on a real social network</li>
+      <li>M. E. J. Newman, <em>Networks</em> (Oxford University Press, 2nd ed. 2018), chapters on degree distributions and the configuration model</li>
     </ul></div>
   </div>
 
+  <!-- ============================================================ ALGORITHMS -->
   <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · greedy, in full</span></div>
+    <div class="bh"><span class="kind">Algorithms · complexity under skew</span></div>
 
-    <h4>1 · The question: BPE's objective, and its greedy rule</h4>
-    <p>Given a corpus and a budget of <var>k</var> merges, choose the merges so that the corpus has as few tokens as possible. BPE answers with one rule, repeated <var>k</var> times: merge the most frequent adjacent pair.</p>
-    <p><b>The gain identity.</b> Replacing a non-overlapping occurrence of <code>a b</code> with a new token <code>z</code> turns two tokens into one and changes nothing else. So a merge that makes <var>r</var> replacements shortens the corpus by exactly <var>r</var>. When no pair overlaps itself, <var>r</var> is the pair's count, and merging the most frequent pair is the exact best <em>single</em> step.</p>
-    <p><b>The overlap caveat.</b> In <code>aaaaa</code> the pair <code>aa</code> is counted 4 times, but merging scans left to right and fits only 2 replacements (<code>aa aa a</code>). With <code>aaaaa</code> ×1 and <code>bc</code> ×3, BPE's count picks <code>aa</code> (count 4, saves 2) over <code>bc</code> (count 3, saves 3). Runs of one repeated symbol are the only case where count and gain differ.</p>
-    <p>Is "best single step, repeated" the best plan? To answer, we need to know when that kind of reasoning is ever correct.</p>
+    <h4>1 · The question: mutual counts for everyone at once</h4>
+    <p>A common design precomputes every user's candidates in a nightly batch job (Day 3 compares this with online serving). The batch needs \(m(u, v) = |N(u) \cap N(v)|\) for every pair of non-friends <var>u</var>, <var>v</var> with at least one mutual friend. How much work is that, and who causes it?</p>
 
-    <h4>2 · What a greedy algorithm is</h4>
-    <p>A <b>greedy algorithm</b> builds a solution by a sequence of choices. Each choice is the best one by a fixed <em>local</em> rule, made using only what has been decided so far, and it is never undone. The rule does not look ahead at how the choice will affect later choices.</p>
-    <p>A tiny example: pay 63 cents with the fewest coins, using US coins 1, 5, 10, 25. Local rule: take the largest coin that still fits.</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">63</span><span class="seq"><span class="nd hot">25</span></span><span class="why">largest coin ≤ 63 · <b>38 left</b></span></div>
-      <div class="step"><span class="k">38</span><span class="seq"><span class="nd">25</span><span class="nd hot">25</span></span><span class="why">largest coin ≤ 38 · <b>13 left</b></span></div>
-      <div class="step"><span class="k">13</span><span class="seq"><span class="nd">25</span><span class="nd">25</span><span class="nd hot">10</span></span><span class="why">largest coin ≤ 13 · <b>3 left</b></span></div>
-      <div class="step"><span class="k">3</span><span class="seq"><span class="nd">25</span><span class="nd">25</span><span class="nd">10</span><span class="nd hot">1</span><span class="nd hot">1</span><span class="nd hot">1</span></span><span class="why"><b>6 coins.</b> Each choice is final.</span></div>
-    </div></div>
-<div class="code"><div class="ch"><span>greedy.py · change-making by the largest coin</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def greedy_change(coins, amount):
-    used = []
-    for c in sorted(coins, reverse=True):      # local rule: biggest coin that fits
-        while amount &gt;= c:
-            used.append(c); amount -= c         # never undone
-    return used</code></pre></div>
-    <p>Greedy algorithms are attractive because they are simple and fast: one pass, often after a sort, so O(<var>n</var> log <var>n</var>) or better. The catch is that a locally best choice can rule out a better plan. The same code with coins {1, 3, 4} pays 6 as 4 + 1 + 1, three coins, when 3 + 3 uses two. A greedy algorithm is correct only when we can <em>prove</em> it is, and the proof always has the same two ingredients.</p>
+    <h4>2 · First attempt: every pair, one intersection each</h4>
+    <p>Loop over all \(\binom{n}{2}\) pairs and intersect their friend lists. For 10,000 users that is 49,995,000 intersections, each costing at least \(O(\min(\deg u, \deg v))\) with hashing (Day 1). Most are wasted: only 11.9% of ordered pairs of users have a mutual friend. At a billion users, \(\binom{n}{2} \approx 5 \times 10^{17}\) pairs rules this out before any intersection is done. The work must be driven by pairs that actually share a friend.</p>
 
-    <h4>3 · The two properties, and why you need both</h4>
-    <p>Think of a problem as a family of instances, where making one choice turns an instance into a smaller instance of the same family (pay 63 → pay 38).</p>
+    <h4>3 · The key idea: count through the middle friend</h4>
+    <p><b>Definitions.</b> The <b>adjacency matrix</b> <var>A</var> has \(A_{uv} = 1\) if <var>u</var> and <var>v</var> are friends and 0 otherwise. A <b>wedge</b> (or path of length 2) is a triple <var>u</var>–<var>w</var>–<var>v</var> with <var>u</var> ≠ <var>v</var>, both friends of the <b>middle</b> <var>w</var>.</p>
+    <p><b>Lemma.</b> \((A^2)_{uv} = m(u, v)\) for <var>u</var> ≠ <var>v</var>, and \((A^2)_{uu} = \deg(u)\).</p>
+    <p><b>Proof.</b> By the definition of matrix product, \((A^2)_{uv} = \sum_w A_{uw}A_{wv}\). A term is 1 exactly when <var>w</var> is a friend of both, and 0 otherwise, so the sum counts common friends. For <var>u</var> = <var>v</var> it counts \(A_{uw}^2 = A_{uw}\), the friends of <var>u</var>. ∎</p>
+    <p>So "all mutual counts" is one sparse matrix product. The useful way to compute it turns the sum around: instead of asking each pair for its mutual friends, let each middle friend <var>w</var> announce itself to every pair of its friends. User <var>w</var> with friends {<var>a</var>, <var>b</var>, <var>c</var>, <var>d</var>} adds 1 to <var>m</var>(<var>a</var>,<var>b</var>), <var>m</var>(<var>a</var>,<var>c</var>), <var>m</var>(<var>a</var>,<var>d</var>), <var>m</var>(<var>b</var>,<var>c</var>), <var>m</var>(<var>b</var>,<var>d</var>), <var>m</var>(<var>c</var>,<var>d</var>): \(\binom{4}{2} = 6\) unordered pairs, 12 ordered ones. Only pairs that share a friend are ever touched.</p>
+<div class="code"><div class="ch"><span>allpairs.py · all mutual counts, one middle friend at a time</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def all_pairs_mutual(adj):
+    """m(u, v) for every non-friend pair u &lt; v with a mutual friend, by looping over the middle friend w."""
+    m = Counter()
+    for w in range(len(adj)):
+        nb = sorted(adj[w])
+        for i, u in enumerate(nb):             # each unordered pair of w's friends, once
+            for v in nb[i + 1:]:
+                if v not in adj[u]:
+                    m[u, v] += 1               # w is one mutual friend of u and v
+    return m</code></pre></div>
+
+    <h4>4 · Cost: Σ deg², derived two ways</h4>
+    <p><b>By the middle friend.</b> User <var>w</var> generates one update per ordered pair of distinct friends: \(\deg(w)(\deg(w) - 1)\) of them. The total is \(\sum_w \deg(w)(\deg(w)-1) = \sum_w \deg(w)^2 - 2m\), and the code above does half of that by visiting unordered pairs.</p>
+    <p><b>By rows.</b> Row <var>u</var> of \(A^2\) is the sum of the rows of <var>u</var>'s friends, which is exactly Day 1's <code>suggest(adj, u)</code>: it reads \(W(u) = \sum_{f\in N(u)} \deg(f)\) entries. Over all users, by the double-counting proof in the ML block, \(\sum_u W(u) = \sum_f \deg(f)^2\). (This row-by-row order is <b>Gustavson's algorithm</b> for sparse matrix products.)</p>
+    <p>Both orders do \(\Theta(\sum_v \deg(v)^2)\) work, plus the output. Since \(\sum_v \deg(v)^2 = n\,E[d^2] = n\,(E[d]^2 + \operatorname{Var}(d))\), two graphs with the same number of friendships can differ enormously in cost: the variance of the degrees decides. A graph where all 10,000 users have exactly 20 friends would cost 4,000,000; the week's graph costs 14,768,324, 3.7 times more. <b>Space</b> is the output: one counter per ordered candidate pair.</p>
+    <p><b>Confirm by measuring.</b> On the week's graph \(\sum_v \deg(v)^2 = 14{,}768{,}324\), equal to \(\sum_u W(u)\) as proved. The output has 11,908,610 ordered candidate pairs holding 14,136,468 counted wedges, so each pair is touched 1.24 times on average. (Check: of the 14,568,324 ordered wedges, the other 431,856 = 6 × 71,976 close a triangle, so their endpoints are already friends.) Who causes the work:</p>
+    <div class="chart"><div class="t">Share of friendships vs share of all-pairs work, by the users acting as the middle friend</div>
+      <div class="sub">Top 0.1% of users (10)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:3.9%;--c:var(--muted)"></i></span><span class="v">3.9%</span></div>
+      <div class="br"><span>work Σ deg²</span><span class="tr"><i style="width:51.6%"></i></span><span class="v">51.6%</span></div>
+      <div class="sub">Top 1% of users (100)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:11.1%;--c:var(--muted)"></i></span><span class="v">11.1%</span></div>
+      <div class="br"><span>work Σ deg²</span><span class="tr"><i style="width:69.1%"></i></span><span class="v">69.1%</span></div>
+      <div class="sub">Top 10% of users (1,000)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:32.1%;--c:var(--muted)"></i></span><span class="v">32.1%</span></div>
+      <div class="br"><span>work Σ deg²</span><span class="tr"><i style="width:83.9%"></i></span><span class="v">83.9%</span></div>
+      <div class="cap">The single top user (1,480 friends) generates 1,480² = 2,190,400 of the 14,768,324 units, 14.8%. The 7 users with 512+ friends generate 48.5%.</div>
+    </div>
+    <p>Squaring turns a mild concentration of friendships into a severe concentration of work. At a billion users the same shape is far worse. <em>Assumption, for a back-of-envelope:</em> mean degree 200 and the same ratio \(E[d^2]/E[d]^2 = 3.69\) as the week's graph. Then \(E[d^2] \approx 147{,}700\) and \(\sum_v \deg(v)^2 \approx 1.5 \times 10^{14}\) wedge updates per full recompute, half of them, by the measured shape, from a tiny set of hubs. In a distributed job (MapReduce-style, keyed by the middle friend), each hub's pairs land on one worker, which then finishes long after the others. This is the "curse of the last reducer" (Suri and Vassilvitskii, below).</p>
+
+    <h4>5 · Triangle counting and the degree-ordering trick</h4>
+    <p><b>The question.</b> Count the triangles: sets of three users who are all friends with each other. Triangles measure triadic closure (the global clustering coefficient is 3 × triangles / wedges; Day 1), and triangle counting is the standard example of an algorithm whose cost depends on skew. LeetCode 1761 is the same loop with a different aggregate.</p>
+    <p><b>First attempts.</b> Checking every triple is \(\binom{n}{3} = 1.67 \times 10^{11}\) checks for 10,000 users. The <b>node iterator</b> is better: for each user <var>v</var>, check every pair of its friends for a friendship. That is \(\sum_v \binom{\deg v}{2}\) checks, 7,284,162 on the week's graph. It counts each triangle three times (once at each corner) and pays \(\binom{1480}{2} = 1{,}094{,}460\) checks at the top hub alone. The cost is again a sum of squared degrees.</p>
+    <p><b>The key idea.</b> Count each triangle only at its "smallest" corner, where smallest means fewest friends. A hub is rarely the smallest corner of a triangle, so it does almost no work.</p>
     <ul>
-      <li><b>Greedy-choice property.</b> For every instance, <em>some</em> optimal solution contains the greedy first choice <var>c</var>. It need not be the only optimal solution; there just has to be one that agrees with greedy's first move.</li>
-      <li><b>Optimal substructure.</b> After choosing <var>c</var>, what remains is an instance <var>P′</var> of the same problem, and (i) if <var>S′</var> is any feasible solution of <var>P′</var>, then <var>c</var> ∪ <var>S′</var> is feasible for <var>P</var> with value \(w(c) + w(S')\); (ii) if <var>O</var> is a feasible solution of <var>P</var> that contains <var>c</var>, then <var>O</var> − <var>c</var> is feasible for <var>P′</var>.</li>
+      <li><b>Order.</b> Rank users by (degree, id): <var>u</var> ≺ <var>v</var> if \(\deg u &lt; \deg v\), or the degrees are equal and <var>u</var> has the smaller id. This is a total order: any two distinct users are comparable, with no ties.</li>
+      <li><b>Orient.</b> Point each friendship from its lower end to its higher end. Let \(N^+(v)\) be the out-neighbours of <var>v</var> (friends ranked above it), with size \(d^+(v)\), and \(d^-(v) = \deg v - d^+(v)\) the in-degree.</li>
+      <li><b>Count.</b> For each oriented edge <var>u</var> → <var>v</var>, count the users <var>w</var> in \(N^+(v)\) that are also in \(N^+(u)\).</li>
     </ul>
-    <p><b>Theorem.</b> If both properties hold for every instance, the greedy algorithm returns an optimal solution.</p>
-    <p><b>Proof, by induction on the instance size.</b> An empty instance has only the empty solution, so greedy is optimal there. Now take an instance <var>P</var> and assume greedy is optimal on every smaller instance. Greedy picks <var>c</var> and then solves <var>P′</var>, returning <var>G′</var>; by the induction hypothesis <var>G′</var> is optimal for <var>P′</var>. By the greedy-choice property there is an optimal solution <var>O</var> of <var>P</var> that contains <var>c</var>. By (ii), <var>O</var> − <var>c</var> is feasible for <var>P′</var>, so \(w(G') \ge w(O - c)\). By (i), greedy's answer <var>c</var> ∪ <var>G′</var> is feasible for <var>P</var> and</p>
-    <div class="eq">\[ w(c \cup G') = w(c) + w(G') \;\ge\; w(c) + w(O - c) = w(O). \]</div>
-    <p>So greedy's answer is at least as good as an optimal one, hence optimal. ∎ (For a minimization problem, flip the inequalities.)</p>
-    <p><b>Why both are needed.</b> Optimal substructure alone is common: 0/1 knapsack and coin change with {1, 3, 4} both have it, which is why dynamic programming solves them (§9). But without the greedy-choice property, the first step of the induction has no optimal <var>O</var> to compare with, and greedy can commit to a first choice that no optimal solution makes. The greedy-choice property alone is not enough either: knowing the first move is safe says nothing about the rest unless the rest is a smaller copy of the same problem that greedy also solves. In practice, the greedy-choice property is the hard part to prove. The next two sections show the two standard ways.</p>
+    <p><b>By hand.</b> Six users: hub 0 is friends with 1, 2, 3, 4, 5; also 1–2 and 2–3. Two triangles: {0, 1, 2} and {0, 2, 3}. Degrees: 0 has 5, 2 has 3, 1 and 3 have 2, 4 and 5 have 1. The order is 4 ≺ 5 ≺ 1 ≺ 3 ≺ 2 ≺ 0, and every arrow points up the order:</p>
+    <div class="dg">
+      <svg viewBox="0 0 420 190" width="100%" style="max-width:30rem;display:block;margin:0 auto" role="img" aria-label="Six-user graph oriented from low to high degree; the hub 0 has no outgoing edges">
+        <defs><marker id="d2arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+        <g style="stroke:var(--muted);stroke-width:1.6;fill:none" marker-end="url(#d2arr)">
+          <line x1="70" y1="150" x2="190" y2="42"/>
+          <line x1="350" y1="150" x2="230" y2="42"/>
+          <line x1="140" y1="150" x2="196" y2="50"/>
+          <line x1="280" y1="150" x2="224" y2="50"/>
+          <line x1="155" y1="160" x2="188" y2="160"/>
+          <line x1="265" y1="160" x2="232" y2="160"/>
+          <line x1="210" y1="145" x2="210" y2="52"/>
+        </g>
+        <g style="font:600 14px var(--f-mono);text-anchor:middle">
+          <circle cx="210" cy="32" r="16" style="fill:var(--accent);stroke:none"/><text x="210" y="37" style="fill:var(--panel)">0</text>
+          <circle cx="210" cy="160" r="15" style="fill:var(--accent-soft);stroke:var(--accent)"/><text x="210" y="165" style="fill:var(--ink)">2</text>
+          <circle cx="140" cy="160" r="15" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="140" y="165" style="fill:var(--ink)">1</text>
+          <circle cx="280" cy="160" r="15" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="280" y="165" style="fill:var(--ink)">3</text>
+          <circle cx="60" cy="160" r="15" style="fill:var(--panel);stroke:var(--line)"/><text x="60" y="165" style="fill:var(--ink)">4</text>
+          <circle cx="360" cy="160" r="15" style="fill:var(--panel);stroke:var(--line)"/><text x="360" y="165" style="fill:var(--ink)">5</text>
+        </g>
+        <g style="font:12px var(--f-display);fill:var(--muted);text-anchor:middle">
+          <text x="300" y="30">0: degree 5, out-degree 0</text>
+          <text x="210" y="186">2: degree 3, out-degree 1</text>
+        </g>
+      </svg>
+      <div class="cap">Arrows point from lower to higher (degree, id). The hub receives five arrows and sends none, so it starts no work.</div>
+    </div>
+    <p>Edges out of 1: {2, 0}. Following 1 → 2, \(N^+(2) = \{0\}\), and 0 is in \(N^+(1)\): triangle {1, 2, 0}. Following 1 → 0, \(N^+(0)\) is empty. From 3 the same steps find {3, 2, 0}. Users 4, 5 and 2 point only at 0, which points nowhere. Total: 2 membership checks and 2 triangles, against 15 pair checks for the node iterator (10 of them at the hub).</p>
+    <p><b>Why each triangle is counted exactly once.</b> Take a triangle and name its corners in order, <var>a</var> ≺ <var>b</var> ≺ <var>c</var>. Its edges are oriented <var>a</var> → <var>b</var>, <var>a</var> → <var>c</var>, <var>b</var> → <var>c</var>. When the loop handles the edge <var>a</var> → <var>b</var>, it finds <var>c</var> in \(N^+(b)\) and in \(N^+(a)\): counted. No other edge counts it: handling <var>a</var> → <var>c</var> would need <var>b</var> ∈ \(N^+(c)\), impossible since <var>b</var> ≺ <var>c</var>; handling <var>b</var> → <var>c</var> would need <var>a</var> ∈ \(N^+(c)\), impossible since <var>a</var> ≺ <var>c</var>. Conversely, anything counted at <var>u</var> → <var>v</var> with <var>w</var> is a triangle, since all three friendships exist. ∎</p>
+    <p><b>Lemma: no user has more than \(\sqrt{2m}\) out-neighbours.</b> Let \(k = d^+(v)\). Every out-neighbour <var>w</var> of <var>v</var> ranks above <var>v</var>, so \(\deg w \ge \deg v \ge d^+(v) = k\). Those <var>k</var> users therefore have degrees adding up to at least \(k \cdot k\). All degrees add up to 2<var>m</var>, so \(k^2 \le 2m\) and \(k \le \sqrt{2m}\). ∎</p>
+    <p><b>Cost.</b> With the out-neighbour sets stored as hash sets, handling edge <var>u</var> → <var>v</var> costs \(d^+(v)\) expected-O(1) lookups. Each user <var>v</var> is the head of \(d^-(v)\) edges, so the total is</p>
+    <div class="eq">\[ \sum_{u \to v} d^+(v) \;=\; \sum_v d^-(v)\, d^+(v) \;\le\; \sqrt{2m}\sum_v d^-(v) \;=\; \sqrt{2m}\cdot m \;=\; O(m^{1.5}), \]</div>
+    <p>plus O(<var>n</var> log <var>n</var> + <var>m</var>) to sort and orient. Space is O(<var>n</var> + <var>m</var>). The bound holds for every graph, however skewed; the node iterator's \(\sum_v \binom{\deg v}{2}\) can be as large as \(\Theta(n^2)\) for a star with only \(n - 1\) friendships. The result goes back to Chiba and Nishizeki (1985).</p>
+<div class="code"><div class="ch"><span>triangles.py · degree-ordered triangle counting</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def count_triangles(adj):
+    """Each triangle counted once, at its lowest vertex in (degree, id) order. O(m^1.5) work."""
+    n = len(adj)
+    pos = [0] * n
+    for i, v in enumerate(sorted(range(n), key=lambda v: (len(adj[v]), v))):
+        pos[v] = i
+    out = [[w for w in adj[v] if pos[w] &gt; pos[v]] for v in range(n)]   # orient low -&gt; high
+    outset = [set(o) for o in out]
+    t = 0
+    for u in range(n):
+        for v in out[u]:                       # u before v
+            t += sum(1 for w in out[v] if w in outset[u])   # v before w, and u-w is an edge
+    return t</code></pre></div>
+    <p><b>Confirm by measuring.</b> The week's graph has 71,976 triangles. The work:</p>
+    <div class="chart"><div class="t">Checks needed to count the 71,976 triangles</div>
+      <div class="br"><span>node iterator, Σ C(deg, 2)</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">7,284,162</span></div>
+      <div class="br"><span>oriented by id only</span><span class="tr"><i style="width:33.4%;--c:var(--trace)"></i></span><span class="v">2,433,041</span></div>
+      <div class="br"><span>oriented by (degree, id)</span><span class="tr"><i style="width:13%"></i></span><span class="v">944,405</span></div>
+      <div class="cap">Largest out-degree: 19 by (degree, id), against the guaranteed bound √(2m) = 447 and the largest degree 1,480. Orienting by id alone leaves a user with 1,185 out-neighbours. The top hub's out-degree is 0.</div>
+    </div>
+    <p>Orientation by id alone already counts each triangle once, but it carries no guarantee: a hub with a small id keeps most of its friends as out-neighbours. Ordering by degree is what proves the bound. The proven bound \(m\sqrt{2m} = 44.7\) million is loose here; the measured work is 2% of it, because few users have many neighbours above them.</p>
 
-    <h4>4 · Proof technique 1: the exchange argument, on interval scheduling</h4>
-    <p><b>The question.</b> Given <var>n</var> intervals [<var>s</var>, <var>f</var>), choose as many as possible so that no two overlap. (Talks to schedule in one room; touching at an endpoint is allowed.)</p>
-    <p><b>First attempts, and why they fail.</b> Two natural local rules are wrong, and each has a three-interval counterexample:</p>
+    <h4>6 · Capping hubs</h4>
+    <p><b>The question.</b> Bound the work of one PYMK request, whatever the graph.</p>
+    <p><b>The idea.</b> Skip any friend with more than <var>C</var> friends. Then \(W_C(u) = \sum_{f\in N(u),\,\deg f \le C} \deg f \le C \cdot \deg u\). The skipped lists are the most expensive (they are the hubs, which by the paradox are most of what a scan reads) and the least informative (a mutual friend with 1,000 friends says little about whether two of them know each other; Day 5 derives the Adamic–Adar weight \(1/\log \deg f\)). The price is that <var>m</var>(<var>u</var>, <var>v</var>) undercounts by the number of skipped hubs they share; Day 4 measures what that does to recall.</p>
+<div class="code"><div class="ch"><span>capped.py · two-hop scan that skips hubs</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def suggest_capped(adj, u, k=10, cap=200):
+    """The exact two-hop scan, except a friend with more than `cap` friends is skipped."""
+    direct = adj[u]
+    count = Counter()
+    for f in direct:
+        if len(adj[f]) &gt; cap:
+            continue                           # a hub: its list costs most and says least
+        for v in adj[f]:
+            if v != u and v not in direct:
+                count[v] += 1
+    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), count</code></pre></div>
     <div class="tablewrap"><table>
-      <tr><th>Rule</th><th>Counterexample</th><th>Rule picks</th><th>Best</th></tr>
-      <tr><td>Shortest first</td><td>[1,5) [4,7) [6,10)</td><td>[4,7), which blocks both others: 1</td><td>[1,5) [6,10): 2</td></tr>
-      <tr><td>Earliest start first</td><td>[1,10) [2,3) [4,5)</td><td>[1,10): 1</td><td>[2,3) [4,5): 2</td></tr>
+      <tr><th>Cap C</th><th class="num">users skipped</th><th class="num">mean W</th><th class="num">p99 W</th><th class="num">max W</th><th class="num">Σ deg² kept</th></tr>
+      <tr><td>none</td><td class="num">0</td><td class="num">1,477</td><td class="num">7,284</td><td class="num">51,806</td><td class="num">100%</td></tr>
+      <tr><td>1,000</td><td class="num">4</td><td class="num">882</td><td class="num">4,366</td><td class="num">48,449</td><td class="num">59.7%</td></tr>
+      <tr><td>500</td><td class="num">7</td><td class="num">760</td><td class="num">3,718</td><td class="num">46,571</td><td class="num">51.5%</td></tr>
+      <tr class="hi"><td>200</td><td class="num">27</td><td class="num">597</td><td class="num">2,909</td><td class="num">41,558</td><td class="num">40.4%</td></tr>
+      <tr><td>100</td><td class="num">100</td><td class="num">456</td><td class="num">2,338</td><td class="num">34,234</td><td class="num">30.9%</td></tr>
     </table></div>
-    <p><b>The key idea.</b> Choose the interval that <em>finishes first</em>, discard everything that overlaps it, and repeat. Finishing first leaves the most room for everything after it. By hand on [1,5) [4,7) [6,10): sorted by finish the order is [1,5), [4,7), [6,10). Take [1,5). [4,7) starts at 4 &lt; 5, so skip it. [6,10) starts at 6 ≥ 5, so take it. Answer: 2.</p>
-    <p><b>Why it is correct: the exchange argument.</b> An <b>exchange argument</b> takes an arbitrary optimal solution and swaps one of its parts for greedy's choice, showing the result is still feasible and no worse. Then an optimal solution containing greedy's choice exists, which is the greedy-choice property.</p>
-    <ul>
-      <li><b>Greedy-choice property.</b> Let <var>g</var> be the interval with the earliest finish. Let <var>O</var> be any optimal solution and <var>o</var> its interval with the earliest finish. Because <var>g</var> finishes earliest of all, \(f(g) \le f(o)\). Every other interval in <var>O</var> is disjoint from <var>o</var> and finishes after it, so it starts at or after \(f(o) \ge f(g)\). So <var>O′</var> = <var>O</var> − <var>o</var> + <var>g</var> has no overlaps and the same size as <var>O</var>: it is an optimal solution that contains <var>g</var>.</li>
-      <li><b>Optimal substructure.</b> After taking <var>g</var>, the remaining instance is the set of intervals that start at or after \(f(g)\). Any disjoint set of those, plus <var>g</var>, is disjoint; and any optimal solution containing <var>g</var>, minus <var>g</var>, is a disjoint set of those.</li>
-    </ul>
-    <p>The theorem in §3 now finishes the proof. Notice <em>why</em> the swap was harmless: the rest of <var>O</var> lives entirely to the right of <var>o</var>, and <var>g</var> ends no later than <var>o</var>, so swapping cannot disturb anything else in <var>O</var>. Keep this in mind for BPE.</p>
-    <p><b>Cost.</b> O(<var>n</var> log <var>n</var>) time for the sort by finish time, then O(<var>n</var>) for one scan that keeps only the finish time of the last chosen interval. O(1) extra space beyond the sort (O(<var>n</var>) if the sort copies).</p>
-    <p><b>Two LeetCode problems that are this problem.</b> <a class="lc" href="https://leetcode.com/problems/non-overlapping-intervals/">435 Non-overlapping Intervals</a> asks for the fewest intervals to remove so the rest are disjoint: that is <var>n</var> minus the maximum disjoint set. <a class="lc" href="https://leetcode.com/problems/minimum-number-of-arrows-to-burst-balloons/">452 Minimum Number of Arrows to Burst Balloons</a> asks for the fewest points that hit every closed interval [<var>s</var>, <var>f</var>]. Its answer equals the maximum number of pairwise disjoint balloons, by a two-sided argument. <em>Lower bound:</em> one arrow cannot hit two disjoint balloons, so any answer needs at least as many arrows as there are disjoint balloons. <em>Upper bound:</em> run earliest-finish-first and shoot an arrow at the right end of each balloon it chooses. A balloon that was skipped starts no later than the last arrow <var>x</var> and, because balloons are sorted by finish, ends no earlier than <var>x</var>, so that arrow hits it. Greedy's arrows match the lower bound exactly.</p>
-<div class="code"><div class="ch"><span>intervals.py · earliest finish first, 435, 452</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def max_disjoint(intervals):                    # half-open [s, f): touching is fine
-    chosen, end = [], float("-inf")
-    for s, f in sorted(intervals, key=lambda iv: iv[1]):   # by finish time
-        if s &gt;= end:                            # compatible with everything chosen
-            chosen.append((s, f)); end = f
-    return chosen
-
-def eraseOverlapIntervals(intervals):           # 435: remove fewest to make disjoint
-    return len(intervals) - len(max_disjoint(intervals))
-
-def findMinArrowShots(points):                  # 452: closed balloons [s, f]
-    arrows, x = 0, float("-inf")
-    for s, f in sorted(points, key=lambda p: p[1]):
-        if s &gt; x:                               # not burst by the last arrow
-            arrows += 1; x = f                  # shoot at its right end
-    return arrows</code></pre></div>
-
-    <h4>5 · Proof technique 2: greedy stays ahead</h4>
-    <p>A <b>greedy-stays-ahead</b> proof compares greedy with an optimal solution step by step and shows, by induction, that after each step greedy is at least as far along by some measure. Then it shows that being ahead at every step means greedy cannot finish with a worse answer.</p>
-    <p><b>Interval scheduling again.</b> Let greedy's intervals be \(g_1, \dots, g_k\) and an optimal solution's be \(o_1, \dots, o_m\), both in order of finish time. <em>Claim:</em> \(f(g_j) \le f(o_j)\) for every \(j \le \min(k, m)\). For \(j = 1\) this holds because \(g_1\) finishes earliest of all. If it holds for \(j - 1\), then \(o_j\) starts at or after \(f(o_{j-1}) \ge f(g_{j-1})\), so \(o_j\) was still available when greedy chose \(g_j\); greedy chose the earliest-finishing available interval, so \(f(g_j) \le f(o_j)\). <em>Conclusion:</em> suppose \(m > k\). Then \(o_{k+1}\) starts after \(f(o_k) \ge f(g_k)\), so it was still available after greedy's last choice, and greedy would not have stopped. So \(k \ge m\). ∎</p>
-    <p><b>Jump game.</b> <a class="lc" href="https://leetcode.com/problems/jump-game/">55 Jump Game</a>: from index <var>i</var> you may jump forward any distance from 1 to <code>nums[i]</code>; can you reach the last index? <a class="lc" href="https://leetcode.com/problems/jump-game-ii/">45 Jump Game II</a>: with the fewest jumps? A first attempt, "always jump as far as possible", fails: in [2, 3, 1, 1, 4] the longest first jump lands on index 2 (value 1), giving three jumps, while jumping to index 1 (value 3) reaches the end in two.</p>
-    <p>The key idea is to be greedy about <em>reach</em>, not about the landing spot. Let \(R_k\) be the farthest index reachable with at most <var>k</var> jumps. Everything up to \(R_k\) is also reachable (you may always jump shorter), so the reachable set is the prefix \([0, R_k]\), and</p>
-    <div class="eq">\[ R_0 = 0, \qquad R_{k+1} = \max_{0 \le i \le R_k} \big(i + \texttt{nums}[i]\big). \]</div>
-    <p><b>Stays ahead.</b> Any sequence of jumps is at position \(p_k \le R_k\) after <var>k</var> jumps. Induction: \(p_0 = 0 = R_0\), and \(p_{k+1} \le p_k + \texttt{nums}[p_k] \le R_{k+1}\) because \(p_k \le R_k\) is one of the indices in the max. So no strategy reaches the end in fewer jumps than the smallest <var>k</var> with \(R_k \ge n - 1\), and greedy achieves exactly that <var>k</var>. On [2, 3, 1, 1, 4]: \(R_0 = 0\), \(R_1 = 2\), \(R_2 = \max(0{+}2, 1{+}3, 2{+}1) = 4\), so 2 jumps. For 55 the same quantity with no jump count is enough: scan left to right, keep the farthest reach, and fail if an index lies beyond it.</p>
-    <p><b>Cost.</b> One left-to-right pass: O(<var>n</var>) time, O(1) space. The layers \(R_0, R_1, \dots\) are breadth-first search levels computed without a queue.</p>
-<div class="code"><div class="ch"><span>jumps.py · 55 and 45, greedy stays ahead</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def canJump(nums):                              # 55
-    reach = 0
-    for i, n in enumerate(nums):
-        if i &gt; reach:
-            return False                        # i is past everything reachable
-        reach = max(reach, i + n)
-    return True
-
-def jump(nums):                                 # 45: fewest jumps to the last index
-    jumps, end, far = 0, 0, 0                   # end: reach with `jumps` jumps
-    for i in range(len(nums) - 1):
-        far = max(far, i + nums[i])             # reach with jumps + 1
-        if i == end:                            # layer finished: must jump
-            jumps += 1; end = far
-    return jumps</code></pre></div>
-
-    <h4>6 · Fractional knapsack works; 0/1 knapsack does not</h4>
-    <p><b>The question.</b> A bag holds weight <var>W</var>. Item <var>i</var> has weight \(w_i\) and value \(v_i\). Maximize the value carried. In the <b>fractional</b> version you may take any fraction \(x_i \in [0, 1]\) of an item (gold dust); in the <b>0/1</b> version each \(x_i\) is 0 or 1 (gold bars).</p>
-    <p><b>Greedy rule.</b> Sort by value per unit weight \(r_i = v_i / w_i\), highest first, and take as much of each item as fits.</p>
-    <p><b>Exchange proof for the fractional version.</b> Number the items so \(r_1 \ge r_2 \ge \dots\). Greedy's solution is \(x^G = (1, \dots, 1, \text{partial}, 0, \dots, 0)\). Let \(x^{*}\) be an optimal solution that agrees with \(x^G\) on as many leading items as possible, and suppose they differ; let <var>i</var> be the first item where they do. Greedy took as much of item <var>i</var> as fit after the earlier items, so \(x^{*}_i &lt; x^G_i\). The optimum fills the bag at least as much as greedy does (if there were spare room it could add more of item <var>i</var>), so some later item \(j > i\) has \(x^{*}_j > 0\). Move a small amount of weight \(\varepsilon > 0\) from item <var>j</var> to item <var>i</var>:</p>
-    <div class="eq">\[ \Delta\text{value} = \varepsilon\, r_i - \varepsilon\, r_j = \varepsilon\,(r_i - r_j) \;\ge\; 0 . \]</div>
-    <p>The total weight is unchanged and the value does not fall, so the result is still optimal. Take \(\varepsilon\) as large as possible: either \(x^{*}_i\) reaches \(x^G_i\), or \(x^{*}_j\) drops to 0. Repeating the swap ends at an optimal solution that agrees with greedy on item <var>i</var> too, contradicting the choice of \(x^{*}\). So greedy's solution is optimal. Cost: O(<var>n</var> log <var>n</var>) for the sort, O(<var>n</var>) for the fill.</p>
-    <p><b>The 0/1 version breaks it.</b> Bag <var>W</var> = 4, items A (weight 3, value 5, ratio 1.67), B (2, 3, 1.5), C (2, 3, 1.5). Greedy takes A, then neither B nor C fits: value 5. Taking B and C gives 6. (Fractionally, greedy takes A and half of B for 6.5.) The proof failed at one step: it moved an arbitrarily small \(\varepsilon\) of weight. With whole items, the only swaps are lumps (A out, B and C in), and a lump of a high-ratio item can waste capacity that lower-ratio items would have filled. 0/1 knapsack still has optimal substructure, so dynamic programming solves it exactly in O(<var>nW</var>) time.</p>
-<div class="code"><div class="ch"><span>knapsack.py · fractional (greedy) vs 0/1 (DP)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def fractional_knapsack(items, cap):            # items: (weight, value)
-    total = 0.0
-    for w, v in sorted(items, key=lambda it: it[1] / it[0], reverse=True):
-        take = min(w, cap)                      # all of it, or what still fits
-        total += v * take / w; cap -= take
-        if cap == 0:
-            break
-    return total
-
-def knapsack01(items, cap):                     # exact: best[c] over items seen so far
-    best = [0] * (cap + 1)
-    for w, v in items:
-        for c in range(cap, w - 1, -1):         # downwards: each item used once
-            best[c] = max(best[c], best[c - w] + v)
-    return best[cap]</code></pre></div>
-
-    <h4>7 · Matroids: the structures where greedy always works</h4>
-    <p>The examples so far each needed their own proof. Is there a structural reason? For one large class of problems, yes, and it is exact.</p>
-    <p><b>Definitions.</b> Take a finite set <var>E</var> of elements, each with a weight \(w(x) \ge 0\), and a family \(\mathcal I\) of subsets called <em>independent sets</em> (the feasible choices). The problem: find an independent set of maximum total weight. The <b>greedy algorithm</b> for it: sort elements by weight, heaviest first, and add each one if the set stays independent. The pair \((E, \mathcal I)\) is a <b>matroid</b> if</p>
-    <ul>
-      <li><b>Hereditary:</b> the empty set is independent, and every subset of an independent set is independent;</li>
-      <li><b>Exchange:</b> if <var>A</var> and <var>B</var> are independent and \(|A| &lt; |B|\), then some \(x \in B \setminus A\) can be added to <var>A</var> with \(A \cup \{x\}\) still independent.</li>
-    </ul>
-    <p><b>Two examples.</b> (1) <em>Uniform matroid:</em> any set of at most <var>k</var> elements is independent. Both properties are immediate, and greedy picks the <var>k</var> heaviest elements, which is plainly optimal. (2) <em>Graphic matroid:</em> <var>E</var> is the edges of a graph, and a set of edges is independent if it contains no cycle (it is a forest). Hereditary: removing edges cannot create a cycle. Exchange: a forest with <var>e</var> edges on <var>n</var> vertices has \(n - e\) connected pieces, so if \(|A| &lt; |B|\), forest <var>A</var> has more pieces than <var>B</var>. If every edge of <var>B</var> stayed inside one piece of <var>A</var>, <var>B</var> would have at least as many pieces as <var>A</var>. So some edge of <var>B</var> joins two pieces of <var>A</var>, and adding it to <var>A</var> creates no cycle.</p>
-    <p><b>Theorem (Rado 1957, Edmonds 1971).</b> Let \((E, \mathcal I)\) be hereditary. The greedy algorithm finds a maximum-weight independent set <em>for every</em> nonnegative weight function if and only if \((E, \mathcal I)\) is a matroid.</p>
-    <p><b>Proof that matroid ⇒ greedy is optimal</b> (greedy stays ahead). Take positive weights for simplicity. Let greedy's set be \(g_1, \dots, g_k\) in the order chosen (so heaviest first) and let <var>O</var> = \(o_1, \dots, o_m\) be any independent set, heaviest first. First, \(k \ge m\): otherwise exchange gives \(x \in O\) with \(G \cup \{x\}\) independent; when greedy looked at <var>x</var>, its set then was a subset of <var>G</var>, so by heredity adding <var>x</var> was allowed and greedy would have taken it. Next, \(w(g_i) \ge w(o_i)\) for every \(i \le m\). Suppose not, and let <var>i</var> be the first failure: \(w(o_i) > w(g_i)\). Apply exchange to \(A = \{g_1, \dots, g_{i-1}\}\) and \(B = \{o_1, \dots, o_i\}\): some \(x \in B \setminus A\) has \(A \cup \{x\}\) independent, and \(w(x) \ge w(o_i) > w(g_i)\). So greedy looked at <var>x</var> before \(g_i\), at a moment when its set was a subset of <var>A</var>; by heredity <var>x</var> fit, so greedy took it, so \(x \in A\). That contradicts \(x \notin A\). Summing \(w(g_i) \ge w(o_i)\) over <var>i</var> gives \(w(G) \ge w(O)\). ∎</p>
-    <p><b>Proof that greedy always optimal ⇒ matroid.</b> Suppose exchange fails for some independent <var>A</var>, <var>B</var> with \(|A| = p &lt; |B|\). By heredity we may shrink <var>B</var> to \(p + 1\) elements and exchange still fails. Give elements of <var>A</var> weight \(p + 2\), elements of \(B \setminus A\) weight \(p + 1\), and everything else 0. Greedy takes all of <var>A</var> first (it is independent), then rejects every element of \(B \setminus A\), because exchange fails and adding elements to a superset of <var>A</var> cannot make it work. Greedy's weight is \(p(p+2) = p^2 + 2p\). But <var>B</var> weighs at least \((p+1)^2 = p^2 + 2p + 1\). So some weight function defeats greedy. ∎</p>
-    <p><b>Kruskal's algorithm is this theorem.</b> A minimum spanning tree is a maximum-weight basis of the graphic matroid under weights \(C - w(e)\) for a large constant <var>C</var>, so "heaviest first" becomes "cheapest edge first". Kruskal sorts the edges by cost and adds an edge whenever it joins two different pieces, which is exactly "add it if the set stays a forest". A union-find structure answers "same piece?" in nearly constant time, so the cost is O(<var>E</var> log <var>E</var>) for the sort plus about O(<var>E</var>) for the scan.</p>
-<div class="code"><div class="ch"><span>kruskal.py · greedy on the graphic matroid</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def kruskal(n, edges):                          # edges: (weight, u, v); returns MST weight
-    parent = list(range(n))
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]       # path halving
-            x = parent[x]
-        return x
-    total, used = 0, 0
-    for w, u, v in sorted(edges):               # cheapest edge first
-        ru, rv = find(u), find(v)
-        if ru != rv:                            # still a forest: independent
-            parent[ru] = rv; total += w; used += 1
-    return total if used == n - 1 else None</code></pre></div>
-    <p><b>What this says about BPE.</b> The matroid theorem needs each element to have a fixed weight, independent of what else is chosen. A BPE merge has no fixed weight: its gain depends on which merges came before it and in which order. So BPE is not a matroid problem, and the theorem gives no guarantee. §8 shows the guarantee really is missing.</p>
-
-    <h4>8 · When greedy fails</h4>
-    <p><b>Coin change with {1, 3, 4}, amount 6.</b> Greedy takes 4, then 1, then 1: three coins. Optimal is 3 + 3: two coins. The greedy-choice property fails: no optimal way to pay 6 uses a 4.</p>
-    <p><b>Canonical coin systems.</b> A coin set is <b>canonical</b> if greedy is optimal for every amount. This is a property of the coin set, not of the algorithm, and it can be proved by exchange. For US coins {1, 5, 10, 25}, an optimal payment never contains 5 pennies (swap for a nickel), 2 nickels (swap for a dime), 3 dimes (swap for a quarter and a nickel) or 2 dimes and a nickel (swap for a quarter): each swap uses fewer coins. So the coins below 25 in an optimal payment add up to at most 2 dimes + 4 pennies = 24. An optimal payment of amount <var>a</var> therefore uses exactly \(\lfloor a/25 \rfloor\) quarters, which is greedy's choice. The same argument on the remainder fixes the dimes (the rest is at most 5 + 4 = 9), then the nickels. For {1, 3, 4} the argument has nothing to swap: two 3s cannot be replaced by a 4 plus fewer coins. Checked by computer for every amount up to 1,000: US coins never fail, {1, 3, 4} fails first at 6, and {1, 10, 25} fails first at 30 (greedy 25 + 5×1 is six coins; 10 + 10 + 10 is three). You do not have to check every amount: Kozen and Zaks (1994) proved that if a coin system is not canonical, its smallest counterexample is below the sum of its two largest coins, so a finite check decides it.</p>
-    <p><b>BPE fails too.</b> Corpus <code>nan</code> ×2, <code>nab</code> ×2, <code>anan</code> ×3 (24 characters), budget 2 merges. Counts: <code>an</code> 8, <code>na</code> 7, <code>ab</code> 2.</p>
-    <div class="dg"><div class="grid2">
-      <div><div class="sub" style="font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--bad)">Greedy · 13 tokens</div>
-        <div class="small muted">merge 1: <code>a+n</code>, gain 8 · merge 2: <code>an+an</code>, gain 3</div>
-        <div class="seq" style="margin-top:.4rem"><span class="lk">×2</span><span class="nd">n</span><span class="nd">an</span></div>
-        <div class="seq"><span class="lk">×2</span><span class="nd">n</span><span class="nd">a</span><span class="nd">b</span></div>
-        <div class="seq"><span class="lk">×3</span><span class="nd hot">anan</span></div></div>
-      <div><div class="sub" style="font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--good)">Best plan · 12 tokens</div>
-        <div class="small muted">merge 1: <code>n+a</code>, gain 7 · merge 2: <code>na+n</code>, gain 5</div>
-        <div class="seq" style="margin-top:.4rem"><span class="lk">×2</span><span class="nd hot">nan</span></div>
-        <div class="seq"><span class="lk">×2</span><span class="nd">na</span><span class="nd">b</span></div>
-        <div class="seq"><span class="lk">×3</span><span class="nd">a</span><span class="nd hot">nan</span></div></div>
-    </div><div class="cap">Total gain: greedy 8 + 3 = 11; best 7 + 5 = 12. The bigger first step cut <code>nan</code> as <code>n·an</code> and destroyed the better second step.</div></div>
-    <p><b>Exactly where the exchange argument breaks.</b> Try to prove the greedy-choice property the way §4 did: take the optimal plan <var>O</var> = (<code>n+a</code>, <code>na+n</code>), swap its first merge for greedy's <code>a+n</code>, and keep the rest.</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">swap</span><span class="seq"><span class="pp rm">n+a</span><span class="pp add">a+n</span><span class="lk">then</span><span class="pp">na+n</span></span><span class="why"><b>Not even a plan.</b> <code>na+n</code> joins the token <code>na</code>, which no longer gets created. Later merges are built from earlier ones.</span></div>
-      <div class="step"><span class="k">repair</span><span class="seq"><span class="pp add">a+n</span><span class="lk">then</span><span class="pp">n+a</span></span><span class="why"><b>14 tokens.</b> After <code>a+n</code>, <code>na</code> occurs only in <code>nab</code>: count 2, down from 7.</span></div>
-      <div class="step"><span class="k">best</span><span class="seq"><span class="pp add">a+n</span><span class="lk">then</span><span class="pp">an+an</span></span><span class="why"><b>13 tokens.</b> The best second merge after <code>a+n</code> gains 3. Every plan that starts with <code>a+n</code> loses to 12.</span></div>
-    </div><div class="cap">No optimal plan starts with greedy's choice, so BPE has no greedy-choice property.</div></div>
-    <p>Two different interactions break the swap, and interval scheduling had neither:</p>
-    <ul>
-      <li><b>Competition for characters.</b> <code>an</code> and <code>na</code> overlap: in <code>n a n</code> you can merge the first two letters or the last two, not both. Merging <code>an</code> used up 5 of the 7 <code>na</code> occurrences (both <code>nan</code> and the middle of each <code>anan</code>). In interval scheduling, the rest of <var>O</var> lived to the right of the swapped interval and was untouched; in BPE, the rest of the plan lives on the same characters as the swapped merge.</li>
-      <li><b>Dependence.</b> A later merge can use a token an earlier merge made (<code>na+n</code> needs <code>na</code>). Removing an early merge does not just lower a later merge's gain; it can delete the later merge.</li>
-    </ul>
-    <p>Optimal substructure still holds: after any first merge, the best remaining plan is the best (<var>k</var> − 1)-merge plan for the rewritten corpus. It is the greedy-choice property that fails. So BPE is like 0/1 knapsack, not like interval scheduling: an exact method would have to look at more than one first move.</p>
-    <p><b>Confirm by measuring.</b> How often does this happen? Over 2,000 random tiny corpora (three words of 3–5 letters from {<code>a</code>, <code>b</code>, <code>c</code>}, frequencies 1–3), greedy BPE was beaten by the best plan in 200 corpora (10.0%) with 2 merges and 208 (10.4%) with 3 merges. In the worst case found, greedy's total gain was 0.667 of the best plan's.</p>
-
-    <h4>9 · When greedy fails, (a): exact answers by dynamic programming</h4>
-    <p><b>Dynamic programming</b> uses optimal substructure without the greedy-choice property: instead of trusting one first choice, it tries every first choice and looks up the best way to finish each one in a table of smaller answers. It works when the number of distinct subproblems, the <em>state space</em>, is small.</p>
-    <p><b>Coin change, <a class="lc" href="https://leetcode.com/problems/coin-change/">322</a>.</b> Let <code>dp[a]</code> be the fewest coins that pay <var>a</var>. The last coin of an optimal payment is some coin <var>c</var>, and the rest must be an optimal payment of <var>a</var> − <var>c</var> (if it were not, replacing it would beat the optimum). So</p>
-    <div class="eq">\[ dp[0] = 0, \qquad dp[a] = 1 + \min_{c \le a} dp[a - c]. \]</div>
-    <p>Correctness is induction on <var>a</var>: if every <code>dp</code> below <var>a</var> is right, the min tries every possible last coin, including the optimal one. By hand for {1, 3, 4}: <code>dp</code>[0..6] = 0, 1, 2, 1, 1, 2, 2; the last entry comes from <code>dp</code>[3] + 1 with coin 3. Cost: <var>amount</var> states × |coins| choices = O(<var>amount</var> · |coins|) time and O(<var>amount</var>) space. The state is one integer, which is why this is cheap.</p>
-    <p><b>Word break, <a class="lc" href="https://leetcode.com/problems/word-break/">139</a>, and the fewest-token split.</b> Can string <var>s</var> be cut into dictionary words? Let <code>ok[i]</code> say whether the first <var>i</var> characters can be cut; <code>ok[i]</code> is true if some <var>j</var> &lt; <var>i</var> has <code>ok[j]</code> and <code>s[j:i]</code> in the dictionary. Replace "is there a split" by "fewest pieces" and the same table gives the <b>shortest segmentation</b> of a chunk for a fixed vocabulary: <code>dp[i] = 1 + min dp[j]</code>, with back-pointers to recover the pieces. With longest token length <var>L</var>, there are <var>n</var> + 1 states and at most <var>L</var> choices each: O(<var>nL</var>) substring lookups, O(<var>n</var>) space.</p>
-    <p>This answers a real question. BPE <em>encodes</em> by replaying its merges in training order, which is itself a greedy procedure. With a 2,000-token vocabulary trained on <em>Alice</em>, 97 of 3,218 chunks have a shorter split than replay gives. <code> spoken</code> encodes as <code> sp|o|ken</code> (3 tokens) though <code> spoke|n</code> (2) uses tokens in the same vocabulary. Replay is still the right choice for a model: it is the split the model saw during training.</p>
-<div class="code"><div class="ch"><span>dp.py · 322, 139, min_tokens</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def coinChange(coins, amount):                  # 322: dp[a] = fewest coins for a
-    dp = [0] + [amount + 1] * amount
-    for a in range(1, amount + 1):
-        for c in coins:
-            if c &lt;= a:
-                dp[a] = min(dp[a], dp[a - c] + 1)
-    return dp[amount] if dp[amount] &lt;= amount else -1
-
-def wordBreak(s, wordDict):                     # 139: ok[i] = s[:i] can be split
-    words, L = set(wordDict), max(map(len, wordDict))
-    ok = [True] + [False] * len(s)
-    for i in range(1, len(s) + 1):
-        ok[i] = any(ok[j] and s[j:i] in words for j in range(max(0, i - L), i))
-    return ok[len(s)]
-
-def min_tokens(s, vocab):                       # fewest tokens; vocab must cover s
-    L, INF = max(map(len, vocab)), float("inf")
-    dp, back = [0] + [INF] * len(s), [-1] * (len(s) + 1)
-    for i in range(1, len(s) + 1):
-        for j in range(max(0, i - L), i):
-            if dp[j] + 1 &lt; dp[i] and s[j:i] in vocab:
-                dp[i], back[i] = dp[j] + 1, j
-    out, i = [], len(s)
-    while i:
-        out.append(s[back[i]:i]); i = back[i]
-    return out[::-1]</code></pre></div>
-    <p><b>Why the merge-plan problem has no small DP.</b> For coin change the state after a choice is one number. For BPE the state after <var>j</var> merges is the whole corpus as it is now segmented, because which merges are possible and how much each gains depends on every word's current tokens. Two plans that reach different segmentations cannot share table entries, and the number of segmentations is exponential in the corpus size. What is left is exhaustive search: try every pair at every step. With <var>p</var> candidate pairs per step, that is about \(p^k\) plans. On all of <em>Alice</em> there are 665 distinct byte pairs at step 0, so even 2 merges means about 442,000 plans and 10 merges about \(1.7 \times 10^{28}\). The brute force below is only for tiny corpora, which is the point: it is how you find and check counterexamples.</p>
-<div class="code"><div class="ch"><span>bpe_plans.py · greedy vs every plan</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def apply_merge(words, pair, tok):              # words: Counter{tuple of symbols: freq}
-    out = Counter()
-    for w, f in words.items():
-        out[tuple(merge(list(w), pair, tok))] += f
-    return out
-
-def length(words):
-    return sum(len(w) * f for w, f in words.items())
-
-def greedy_plan(words, k):
-    ws, plan = Counter({tuple(w): f for w, f in words.items()}), []
-    for step in range(k):
-        counts = Counter()
-        for w, f in ws.items():
-            for p in zip(w, w[1:]):
-                counts[p] += f
-        if not counts:
-            break
-        p = min(counts, key=lambda q: (-counts[q], q))   # most frequent, ties: smallest
-        ws = apply_merge(ws, p, f"&lt;{step}&gt;"); plan.append(p)
-    return length(ws), plan
-
-def best_plan(words, k):                        # exhaustive search over k-merge plans
-    best = None
-    def rec(ws, plan):
-        nonlocal best
-        pairs = sorted({p for w in ws for p in zip(w, w[1:])})
-        if len(plan) == k or not pairs:
-            if best is None or length(ws) &lt; best[0]:
-                best = (length(ws), plan)
-            return
-        for p in pairs:
-            rec(apply_merge(ws, p, f"&lt;{len(plan)}&gt;"), plan + [p])
-    rec(Counter({tuple(w): f for w, f in words.items()}), [])
-    return best</code></pre></div>
-    <p><code>apply_merge</code> uses <code>merge</code> from the week reading (R.6); new tokens are named <code>&lt;0&gt;</code>, <code>&lt;1&gt;</code>, …, so <code>best_plan</code> returns <code>(12, [('n', 'a'), ('&lt;0&gt;', 'n')])</code> and <code>greedy_plan</code> returns <code>(13, [('a', 'n'), ('&lt;0&gt;', '&lt;0&gt;')])</code>.</p>
-
-    <h4>10 · When greedy fails, (b): approximation algorithms</h4>
-    <p>When an exact answer is too expensive, the next best thing is a fast algorithm with a <em>proven</em> worst case. An algorithm has <b>approximation ratio</b> \(\rho\) if on every instance its answer is within a factor \(\rho\) of optimal: \(\mathrm{ALG} \ge \rho \cdot \mathrm{OPT}\) with \(\rho \le 1\) for a maximization problem, \(\mathrm{ALG} \le \rho \cdot \mathrm{OPT}\) with \(\rho \ge 1\) for a minimization problem.</p>
-    <p><b>Greedy set cover.</b> Given a universe <var>U</var> of <var>n</var> elements and a list of subsets, choose the fewest subsets whose union is <var>U</var>. Greedy: repeatedly choose the subset that covers the most still-uncovered elements. It is not optimal: with <var>U</var> = {1, …, 6}, A = {1, 2, 3, 4}, B = {1, 3, 5}, C = {2, 4, 6}, greedy takes A (4 new), then B (1 new), then C (1 new), three sets, while B and C alone cover everything.</p>
-    <p><b>Theorem.</b> Greedy uses at most \(H(n) \cdot \mathrm{OPT}\) sets, where \(H(n) = 1 + \tfrac12 + \dots + \tfrac1n \le \ln n + 1\).</p>
-    <p><b>Proof (charging).</b> Each time greedy picks a set that covers <var>t</var> new elements, charge each of those elements 1/<var>t</var>. Each pick hands out a total charge of exactly 1, so the number of sets greedy picks equals the total charge. Now bound the charge per element. Suppose <var>r</var> elements are uncovered when greedy makes a pick. The optimal cover covers those <var>r</var> elements with OPT sets, so one of its sets covers at least <var>r</var>/OPT of them; greedy's pick covers at least that many, so \(t \ge r/\mathrm{OPT}\) and each newly covered element is charged at most OPT/<var>r</var>. List the elements in the order they get covered. When the <var>j</var>-th one is covered, at least \(n - j + 1\) elements were uncovered at the start of that pick, so its charge is at most \(\mathrm{OPT}/(n - j + 1)\). Adding up:</p>
-    <div class="eq">\[ \#\text{greedy sets} \;=\; \sum_{j=1}^{n} \text{charge}_j \;\le\; \mathrm{OPT}\Big(\frac1n + \frac1{n-1} + \dots + \frac11\Big) = H(n)\cdot \mathrm{OPT}. \]</div>
-    <p>∎</p>
-    <p>This is close to the best possible: no polynomial-time algorithm achieves \((1 - \varepsilon)\ln n\) unless P = NP (Dinur and Steurer, 2014). Cost: with a straightforward implementation, each pick scans all subsets, so O(<var>m</var> · <var>n</var> · picks) for <var>m</var> subsets; bucket queues make it linear in the total size of the subsets.</p>
-<div class="code"><div class="ch"><span>set_cover.py · greedy set cover</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def greedy_set_cover(universe, sets):
-    left, picked = set(universe), []
-    while left:
-        best = max(sets, key=lambda name: len(sets[name] &amp; left))
-        if not sets[best] &amp; left:
-            return None                         # some element is in no set
-        picked.append(best); left -= sets[best]
-    return picked</code></pre></div>
-    <p><b>BPE.</b> Kozma and Voderholzer (2024) studied the problem "choose <var>k</var> merges to maximize the compression gain" and proved it <b>APX-complete</b>. APX is the class of problems with some constant-ratio polynomial-time approximation; APX-complete means that, unless P = NP, there is a ratio no polynomial algorithm can beat, so you cannot get arbitrarily close to optimal in polynomial time. They also bounded greedy BPE's worst-case ratio: its gain is always at least 0.333 of the optimal gain, and there are inputs where it gets no more than 0.625 of it. Zouhar et al. (2023) took another route, treating the gain of a merge sequence as a function with diminishing returns, and proved a guarantee that depends on a measured curvature quantity; on real data that guarantee comes out at about 0.37. These are worst-case floors. On our counterexample greedy got 11 of 12 (0.917), and the worst ratio in the random tiny corpora above was 0.667. On Zipf-shaped natural text the top pairs are far more frequent than the rest, so the early merges barely interfere with one another, and greedy does much better than its worst case.</p>
-
-    <h4>11 · When greedy fails, (c): why BPE uses greedy anyway</h4>
-    <ul>
-      <li><b>It is simple and deterministic.</b> One rule plus a tie-break (the smaller pair wins) fixes the result completely: same corpus, same merges, in every implementation. That is what lets Day 4 test a fast trainer against the simple one merge by merge.</li>
-      <li><b>It is fast.</b> Each merge is one pass, and Day 4 makes it nearly linear in the corpus by counting once and updating locally. Exact search grows like \(p^k\).</li>
-      <li><b>It is good enough.</b> The guarantee is weak in theory, but on natural text greedy's gain is close to the best plan's, and the ML block showed that the length objective is only a proxy anyway: past the knee, extra compression produces tokens the model cannot learn.</li>
-      <li><b>Encoding replays its order.</b> The tokenizer <em>is</em> the ordered merge list. Encoding new text applies those merges in the same order, so the training procedure and the encoder are the same algorithm, and any text is split the same way it would have been split in training. An optimal plan found by search would be a list too, but greedy's list comes with this consistency for free.</li>
-    </ul>
+    <p>Skipping just 27 users' lists (0.27%) cuts the mean work by 60% and the p99 by 60%. The maximum barely moves: the most expensive request is the hub's own, and its 1,480 friends are mostly ordinary users, so capping friends does not help it. Bounding that request needs a second cap on how many of <var>u</var>'s own friends are scanned, which is sampling (Day 4).</p>
+    <p><b>Where PYMK uses it.</b> Candidate generation takes a read budget, and hub capping is the cheapest way to meet it. Precomputation must split hubs across workers, or skip them, to avoid one worker doing half the job. Triangle counts feed clustering features and graph health dashboards.</p>
 
     <div class="part"><b>Practice</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/assign-cookies/">455 Assign Cookies</a>: greedy works. Prove it by exchange.</li>
-      <li><a class="lc" href="https://leetcode.com/problems/non-overlapping-intervals/">435 Non-overlapping Intervals</a> and <a class="lc" href="https://leetcode.com/problems/minimum-number-of-arrows-to-burst-balloons/">452 Minimum Number of Arrows to Burst Balloons</a>: earliest finish first (§4).</li>
-      <li><a class="lc" href="https://leetcode.com/problems/jump-game/">55 Jump Game</a> and <a class="lc" href="https://leetcode.com/problems/jump-game-ii/">45 Jump Game II</a>: greedy stays ahead (§5).</li>
-      <li><a class="lc" href="https://leetcode.com/problems/coin-change/">322 Coin Change</a> and <a class="lc" href="https://leetcode.com/problems/word-break/">139 Word Break</a>: dynamic programming where greedy fails (§9).</li>
-      <li>Write a brute-force search over all 2-merge plans and find your own counterexample on 3 words over <code>abcd</code>.</li>
-      <li>Prove the exchange property for the uniform matroid, and show that "sets of pairwise disjoint intervals" is <em>not</em> a matroid (find <var>A</var>, <var>B</var> where exchange fails). Why does greedy still work there?</li>
+      <li><a href="https://leetcode.com/problems/find-the-town-judge/">997. Find the Town Judge</a>: degrees in a directed graph.</li>
+      <li><a href="https://leetcode.com/problems/maximal-network-rank/">1615. Maximal Network Rank</a>: two degrees and one shared edge.</li>
+      <li><a href="https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/">1761. Minimum Degree of a Connected Trio in a Graph</a>: triangle enumeration with the degree ordering.</li>
+      <li><a href="https://leetcode.com/problems/find-center-of-star-graph/">1791. Find Center of Star Graph</a>: the extreme hub.</li>
+      <li>Own: on the week's graph, run <code>all_pairs_mutual</code> restricted to middle friends with degree ≤ 200, and measure the share of output pairs that lose all their mutual friends.</li>
+      <li>Own: prove that orientation by id alone counts each triangle once, and build a graph with <var>m</var> friendships on which it does \(\Theta(m^2)\) work.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/maximum-length-of-pair-chain/">646 Maximum Length of Pair Chain</a> is interval scheduling in disguise. <a class="lc" href="https://leetcode.com/problems/min-cost-to-connect-all-points/">1584 Min Cost to Connect All Points</a> is Kruskal on a complete graph.</li>
-      <li><b>Overlap:</b> fix BPE's count so that it measures the real gain on runs like <code>aaaaa</code>. Does greedy by real gain beat greedy by count on the <code>aaaaa</code>/<code>bc</code> corpus?</li>
-      <li><b>Segmentation:</b> is BPE's replay ever <em>longer</em> than the shortest split on the 2-merge counterexample's vocabulary? Use <code>min_tokens</code> to check.</li>
-      <li>Give a three-coin set where greedy fails, use the Kozen–Zaks bound to decide how far you must check, and relate the failure to the <code>nan</code> example.</li>
+      <li>List, not count, the triangles. Show the output can be \(\Theta(m^{1.5})\), so the algorithm is optimal for listing.</li>
+      <li>1615 at scale: <var>n</var> = 10⁹. Avoid the \(O(n^2)\) pair loop: only the users with the top two degrees can be in an optimal pair. Prove it, then count how many pairs you must check.</li>
+      <li>Count, for each friendship <var>u</var>–<var>v</var>, the number of triangles through it (its "embeddedness") with the same orientation.</li>
+      <li>The batch job is distributed by middle friend. Split each hub's pair list into chunks so that no worker gets more than <var>B</var> updates. How many chunks does the top user need for <var>B</var> = 100,000?</li>
     </ul></div>
-    <details class="sol"><summary>Solutions</summary><div>
-<div class="code"><div class="ch"><span>cookies.py · 455</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findContentChildren(g, s):                  # g: greed, s: cookie sizes
-    g, s = sorted(g), sorted(s)
-    child = 0
-    for size in s:                              # smallest cookie first
-        if child &lt; len(g) and size &gt;= g[child]:
-            child += 1                          # least greedy unfed child gets it
-    return child</code></pre></div>
-    <p><b>455 by exchange.</b> Let <var>g</var> be the least greedy child and <var>c</var> the smallest cookie with \(c \ge g\). Cookies smaller than <var>c</var> satisfy nobody, since every child is at least as greedy as <var>g</var>. Take any optimal assignment. If <var>g</var> is unfed, give <var>g</var> the cookie <var>c</var> (if another child had it, that child loses it): the count does not drop. If <var>g</var> has some other cookie <var>c′</var> (necessarily <var>c′</var> ≥ <var>c</var>), give <var>g</var> the cookie <var>c</var> instead, and if a child <var>h</var> had <var>c</var>, give <var>h</var> the cookie <var>c′</var>: <var>h</var> was satisfied by <var>c</var>, so it is satisfied by the larger <var>c′</var>. Either way an optimal assignment pairs <var>g</var> with <var>c</var>, and the rest is the same problem on fewer children and cookies. The code walks cookies from smallest up and gives each one to the least greedy unfed child if it fits, which is exactly this rule. Cost: two sorts, O(<var>n</var> log <var>n</var> + <var>m</var> log <var>m</var>), then one pass.</p>
-    <p><b>Intervals are not a matroid.</b> <var>A</var> = {[0, 10)} and <var>B</var> = {[0, 5), [5, 10)} are both disjoint sets and \(|A| &lt; |B|\), but neither interval of <var>B</var> can be added to <var>A</var>. Greedy still works because the problem has its own exchange argument (§4); matroids are a sufficient structure for "greedy works for <em>every</em> weight function", and interval scheduling only needs it for counting.</p>
-    <p><b>Overlap.</b> Count non-overlapping occurrences by scanning each word left to right and skipping one position after each match. On <code>aaaaa</code> ×1, <code>bc</code> ×3 this gives <code>aa</code> 2 and <code>bc</code> 3, so greedy by real gain merges <code>bc</code> and reaches 8 tokens, the optimum for one merge, where greedy by count stops at 9.</p>
-    <p><b>Coins.</b> {1, 10, 25} fails at 30; the bound says any counterexample is below 25 + 10 = 35, so checking 1–34 decides it. Like <code>nan</code>, the big first choice (25) leaves a remainder (5) that the other coins cover badly, while a smaller first choice (10) leaves a remainder (20) they cover well.</p></div></details>
+    <details class="sol"><summary>Solution</summary><div>
+<div class="code"><div class="ch"><span>lc_997.py · Find the Town Judge, O(n + |trust|)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findJudge(n, trust):
+    score = [0] * (n + 1)
+    for a, b in trust:
+        score[a] -= 1                          # trusting someone disqualifies a
+        score[b] += 1                          # being trusted counts for b
+    for p in range(1, n + 1):
+        if score[p] == n - 1:                  # possible only if in = n-1 and out = 0
+            return p
+    return -1</code></pre></div>
+    <p>The judge has in-degree <var>n</var> − 1 and out-degree 0. Since in-degree ≤ <var>n</var> − 1 and out-degree ≥ 0, in − out = <var>n</var> − 1 happens only in that case, so one score per person suffices.</p>
+<div class="code"><div class="ch"><span>lc_1615.py · Maximal Network Rank, O(n² + m)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def maximalNetworkRank(n, roads):
+    deg = [0] * n
+    road = set()
+    for a, b in roads:
+        deg[a] += 1; deg[b] += 1
+        road.add((min(a, b), max(a, b)))
+    best = 0
+    for a in range(n):
+        for b in range(a + 1, n):
+            best = max(best, deg[a] + deg[b] - ((a, b) in road))   # a shared road counts once
+    return best</code></pre></div>
+    <p>The rank of a pair is the number of roads touching either city: \(\deg a + \deg b\), minus 1 if the road <var>a</var>–<var>b</var> was counted twice.</p>
+<div class="code"><div class="ch"><span>lc_1761.py · Minimum Degree of a Connected Trio, O(m^1.5)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def minTrioDegree(n, edges):
+    adj = [set() for _ in range(n + 1)]
+    for a, b in edges:
+        adj[a].add(b); adj[b].add(a)
+    deg = [len(s) for s in adj]
+    out = [[w for w in adj[v] if (deg[w], w) &gt; (deg[v], v)] for v in range(n + 1)]
+    best = math.inf
+    for u in range(1, n + 1):
+        for v in out[u]:
+            for w in out[v]:
+                if w in adj[u]:                # u, v, w is a trio, found once
+                    best = min(best, deg[u] + deg[v] + deg[w] - 6)
+    return -1 if best == math.inf else best</code></pre></div>
+    <p>The same orientation as <code>count_triangles</code>, so each trio is found once and the loops do \(O(m^{1.5})\) work. A trio's degree is the number of edges leaving it: the three degrees minus the 6 ends of its own three edges. For the id-only bad case, take a star whose centre has id 0 plus a few edges among the leaves: every leaf edge forces a scan of the centre's out-list. For the hub-chunking variation: the top user has 1,480 · 1,479 = 2,188,920 ordered pairs, so 22 chunks of at most 100,000.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em> (3rd edition), chapter 16 (greedy algorithms: activity selection, fractional knapsack, matroids) and section 35.3 (greedy set cover)</li>
-      <li>Kleinberg and Tardos, <em>Algorithm Design</em>, chapter 4 (greedy stays ahead and exchange arguments, named as such)</li>
-      <li>Jeff Erickson, <a href="https://jeffe.cs.illinois.edu/teaching/algorithms/">Algorithms</a> (free textbook), chapter 4 (greedy algorithms)</li>
-      <li>Kozma and Voderholzer, <a href="https://arxiv.org/abs/2411.08671">Theoretical Analysis of Byte-Pair Encoding</a> (paper)</li>
-      <li>Zouhar et al., <a href="https://arxiv.org/abs/2306.16837">A Formal Perspective on Byte-Pair Encoding</a> (paper)</li>
-      <li>Kozen and Zaks, "Optimal bounds for the change-making problem" (Theoretical Computer Science, 1994)</li>
-      <li><a href="https://en.wikipedia.org/wiki/Greedy_algorithm">Greedy algorithm</a>, <a href="https://en.wikipedia.org/wiki/Matroid">Matroid</a>, <a href="https://en.wikipedia.org/wiki/Set_cover_problem">Set cover problem</a> and <a href="https://en.wikipedia.org/wiki/APX">APX</a> (Wikipedia)</li>
+      <li>Chiba and Nishizeki, "Arboricity and Subgraph Listing Algorithms", <em>SIAM Journal on Computing</em> 14(1), 1985 (the O(<var>m</var>·arboricity) bound behind the degree ordering)</li>
+      <li>Schank and Wagner, "Finding, Counting and Listing All Triangles in Large Graphs, an Experimental Study", WEA 2005</li>
+      <li>Latapy, "Main-memory Triangle Computations for Very Large (Sparse (Power-Law)) Graphs", <em>Theoretical Computer Science</em> 407, 2008</li>
+      <li>Suri and Vassilvitskii, "Counting Triangles and the Curse of the Last Reducer", WWW 2011 (skew in distributed triangle counting)</li>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/"><em>Mining of Massive Datasets</em></a>, chapter 10 (counting triangles, also in MapReduce)</li>
+      <li>Gustavson, "Two Fast Algorithms for Sparse Matrices: Multiplication and Permuted Transposition", <em>ACM Transactions on Mathematical Software</em> 4(3), 1978</li>
     </ul></div>
   </div>
 
+  <!-- ============================================================ DESIGN -->
   <div class="blk des">
-    <div class="bh"><span class="kind">Design · choosing the vocabulary budget</span></div>
-    <p><b>The question.</b> You are building a 1 B-parameter model. How large should its vocabulary be?</p>
-    <p><b>First attempt.</b> "As large as the data supports, since longer tokens mean shorter sequences." This ignores what the vocabulary costs inside the model, and a small model feels that cost most.</p>
-    <p><b>The cost, derived.</b> The vocabulary is paid for twice. The input table holds <var>V</var> × <var>d</var> parameters, one row of width <var>d</var> per token. The output layer scores all <var>V</var> tokens at every position, which is a <var>d</var> × <var>V</var> matrix-vector product, about 2<var>Vd</var> operations per token. With <b>tied</b> embeddings the two share one table; untied, there are two.</p>
-    <div class="chart"><div class="t">Share of parameters spent on the vocabulary</div>
-      <div class="br"><span>GPT-2 small · 50,257 × 768, tied</span><span class="tr"><i style="width:31%"></i></span><span class="v">31%</span></div>
-      <div class="br"><span>Llama 3 8B · 128,256 × 4,096, ×2 untied</span><span class="tr"><i style="width:13%"></i></span><span class="v">13%</span></div>
-      <div class="cap">38.6 M of 124 M parameters for GPT-2 small; 1.05 B of 8 B for Llama 3 8B. Small models pay most for a big vocabulary.</div>
-    </div>
-    <p>So the budget is a design decision with three inputs: how much text you have (how many tokens it can support at <var>τ</var> occurrences each, from the ML block), the model's size (what share of parameters you can spend), and the languages and domains you must serve.</p>
-    <p><b>Where BPE uses it.</b> The budget is the <var>k</var> in "choose <var>k</var> merges": <var>V</var> = 256 + <var>k</var> for byte-level BPE, plus any special tokens.</p>
+    <div class="bh"><span class="kind">Design · estimating load and the tail</span></div>
+
+    <h4>1 · Back-of-envelope estimation as a skill</h4>
+    <p><b>The question.</b> If every PYMK load ran the exact two-hop scan online, how much reading would the system do at a billion users?</p>
+    <p><b>First attempt.</b> "A billion users, 200 friends each, so 200 reads per request." That is the number of friend lists read, but it ignores how long each list is, which the ML block showed is the expensive part, and it gives no rate.</p>
+    <p><b>The method.</b> A back-of-envelope estimate has three steps. (1) Write every assumption down and label it, so a reader can change one and redo the arithmetic. (2) Compute with round numbers and powers of ten: a day is 86,400 s, about \(10^5\). (3) Sanity-check the result against something known, and say which assumption it is most sensitive to.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Quantity</th><th>How</th><th class="num">Value</th></tr>
+      <tr><td><em>Assumption:</em> users, daily active share</td><td>1 B users, 50% active per day</td><td class="num">500 M</td></tr>
+      <tr><td><em>Assumption:</em> PYMK loads per active user per day</td><td></td><td class="num">2</td></tr>
+      <tr><td>Requests per day</td><td>500 M × 2</td><td class="num">10⁹</td></tr>
+      <tr><td>Average QPS</td><td>10⁹ / 86,400</td><td class="num">11,574</td></tr>
+      <tr><td><em>Assumption:</em> peak / average</td><td></td><td class="num">3</td></tr>
+      <tr class="hi"><td>Peak QPS</td><td>3 × 11,574</td><td class="num">34,722</td></tr>
+      <tr><td><em>Assumption:</em> mean degree; degree shape as on the week's graph</td><td>\(E[d] = 200\), \(E[d^2]/E[d]^2 = 3.69\)</td><td class="num">200</td></tr>
+      <tr><td>Mean degree of a friend</td><td>200 × 3.69</td><td class="num">738</td></tr>
+      <tr><td>Ids read per request, mean \(E[d^2]\)</td><td>200 × 738</td><td class="num">147,683</td></tr>
+      <tr><td><em>Assumption:</em> 8-byte ids. Bytes per request</td><td>147,683 × 8</td><td class="num">1.18 MB</td></tr>
+      <tr class="hi"><td>Read bandwidth at peak</td><td>34,722 × 1.18 MB</td><td class="num">41 GB/s</td></tr>
+      <tr><td>Friend-list reads per second at peak</td><td>34,722 × 200</td><td class="num">6.9 M</td></tr>
+      <tr><td>Adjacency storage (R.6)</td><td>2 × 10¹¹ entries × 8 B</td><td class="num">1.6 TB</td></tr>
+      <tr><td>Precomputed top 100 per user</td><td>10⁹ × 100 × (8 B id + 4 B score)</td><td class="num">1.2 TB</td></tr>
+    </table></div>
+    <p><b>Reading the result.</b> 41 GB/s of adjacency reads is feasible only on a large cluster, and it is spent mostly on hub lists that matter least. The estimate is most sensitive to the degree-shape assumption: with no variance it would be \(200^2 \times 8 = 320\) KB per request, 3.7 times less. Storing a precomputed answer costs about as much as the graph itself, and serving it is one read per request. That trade (precompute vs online) is Day 3's first design decision.</p>
+
+    <h4>2 · Latency percentiles, defined</h4>
+    <p><b>The question.</b> How do you state "how fast" a service is, when requests differ in cost by a factor of 1,000?</p>
+    <p><b>Definition.</b> For a sample of <var>N</var> latencies sorted as \(x_{(1)} \le \dots \le x_{(N)}\), the <b>q-th percentile</b> (nearest-rank) is \(x_{(\lceil qN/100 \rceil)}\): the smallest value with at least <var>q</var>% of the sample at or below it. <b>p50</b> is the median (half the requests are faster), <b>p95</b> and <b>p99</b> bound all but the slowest 5% and 1%. A service-level objective is usually stated as a percentile: "p99 under 100 ms".</p>
+    <p><b>Why not the mean.</b> The mean is one number for a whole distribution and is pulled by the tail it hides. On the week's graph the work per request has mean 1,477 but median 1,023, p95 3,870, p99 7,284 and max 51,806. A user who opens the app many times a day meets the p99 often: at 100 requests, the chance that none of them is in the slowest 1% is \(0.99^{100} = 37\%\). Day 3 shows how to estimate a p99 from samples and how uncertain it is.</p>
+<div class="code"><div class="ch"><span>tail.py · percentiles and fan-out</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def percentile(xs, q):
+    """Nearest-rank percentile: the smallest sample value with at least q% of the sample at or below it."""
+    s = sorted(xs)
+    return s[max(0, math.ceil(q / 100 * len(s)) - 1)]
+
+
+def p_any_slow(p, n):
+    """A request waits for n independent calls, each slow with probability p."""
+    return 1 - (1 - p) ** n</code></pre></div>
+
+    <h4>3 · The tail at scale: fan-out</h4>
+    <p><b>The question.</b> A PYMK request reads <var>n</var> friend lists in parallel from storage and must wait for all of them. Each read is slow (say, it hits a garbage-collection pause or a busy disk) with probability <var>p</var> = 1%. How often is the request slow?</p>
+    <p><b>First attempt.</b> "1%, since each read is slow 1% of the time." That is right only for <var>n</var> = 1. A request that waits for all of its calls is as slow as its slowest call.</p>
+    <p><b>Derivation.</b> Assume the reads are slow independently. The request is fast only if all <var>n</var> reads are fast, so</p>
+    <div class="eq">\[ P(\text{request fast}) = (1-p)^n, \qquad P(\text{request slow}) = 1 - (1-p)^n . \]</div>
+    <p>Two approximations make it easy to use. For small <var>np</var>, \(1 - (1-p)^n \le np\) by the union bound (the probability that at least one of <var>n</var> events happens is at most the sum of their probabilities), and it is close to <var>np</var>. In general, \(\ln(1-p) \approx -p\) gives \(1 - (1-p)^n \approx 1 - e^{-np}\): once <var>np</var> is about 1, most requests are slow.</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">fan-out n</th><th class="num">1</th><th class="num">10</th><th class="num">15</th><th class="num">100</th><th class="num">200</th><th class="num">1,000</th></tr>
+      <tr><td>p = 1%</td><td class="num">1.0%</td><td class="num">9.6%</td><td class="num">14.0%</td><td class="num">63.4%</td><td class="num">86.6%</td><td class="num">≈100%</td></tr>
+      <tr><td>p = 0.1%</td><td class="num">0.1%</td><td class="num">1.0%</td><td class="num">1.5%</td><td class="num">9.5%</td><td class="num">18.1%</td><td class="num">63.2%</td></tr>
+    </table></div>
+    <p><b>Turned around.</b> For the request to be fast 99% of the time, each call must be fast with probability \(0.99^{1/n}\): at <var>n</var> = 100 that is 0.9999, so the request's p99 is set by each call's <b>p99.99</b>. A backend that looks healthy at its own p99 can make every user-facing request slow.</p>
+    <p><b>On the week's graph.</b> A request fans out to \(\deg(u)\) friend lists: median 15, p99 100, max 1,480. At <var>p</var> = 1%, averaging \(1-(1-p)^{\deg u}\) over users gives 16.6% of requests slow: 14.0% for a median user and essentially 100% for the top hub. At <var>p</var> = 0.1%, 1.9%. A simulation with an <em>assumed</em> read latency (1 ms, or 50 ms with probability 1%, independently) and ten requests per user agrees: 16.8% of requests take 50 ms, so the p50 is 1 ms while the p95 and p99 are both 50 ms.</p>
+    <p><b>What to do about it.</b> The derivation names the levers: make <var>n</var> smaller, make <var>p</var> smaller, or stop waiting for the last call.</p>
+    <ul>
+      <li><b>Fewer calls.</b> Batch reads by storage shard, so a request makes one call per shard rather than one per friend (Day 3 measures shards touched). Cap fan-out (hub capping, sampling on Day 4).</li>
+      <li><b>Hedged requests.</b> If a read has not returned after, say, the p95 delay, send a second copy to another replica and take whichever answers first. If the copies are slow independently, a read is now slow with probability about \(p^2\): at <var>p</var> = 1% and <var>n</var> = 100, the request is slow 1.0% of the time instead of 63.4%. In the simulation (both copies sent at once, a simplification), the share of slow requests falls from 16.8% to 0.21%. The cost is the extra reads, roughly the share of calls that get a second copy.</li>
+      <li><b>Partial results.</b> Give the fan-out a deadline and rank with the lists that arrived. Mutual counts are approximate anyway; the final eligibility check (blocks, privacy, already friends) is not, so it must never be skipped (Day 3).</li>
+    </ul>
+
+    <h4>4 · Hot keys</h4>
+    <p><b>The question.</b> Which friend lists does storage serve most, and how unevenly?</p>
+    <p><b>Derivation.</b> If every user makes one request, list <var>f</var> is read once for each friend of <var>f</var>: \(\deg(f)\) reads. Each read returns \(\deg(f)\) ids, so <var>f</var>'s list costs \(\deg(f)^2\) ids of bandwidth. Read counts follow the degrees; bytes follow the squared degrees. Measured: reads per list have median 15 and maximum 1,480. The top 1% of lists receive 11.1% of the reads but 69.1% of the bytes. The hottest list alone serves 1,480 × 1,480 × 8 B = 17.5 MB per round of requests, against 1.8 KB for a median list. A key that receives far more traffic than average is a <b>hot key</b>; the shard that holds it saturates while the others idle, and adding shards does not help, because the key lives on one shard.</p>
+    <p><b>Mitigations.</b> Replicate hot lists on several shards and spread reads across the copies; cache them close to the servers that compute candidates (Day 3's cache); or skip them (hub capping). All three need the hot set to be known, and the degree tells you which it is before any traffic arrives.</p>
+
+    <h4>5 · Little's law</h4>
+    <p><b>The question.</b> At 34,722 peak QPS and 50 ms per request, how many requests are in progress at once? That number sizes thread pools, connection pools and memory.</p>
+    <p><b>Statement.</b> In any stable system, the average number of items inside, <var>L</var>, equals the arrival rate, <var>λ</var>, times the average time each item spends inside, <var>W</var>: \(L = \lambda W\). It needs no assumption about arrival patterns or service times.</p>
+    <p><b>Why it is true (the area argument).</b> Watch the system for a long time <var>T</var> and let <var>N</var>(<var>t</var>) be the number of items inside at time <var>t</var>. Compute the area under <var>N</var>(<var>t</var>) two ways. Over time, the area is \(\int_0^T N(t)\,dt = L \cdot T\), by the definition of the time-average <var>L</var>. Over items, each item adds 1 to <var>N</var> for exactly as long as it stays, so the area is the sum of the stay times, \(\sum_i W_i = (\lambda T)\cdot W\), with \(\lambda T\) items arriving. Equate the two and divide by <var>T</var>: \(L = \lambda W\). (Items still inside at the edges of the window make a bounded error that vanishes as <var>T</var> grows.) ∎</p>
+    <p><b>Confirm by measuring.</b> A simulated single-server queue with random (Poisson) arrivals at rate 0.8 and random (exponential) service at rate 1, over 200,000 arrivals: measured \(\lambda = 0.8004\), mean time inside \(W = 4.938\), \(\lambda W = 3.952\), and the time-average number inside, measured directly from <var>N</var>(<var>t</var>), \(L = 3.952\). (Queueing theory predicts <var>W</var> = 5 and <var>L</var> = 4 for this queue. The sample's <var>L</var> and <var>W</var> are both a little below that by chance, but they still satisfy \(L = \lambda W\): the law holds for each sample path, up to the edge effects in the proof.)</p>
+    <p><b>Worked example.</b> 34,722 requests/s × 0.050 s = 1,736 requests in flight at peak. If each issues its 200 friend-list reads in parallel, storage sees 1,736 × 200 ≈ 347,000 outstanding reads. If one server can hold 100 requests in flight, the fleet needs at least 18 servers before any headroom, and a slower p99 directly raises <var>W</var> and therefore the concurrency the fleet must absorb.</p>
+
+    <h4>Where PYMK uses it</h4>
+    <p>The estimate says the exact scan cannot run online for every load at a billion users without a very large read budget; that is why the design precomputes (Day 3), caches hot lists (Day 3), and caps and samples (Day 4). Percentiles are how the latency budget is stated, fan-out is why the tail dominates it, and Little's law turns the budget into a fleet size.</p>
+
     <div class="part"><b>Practice</b><ul>
-      <li>A 1 B-parameter model has <var>d</var> = 2,048 and tied embeddings. Compute the embedding share at <var>V</var> = 32k, 128k and 256k, and pick one.</li>
+      <li>Redo the estimate table with 3 loads per active user and a peak factor of 2. Which line changes most?</li>
+      <li>Compute \(1-(1-p)^n\) and \(np\) for <var>p</var> = 0.5% and <var>n</var> = 10, 50, 100. Where does the union bound stop being a good approximation?</li>
+      <li>On the week's graph, compute the share of requests that are slow at <var>p</var> = 1% with hub capping at <var>C</var> = 200 (skipped lists are not read).</li>
+      <li>Simulate a queue with arrival rate 0.9 and service rate 1; check \(L = \lambda W\) and compare <var>W</var> with the rate-0.8 run.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>Same question with untied input and output tables.</li>
-      <li>Your corpus is 1 GB. Estimate how many merges it supports at τ = 100, using the rough rule \(V H_V \le N/\tau\) and the rare-token column above.</li>
-      <li>The model serves English and Hindi equally. How does that change the budget?</li>
+      <li>The <var>n</var> reads are not independent: with probability 0.5% the whole storage tier is slow at once, otherwise reads are slow independently with <var>p</var> = 0.5%. Derive <var>P</var>(request slow) at <var>n</var> = 100. Does hedging help against the shared part?</li>
+      <li>A request issues its reads one after another instead of in parallel. What is its mean latency, and what is its p99?</li>
+      <li>Hedge only after the p95 delay. What fraction of extra reads does that add, and what is the new per-read slow probability?</li>
     </ul></div>
     <details class="sol"><summary>Solution</summary><div>
-    <div class="tablewrap"><table>
-      <tr><th class="num">V</th><th class="num">V × 2,048</th><th class="num">Share of 1 B</th></tr>
-      <tr><td class="num">32,000</td><td class="num">65.5 M</td><td class="num">7%</td></tr>
-      <tr><td class="num">128,000</td><td class="num">262 M</td><td class="num">26%</td></tr>
-      <tr><td class="num">256,000</td><td class="num">524 M</td><td class="num">52%</td></tr>
-    </table></div>
-    <p>256k spends half the model on a lookup table; 32k is cheap but long for anything but English. A reasonable answer is 64k–128k for a multilingual 1 B model, justified with a fertility measurement per language (Day 3). Untied tables double each figure, which pushes the choice down.</p></div></details>
+    <p>Practice 1: requests per day become 1.5 × 10⁹ and average QPS 17,361 (+50%, the largest change), but peak QPS is 2 × 17,361 = 34,722, unchanged, because the peak depends on loads × peak factor, which is 6 in both cases. Every line after "peak QPS" is therefore the same. Practice 2: at <var>p</var> = 0.5%, \(1-(1-p)^n\) is 4.9%, 22.2%, 39.4% against <var>np</var> = 5%, 25%, 50%; the bound is good while <var>np</var> is well below 1. Variation 1: \(P = 0.005 + 0.995\,(1 - 0.995^{100}) = 0.005 + 0.995 \times 0.3942 = 0.3973\); hedging to another replica of the same slow tier does not remove the shared 0.5%. Variation 2: sequential reads add latencies, so the mean is <var>n</var> times the mean read; the p99 is the p99 of a sum, which for many independent reads is close to the mean plus about 2.3 standard deviations of the sum (the normal approximation), far below <var>n</var> times the per-read p99, because slow reads rarely come together. Sequential reads trade a fatter mean for a thinner relative tail; parallel reads have the opposite profile. Variation 3: about 5% extra reads; a read is slow only if the first copy is slow and the second is too, about \(p \cdot p\) when slowness is independent.</p></div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>Karpathy's tokenizer video, the section on vocabulary size and the output layer</li>
+      <li>Jeffrey Dean and Luiz André Barroso, "The Tail at Scale", <em>Communications of the ACM</em> 56(2), 2013 (fan-out, hedged and tied requests)</li>
+      <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, chapter 1 (percentiles, tail latency amplification)</li>
+      <li>John D. C. Little, "A Proof for the Queuing Formula: L = λW", <em>Operations Research</em> 9(3), 1961; <a href="https://en.wikipedia.org/wiki/Little%27s_law">Little's law</a> (Wikipedia)</li>
+      <li>Mor Harchol-Balter, <em>Performance Modeling and Design of Computer Systems</em> (Cambridge University Press, 2013), the chapters on operational laws and Little's law</li>
+      <li>Jeff Dean's "Numbers Everyone Should Know" (latency figures for back-of-envelope estimates, widely reproduced from his talks)</li>
     </ul></div>
   </div>
 
   <div class="check" data-check="day2">
     <div class="ch"><b>Checkpoint · Day 2</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="d2a" data-dim="ml"><span class="tx">Derive why a token seen <var>n</var> times has an embedding with noise ∝ 1/√<var>n</var>.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2b" data-dim="ml"><span class="tx">Reproduce the vocabulary sweep with a held-out split, and measure the leakage when the split comes after training.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2c" data-dim="dsa"><span class="tx">State the greedy-choice property and optimal substructure, and write the induction that makes greedy optimal.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2d" data-dim="dsa"><span class="tx">Prove earliest-finish-first by exchange and by greedy stays ahead; solve 435, 452 and 45.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2e" data-dim="dsa"><span class="tx">Define a matroid and prove that greedy is optimal on one; explain Kruskal as an instance.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2f" data-dim="dsa"><span class="tx">Show exactly where the exchange argument breaks for BPE on the <code>nan</code>/<code>nab</code>/<code>anan</code> corpus, and confirm it with your brute-force search.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2g" data-dim="dsa"><span class="tx">Solve 322 and 139 by dynamic programming, and find a chunk where replay is longer than the shortest split.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2h" data-dim="dsa"><span class="tx">Prove greedy set cover's H(<var>n</var>) bound, and state what is known about greedy BPE's approximation ratio.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2i" data-dim="sys"><span class="tx">Choose a vocabulary size for a 1 B multilingual model and defend it with numbers.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2a" data-dim="ml"><span class="tx">Prove the friendship paradox in both forms (size-biased and per-user), and reproduce 73.8 vs 20 on the week's graph.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2b" data-dim="ml"><span class="tx">Derive \(P(D \ge k) = (m/k)^2\) for preferential attachment and the exponential tail for uniform attachment; measure attachment on the temporal split.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2c" data-dim="ml"><span class="tx">Prove \(E_u[W] = E[d^2]\), state the assumption behind \(E[W \mid d] = d\,E[d^2]/E[d]\), and explain why hubs fall below it.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2d" data-dim="dsa"><span class="tx">Derive the Σ deg² cost of all-pairs mutual counts by the middle friend and by rows, and measure the top 1% share of the work.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2e" data-dim="dsa"><span class="tx">Prove that degree-ordered triangle counting counts each triangle once and does O(m<sup>1.5</sup>) work; solve 1761.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2f" data-dim="dsa"><span class="tx">Solve 997 and 1615, implement hub capping, and explain why it cuts the mean work but not the maximum.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2g" data-dim="sys"><span class="tx">Produce the 1 B-user estimate (QPS, bytes per request, bandwidth, storage) with every assumption labelled.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2h" data-dim="sys"><span class="tx">Derive \(1-(1-p)^n\), compute the fan-out tail on the week's graph, and name three mitigations with their cost.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="p2i" data-dim="sys"><span class="tx">Prove Little's law by the area argument and use it to size in-flight requests at peak.</span><span class="dim sys">System Design</span></label>
   </div>
-</section><div class="pager"><a class="btn" href="day_1.html">← Text as data</a><a class="btn pri" href="day_3.html">Information →</a></div>
+</section>
+<div class="pager"><a class="btn" href="day_1.html">← Graphs and counting</a><a class="btn pri" href="day_3.html">The distributed graph →</a></div>
 <footer>
-  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("BPE from First Principles, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
-  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. Measurements use <em>Alice's Adventures in Wonderland</em> by Lewis Carroll, in the public domain. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original. FLORES+ is distributed by the Open Language Data Initiative under its own license.</p>
+  <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
+  <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
   <p>Part of the self-paced <a href="https://dpaul0501.github.io/ai-engineer-100-labs/">AI Engineer 100</a> guide · <a href="index.html">Week 1</a></p>
 </footer>
 
@@ -902,8 +955,8 @@ simInit(); simRender();
 }
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
-const KEY = "bpe-week-progress-v1";
-const ITEMS = [{"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ml", "page": "index.html"}, {"id": "r1", "dim": "ml", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ai", "page": "index.html"}, {"id": "d1a", "dim": "ml", "page": "day_1.html"}, {"id": "d1b", "dim": "ml", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "ai", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "dsa", "page": "day_2.html"}, {"id": "d2i", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "ml", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "ai", "page": "day_3.html"}, {"id": "d3i", "dim": "ai", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "dsa", "page": "day_4.html"}, {"id": "d4c", "dim": "dsa", "page": "day_4.html"}, {"id": "d4d", "dim": "dsa", "page": "day_4.html"}, {"id": "d4e", "dim": "dsa", "page": "day_4.html"}, {"id": "d4f", "dim": "dsa", "page": "day_4.html"}, {"id": "d4g", "dim": "dsa", "page": "day_4.html"}, {"id": "d4h", "dim": "del", "page": "day_4.html"}, {"id": "d5a", "dim": "dsa", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "dsa", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "ml", "page": "day_5.html"}, {"id": "d5g", "dim": "ai", "page": "day_5.html"}, {"id": "d5h", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "dsa", "page": "worksheet.html"}, {"id": "w4", "dim": "del", "page": "worksheet.html"}, {"id": "w5", "dim": "sys", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "ai", "page": "worksheet.html"}, {"id": "w8", "dim": "ai", "page": "worksheet.html"}, {"id": "c1", "dim": "ml", "page": "worksheet.html"}, {"id": "c2", "dim": "ml", "page": "worksheet.html"}, {"id": "c3", "dim": "dsa", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "dsa", "page": "worksheet.html"}, {"id": "c7", "dim": "dsa", "page": "worksheet.html"}, {"id": "c8", "dim": "ai", "page": "worksheet.html"}, {"id": "c9", "dim": "ai", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "del", "page": "worksheet.html"}];
+const KEY = "pymk-week1-progress-v1";
+const ITEMS = [{"id": "pr1", "dim": "sys", "page": "index.html"}, {"id": "pr2", "dim": "ml", "page": "index.html"}, {"id": "pr3", "dim": "ml", "page": "index.html"}, {"id": "pr4", "dim": "dsa", "page": "index.html"}, {"id": "pr5", "dim": "dsa", "page": "index.html"}, {"id": "pr6", "dim": "dsa", "page": "index.html"}, {"id": "pr7", "dim": "del", "page": "index.html"}, {"id": "pr8", "dim": "sys", "page": "index.html"}, {"id": "pr9", "dim": "sys", "page": "index.html"}, {"id": "p2a", "dim": "ml", "page": "day_2.html"}, {"id": "p2b", "dim": "ml", "page": "day_2.html"}, {"id": "p2c", "dim": "ml", "page": "day_2.html"}, {"id": "p2d", "dim": "dsa", "page": "day_2.html"}, {"id": "p2e", "dim": "dsa", "page": "day_2.html"}, {"id": "p2f", "dim": "dsa", "page": "day_2.html"}, {"id": "p2g", "dim": "sys", "page": "day_2.html"}, {"id": "p2h", "dim": "sys", "page": "day_2.html"}, {"id": "p2i", "dim": "sys", "page": "day_2.html"}, {"id": "p3a", "dim": "ml", "page": "day_3.html"}, {"id": "p3b", "dim": "dsa", "page": "day_3.html"}, {"id": "p3c", "dim": "dsa", "page": "day_3.html"}, {"id": "p3d", "dim": "dsa", "page": "day_3.html"}, {"id": "p3e", "dim": "sys", "page": "day_3.html"}, {"id": "p3f", "dim": "dsa", "page": "day_3.html"}, {"id": "p3g", "dim": "sys", "page": "day_3.html"}, {"id": "p3h", "dim": "sys", "page": "day_3.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

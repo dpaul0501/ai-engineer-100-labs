@@ -15,29 +15,32 @@ DIMENSIONS = [
     {"System Design": "tracks/system-design.md"},
     {"Software Delivery": "tracks/software-delivery.md"},
 ]
-# A week with its own pages (a landing page, one page per day, a worksheet) replaces weeks/week_NN.md in the nav.
-WEEK_PAGES = {
-    "week_01": ("Week 1: Tokenization", [
+# Released weeks, in program order. Each has a landing page (the week reading), one page per day, and a worksheet.
+WEEKS = [
+    ("Week 1: People You May Know", [
         {"Week reading": "week_01/index.html"},
-        {"Day 1: Text as data": "week_01/day_1.html"},
-        {"Day 2: The objective": "week_01/day_2.html"},
-        {"Day 3: Information": "week_01/day_3.html"},
-        {"Day 4: Fast training": "week_01/day_4.html"},
-        {"Day 5: Encoding and serving": "week_01/day_5.html"},
+        {"Day 1: Graphs and counting": "week_01/day_1.html"},
+        {"Day 2: Scale and skew": "week_01/day_2.html"},
+        {"Day 3: The distributed graph": "week_01/day_3.html"},
+        {"Day 4: Approximation and candidates": "week_01/day_4.html"},
+        {"Day 5: Ranking with ML": "week_01/day_5.html"},
         {"Worksheet and learning checks": "week_01/worksheet.html"},
+        {"The talk (slides)": "week_01/talk.html"},
     ]),
-}
+    ("Week 3: Tokenization", [
+        {"Week reading": "week_03/index.html"},
+        {"Day 1: Text as data": "week_03/day_1.html"},
+        {"Day 2: Greedy and the objective": "week_03/day_2.html"},
+        {"Day 3: Information": "week_03/day_3.html"},
+        {"Day 4: Fast training": "week_03/day_4.html"},
+        {"Day 5: Encoding and serving": "week_03/day_5.html"},
+        {"Worksheet and learning checks": "week_03/worksheet.html"},
+    ]),
+]
 
 
 def main() -> None:
-    weeks = []
-    for page in sorted((GUIDE / "docs" / "weeks").glob("week_*.md")):
-        if page.stem in WEEK_PAGES:
-            title, pages = WEEK_PAGES[page.stem]
-            weeks.append({title: pages})
-            continue
-        title = page.read_text(encoding="utf-8").splitlines()[0].lstrip("# ").replace(" · ", ": ", 1)
-        weeks.append({title: f"weeks/{page.name}"})
+    weeks = [{title: pages} for title, pages in WEEKS]
     config_path = GUIDE / "mkdocs.yml"
     config = yaml.safe_load(config_path.read_text())
     config["nav"] = [{"Start here": "index.md"}, {"Month 1 plan": "month_01.md"}, {"Weeks": weeks}, {"By dimension": DIMENSIONS}]

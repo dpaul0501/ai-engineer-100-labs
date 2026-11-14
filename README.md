@@ -6,13 +6,15 @@ The self-paced guide for the [100-day Zero to One AI Engineer program](https://d
 
 ## The weeks
 
-One page per week, released in order. Each week is one build that moves five dimensions forward: **DSA, ML, AI, System Design, and Software Delivery**. Every build goes spec → contract → test → code.
+Each week is built around one hard design problem of the kind top companies ask, and one build that moves five dimensions forward: **DSA, ML, AI, System Design, and Software Delivery**. Every build goes spec → contract → test → code.
 
 | Week | Guide | Tutorial | Lab |
 |---|---|---|---|
-| 1 | [Tokenization](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/) | [Week reading](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/), then [Day 1](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/day_1.html)–[Day 5](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/day_5.html) and the [worksheet](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/worksheet.html) | [`tok`](week_01/) |
+| 1 | [People You May Know](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/) | [Week reading](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/), then [Day 1](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/day_1.html)–[Day 5](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/day_5.html), the [worksheet](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/worksheet.html) and the [talk](https://dpaul0501.github.io/ai-engineer-100-labs/week_01/talk.html) | [`pymk`](week_01/) |
+| 2 | Representation learning (next) | | |
+| 3 | [Tokenization](https://dpaul0501.github.io/ai-engineer-100-labs/week_03/) | [Week reading](https://dpaul0501.github.io/ai-engineer-100-labs/week_03/), then [Day 1](https://dpaul0501.github.io/ai-engineer-100-labs/week_03/day_1.html)–[Day 5](https://dpaul0501.github.io/ai-engineer-100-labs/week_03/day_5.html) and the [worksheet](https://dpaul0501.github.io/ai-engineer-100-labs/week_03/worksheet.html) | [`tok`](week_03/) |
 
-The plan for Weeks 1–4 is in [Month 1](guide/docs/month_01.md). Later weeks are added as they are ready.
+The plan for Month 1 is in [Month 1](guide/docs/month_01.md). Later weeks are added as they are ready.
 
 **By dimension:** [DSA](guide/docs/tracks/dsa.md) · [ML](guide/docs/tracks/ml.md) · [AI](guide/docs/tracks/ai.md) · [System Design](guide/docs/tracks/system-design.md) · [Software Delivery](guide/docs/tracks/software-delivery.md)
 
