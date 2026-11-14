@@ -25,6 +25,16 @@ Statistics and core ML: each idea derived from first principles, checked by meas
     - Confirm by measuring
     - Where PYMK uses it
     - Practice: [295 · Find Median from Data Stream](https://leetcode.com/problems/find-median-from-data-stream/)
+- **[Day 4: Approximation and candidates](../week_01/day_4.html):** sampling estimators and recall against the exact answer
+    - 1 · The question
+    - 2 · First attempt: read the first lists that fit
+    - 3 · The key idea, derived: a uniform sample of friends, scaled up
+    - 4 · Why it is correct: unbiasedness and the variance, proved
+    - 5 · The budgeted version, and its cost
+    - 6 · The fidelity metric: recall@10 against the exact answer
+    - 7 · Hub capping as a bias–variance trade-off
+    - 8 · Confirm by measuring
+    - 9 · Where PYMK uses it
 
 ## Week 3: Tokenization
 

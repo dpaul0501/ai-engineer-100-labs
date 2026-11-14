@@ -29,6 +29,14 @@ Algorithms and data structures taught as subjects: each one posed as a question,
     - 7 · Caching hot adjacency lists
     - 8 · Where PYMK uses it
     - Practice: [146 · LRU Cache](https://leetcode.com/problems/lru-cache/) · [706 · Design HashMap](https://leetcode.com/problems/design-hashmap/) · [981 · Time Based Key-Value Store](https://leetcode.com/problems/time-based-key-value-store/) · [460 · LFU Cache](https://leetcode.com/problems/lfu-cache/)
+- **[Day 4: Approximation and candidates](../week_01/day_4.html):** sketches and walks for candidate generation
+    - 1 · The question: similar friend sets, without the two-hop scan
+    - 2 · MinHash: a signature whose agreements estimate Jaccard
+    - 3 · LSH banding: find the similar pairs without comparing all pairs
+    - 4 · Bloom filters: membership in a few bits per key
+    - 5 · Personalized PageRank: a third candidate source
+    - 6 · Three small structures behind sampling and filtering
+    - Practice: [380 Insert Delete GetRandom O(1)](https://leetcode.com/problems/insert-delete-getrandom-o1/) · [528 Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) · [705 Design HashSet](https://leetcode.com/problems/design-hashset/) · [381 Insert Delete GetRandom O(1) - Duplicates allowed](https://leetcode.com/problems/insert-delete-getrandom-o1-duplicates-allowed/) · [706 Design HashMap](https://leetcode.com/problems/design-hashmap/)
 
 ## Week 3: Tokenization
 

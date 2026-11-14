@@ -16,6 +16,13 @@ Spec → contract → test → code, every week: function contracts, golden, pro
     - Where PYMK uses it
 - **[Day 1: Graphs and counting](../week_01/day_1.html):** checkpoint
     - Write the contract and the golden, property and differential tests for the exact baseline; catch all four planted bugs.
+- **[Day 4: Approximation and candidates](../week_01/day_4.html):** the candidate-budget contract
+    - The question
+    - First attempt: one source, best effort
+    - The key idea: a contract with before and after promises
+    - What is approximate and what must stay exact
+    - Confirm by measuring
+    - Where PYMK uses it
 - **[Worksheet and learning checks](../week_01/worksheet.html):** checkpoint
     - WI-1 Spec and failing tests
     - WI-7 Serving: the final filter and the cache
