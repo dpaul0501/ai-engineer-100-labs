@@ -14,7 +14,7 @@ The weeks after Week 3 are being reordered; their topics are listed below.
 
 ## Week 1 · People You May Know
 
-Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html). The [talk](week_01/talk.html) presents the whole design as slides.
+Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html). The problem grows each day: count mutual friends exactly, see why popular people make it slow, read less with sampling, MinHash and LSH, learn who connects with a model, then take it to a billion users as a system and a product. The [talk](week_01/talk.html) presents the whole design as slides.
 
 - **DSA:** graph representations, traversal, hash counting, set intersection, top-k, triangle counting, consistent hashing, MinHash and LSH, Bloom filters, personalized PageRank, k-way merge
 - **ML:** triadic closure, heavy-tailed degrees and the friendship paradox, percentiles with error bars, sampling estimators and recall@K, link prediction with logistic regression, AUC

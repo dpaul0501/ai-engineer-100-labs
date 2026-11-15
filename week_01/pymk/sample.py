@@ -1,6 +1,6 @@
 """Approximate candidate generation: read fewer adjacency lists.
 
-Two tools. sample_counts is the estimator from Day 4: unbiased, with hypergeometric variance.
+Two tools. sample_counts is the estimator from Day 3: unbiased, with hypergeometric variance.
 budgeted_candidates is the serving policy: never read more than `budget` adjacency entries,
 and optionally never read a hub's list at all.
 """

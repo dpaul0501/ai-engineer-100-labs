@@ -4,21 +4,30 @@ Each week's design problem taken to production: estimates with stated assumption
 
 ## Week 1: People You May Know
 
-- **[Day 2: Scale and skew](../week_01/day_2.html):** estimating load and the tail
-    - 1 · Back-of-envelope estimation as a skill
-    - 2 · Latency percentiles, defined
-    - 3 · The tail at scale: fan-out
-    - 4 · Hot keys
-    - 5 · Little's law
-    - Where PYMK uses it
-- **[Day 3: The distributed graph](../week_01/day_3.html):** the graph store, precompute, incremental updates
-    - The question
-    - A graph store, as a published design describes it
-    - First attempt: compute on request
-    - The key idea: precompute as a self-join
-    - Incremental updates: whose candidates change when u and v connect
-    - Consistency: why the final check runs on every response
-    - Where PYMK uses it
+- **[Day 3: Read less](../week_01/day_3.html):** several sources under one budget
+    - The situation
+    - Try the obvious thing: one source, best effort
+    - The next idea: give each source a fixed share
+    - Measure it: fixed shares against pooling
+    - What may be approximate, and what must stay exact
+    - The whole path
+- **[Day 5: A billion users](../week_01/day_5.html):** how big is a billion users?
+    - The situation
+    - Try the obvious thing
+    - The idea: estimate on paper, with every assumption labelled
+- **[Day 5: A billion users](../week_01/day_5.html):** fast at the tail, fresh, and consistent enough
+    - 1 · Fast: fan-out makes the slow machine everyone's problem
+    - 2 · Hot keys
+    - 3 · Little's law: how many requests are in flight
+    - 4 · Fresh: precompute, or compute on request?
+    - 5 · Incremental updates: when two people connect, whose suggestions change?
+    - 6 · Consistent enough: why the final check runs on every response
+- **[Day 5: A billion users](../week_01/day_5.html):** the product: rules people trust, goals traded off, the whole architecture
+    - 1 · The rules people must be able to trust
+    - 2 · The goals traded off against each other
+    - 3 · The whole architecture, where every box answers a problem from the week
+    - 4 · Training–serving skew, and point-in-time features
+- **[Day 5: A billion users](../week_01/day_5.html):** how to walk an interviewer through it
 
 ## Week 3: Tokenization
 

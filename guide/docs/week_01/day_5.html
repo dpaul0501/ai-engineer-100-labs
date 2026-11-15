@@ -2,8 +2,14 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}
 .pager{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:2.4rem 0 0}
 .pager .btn{text-decoration:none}
+details.deep{border-color:var(--accent);border-left-width:4px;background:var(--accent-soft)}
+details.deep>summary{color:var(--accent)}
+details.deep[open]>summary{border-bottom:1px solid var(--line);margin-bottom:.6rem}
+details.deep>div{padding-top:.2rem}
+p.idea{margin:1.1rem 0;padding:.7rem 1rem;border-left:4px solid var(--trace);background:var(--trace-soft);border-radius:0 8px 8px 0}
+p.idea b{color:var(--trace)}
 </style>
-<title>People You May Know · Ranking with ML</title>
+<title>People You May Know · A billion users</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -273,11 +279,11 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
   <div class="prog" data-prog></div>
   <div class="rail-label">Week 1 · People You May Know</div>
   <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Graphs and counting</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Scale and skew</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>The distributed graph</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Approximation and candidates</a>
-  <a href="day_5.html" class="on" data-page="day_5.html"><span class="n">D5</span>Ranking with ML</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Count it exactly</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Popular people</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Read less</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Learn who connects</a>
+  <a href="day_5.html" class="on" data-page="day_5.html"><span class="n">D5</span>A billion users</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
   <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
@@ -285,567 +291,731 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 
 <main><div class="page">
 <section class="s" id="day5" data-sec="day5">
-  <div class="shead"><span class="sno">DAY 5 · RANKING WITH ML</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">System Design</span></span></div>
-  <h2>From counting mutual friends to a model that ranks them</h2>
-  <p><b>Where we are in the design.</b> Days 1–4 built the left half of the pipeline: a candidate set for each user (friends of friends, made cheap and approximate where it is safe). Today builds the <b>features → ranking</b> boxes and then closes the week. The ML block turns "who will become friends?" into a supervised learning problem, derives the features and the model, and measures them honestly on the week's graph. The Algorithms block merges ranked lists from several shards and sources with a heap. The Design block assembles the full serving architecture, where every box answers a problem found earlier in the week, and shows how to test a new ranker on real users.</p>
-  <div class="dg"><div class="seq"><span class="nd">candidate generation</span><span class="lk">→</span><span class="nd hot">features</span><span class="lk">→</span><span class="nd hot">ranking</span><span class="lk">→</span><span class="nd">filtering and top-k</span><span class="lk">→</span><span class="nd">serving</span></div>
-    <div class="cap">Today's boxes are highlighted. The ranker's job: among about 800 candidates per user, put the few who will actually connect into the 10 slots shown.</div></div>
+  <div class="shead"><span class="sno">DAY 5 · A BILLION USERS</span><span class="dims"><span class="dim sys">System Design</span><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim ai">AI</span></span></div>
+  <h2>A billion users, and a product people trust</h2>
+  <p><b>Where we are.</b> Everything so far ran on one laptop. Ten thousand people, a hundred thousand friendships, all of it in memory; the most expensive request read 51,806 friend ids and still finished at once. Day 1 made the answer exact, Day 2 found why popular people make it slow, Day 3 read less and found almost the same people, and Day 4 learned who will actually connect. Today we make it real: a billion people, thousands of machines, and suggestions that people can trust never to show them someone they blocked.</p>
+  <div class="dg"><div class="seq"><span class="nd hot">how big?</span><span class="lk">→</span><span class="nd">split the graph</span><span class="lk">→</span><span class="nd">fast, fresh, consistent</span><span class="lk">→</span><span class="nd">the product and its architecture</span><span class="lk">→</span><span class="nd">prove it helps</span><span class="lk">→</span><span class="nd">Week 2</span></div>
+    <div class="cap">Today's path. Each step answers a problem the step before it uncovers.</div></div>
 
-  <div class="blk ml">
-    <div class="bh"><span class="kind">ML · link prediction, from first principles</span></div>
+  <!-- ============================================================ 1 · HOW BIG -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">System Design · how big is a billion users?</span></div>
 
-    <h4>1 · The question: predicting friendships that do not exist yet</h4>
-    <p><b>The question.</b> At some moment <var>t</var> we know the friendship graph so far. For a user <var>u</var>, rank <var>u</var>'s candidates by how likely each is to become <var>u</var>'s friend <em>after</em> <var>t</var>. This is <b>link prediction</b>: the graph is the input, a future edge is the thing to predict. On the week's graph, the first 80,000 friendships are the past and the last 20,000 are the future (<code>temporal_split</code> in <code>ref.py</code>).</p>
-    <p><b>First attempt: hide random edges.</b> A common recipe takes the whole graph, hides a random 20% of its edges, and asks the model to recover them. On the week's graph that recipe looks wonderful: ranking by mutual-friend count recovers 14.2% of the hidden friendships in each user's top 10 (95% CI 13.7–14.7%), and 62.5% of them have at least one mutual friend. The honest temporal split gives 5.2% and 48.4%. The random split overstates recall by 2.7×.</p>
-    <p>The reason is leakage from the future. Suppose <var>u</var>–<var>v</var> formed early and was hidden. Later, a friend <var>x</var> of <var>u</var> met <var>v</var> through <var>u</var>, so the edge <var>x</var>–<var>v</var> formed. That later edge is visible in the random split, and it makes <var>x</var> a mutual friend of <var>u</var> and <var>v</var>. The evidence for the hidden edge was <em>caused by</em> the hidden edge. At serving time this cannot happen: nothing after "now" is known.</p>
+    <h4>The situation</h4>
+    <p>An interviewer says: "There are a billion users." Before drawing any boxes, find out what that number does to the code you already have. Which resource runs out first: memory, network, or machines?</p>
 
-    <h4>2 · The key idea: two time cuts, and a precise population</h4>
-    <p><b>Definitions.</b> Order the friendships by formation time. A <b>cut</b> at position <var>c</var> splits them into a <em>feature graph</em> (edges before <var>c</var>) and a <em>label window</em> (edges after it). A pair (<var>u</var>, <var>v</var>) is a <b>positive</b> if it is not an edge of the feature graph and becomes one in the label window. A model needs two cuts: one to learn from, one to be judged on.</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">train</span><span class="seq"><span class="nd">edges 0–59,999 · features</span><span class="nd hot">60,000–79,999 · labels</span><span class="nd" style="opacity:.45">80,000–99,999 · unseen</span></span><span class="why">fit the model's weights</span></div>
-      <div class="step"><span class="k">test</span><span class="seq"><span class="nd">edges 0–79,999 · features</span><span class="nd hot">80,000–99,999 · labels</span></span><span class="why">measure it, exactly as it would be served</span></div>
-    </div><div class="cap">The model never sees a label from the test window, and the test features never use an edge from it. Both cuts keep the order of time.</div></div>
-    <p><b>The evaluation population, precisely.</b> These choices decide every number below, so they are stated once:</p>
-    <ul>
-      <li><b>Users:</b> every user with at least one future friendship: 9,357 users (5 of them had no past friend at all). Each future friendship is counted from both ends, 40,000 (user, future friend) pairs in total.</li>
-      <li><b>Candidates:</b> <var>C</var>(<var>u</var>) = the two-hop candidates of <var>u</var> in the past graph (friends of friends, minus <var>u</var> and <var>u</var>'s friends), the set of Days 1–4. On average 829 per user (median 533, maximum 7,790); 7,757,153 scored pairs in all.</li>
-      <li><b>Positives:</b> <var>C</var>(<var>u</var>) ∩ <var>F</var>(<var>u</var>), where <var>F</var>(<var>u</var>) is <var>u</var>'s future friends: 21,290 pairs, a base rate of 0.274%.</li>
-      <li><b>Misses:</b> a future friend outside <var>C</var>(<var>u</var>) can never be ranked. It stays in the denominator of recall and counts as a miss. Only 53.2% of the 40,000 future (user, friend) pairs are inside the candidate set; averaged per user, the share is 48.4% (95% CI 47.8–49.1%). That is the <b>ceiling</b>: no ranker over two-hop candidates can reach a higher mean recall.</li>
-    </ul>
-    <p><b>Why this is the right test.</b> At serving time the system knows the graph up to "now", scores the candidates it generated, and shows 10. The test cut reproduces exactly that: features from edges 0–79,999 only, candidates from the same graph, and success measured on what happened next. Any quantity computed this way is an estimate of what the deployed ranker would have achieved over that window.</p>
+    <h4>Try the obvious thing</h4>
+    <p>"Run the same <code>suggest</code> on a bigger machine." To judge that, you need the size of the graph and the work per request at a billion users. Nobody will hand you those numbers. You estimate them.</p>
 
-    <h4>3 · Negatives, and their bias</h4>
-    <p>A classifier needs negatives: pairs that did <em>not</em> connect. Which ones you take changes what is learned and what is measured.</p>
-    <p><b>Random users are too easy.</b> Take the same 21,290 positives and, as negatives, 20 random non-friends per user. 91.7% of those random negatives have no mutual friend at all, while every positive has at least one. Counting mutual friends then scores an AUC of 0.969 (AUC is defined in §8; 1 is perfect, 0.5 is chance). Against negatives drawn from the candidate set, the pairs the ranker actually has to separate, the same score reaches only 0.620 (Adamic–Adar, introduced next: 0.984 against 0.805). Random negatives test whether a model can tell a friend of a friend from a stranger, which candidate generation already did.</p>
-    <p><b>Negatives must come from the candidate set</b>, and in training there are too many: 4,541,304 candidate pairs in the training window for 18,322 positives. We keep every positive and each negative independently with probability <var>r</var> = 0.05, giving 244,152 training rows with 7.5% positives. This makes training fast but shifts the model's probabilities upward; §7 derives the exact correction and §11 measures it.</p>
-    <p><b>Negatives are "not yet", not "never".</b> A pair that did not connect in the window may connect later, or may never have been offered the chance. That second problem is exposure bias, and it only appears once a ranker is live (§12).</p>
-
-    <h4>4 · Features: four ways to score a mutual friend</h4>
-    <p><b>The question.</b> Two candidates each share two mutual friends with you. Which is more likely to become your friend? Counting says they tie. The example below, worked by hand, shows why they should not.</p>
-    <div class="dg">
-      <svg viewBox="0 0 600 310" role="img" aria-label="YOU has friends A, B and H. A and B know X; B and the hub H know Y; H also knows Z, P, Q and R." style="width:100%;max-width:600px;height:auto;display:block;margin:0 auto">
-        <g stroke="var(--muted)" stroke-width="1.6" opacity=".7">
-          <line x1="50" y1="150" x2="190" y2="60"/><line x1="50" y1="150" x2="190" y2="150"/><line x1="50" y1="150" x2="190" y2="240"/>
-          <line x1="190" y1="60" x2="330" y2="35"/><line x1="190" y1="150" x2="330" y2="35"/><line x1="190" y1="150" x2="330" y2="95"/>
-          <line x1="190" y1="240" x2="330" y2="95"/><line x1="190" y1="240" x2="330" y2="155"/><line x1="190" y1="240" x2="330" y2="200"/>
-          <line x1="190" y1="240" x2="330" y2="245"/><line x1="190" y1="240" x2="330" y2="290"/>
-        </g>
-        <g font-family="var(--f-mono)" font-size="12" text-anchor="middle">
-          <circle cx="50" cy="150" r="18" fill="var(--accent)"/><text x="50" y="154" fill="var(--panel)" font-weight="600">YOU</text>
-          <circle cx="190" cy="60" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="64" fill="var(--ink)">A</text>
-          <circle cx="190" cy="150" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="154" fill="var(--ink)">B</text>
-          <circle cx="190" cy="240" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="244" fill="var(--ink)">H</text>
-          <text x="190" y="32" fill="var(--muted)" font-size="11">deg 2</text><text x="150" y="128" fill="var(--muted)" font-size="11">deg 3</text><text x="150" y="272" fill="var(--muted)" font-size="11">deg 6</text>
-          <circle cx="330" cy="35" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="39" fill="var(--ink)">X</text>
-          <circle cx="330" cy="95" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="99" fill="var(--ink)">Y</text>
-          <circle cx="330" cy="155" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="159" fill="var(--ink)">Z</text>
-          <circle cx="330" cy="200" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="204" fill="var(--ink)">P</text>
-          <circle cx="330" cy="245" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="249" fill="var(--ink)">Q</text>
-          <circle cx="330" cy="290" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="294" fill="var(--ink)">R</text>
-        </g>
-        <g font-family="var(--f-mono)" font-size="11.5" fill="var(--ink)">
-          <text x="356" y="39">A, B · CN 2 · AA 2.35 · RA 0.83</text>
-          <text x="356" y="99">B, H · CN 2 · AA 1.47 · RA 0.50</text>
-          <text x="356" y="159" fill="var(--muted)">H · CN 1 · AA 0.56 · RA 0.17</text>
-          <text x="356" y="204" fill="var(--muted)">(P, Q, R: same as Z)</text>
-        </g>
-      </svg>
-      <div class="cap">YOU's friends are A (2 friends), B (3) and H, a hub with 6. X and Y both have two mutual friends with YOU, so counting ties them (each candidate is labelled with its mutual friends and scores). Y's evidence comes partly from H, who knows many people; X's comes from two people with small circles.</div></div>
-    <p><b>Definitions.</b> Write \(N(x)\) for the friends of <var>x</var> and \(d_x = |N(x)|\) for its degree. For a candidate pair (<var>u</var>, <var>v</var>):</p>
-    <div class="eq">\[ \text{CN}(u,v) = |N(u)\cap N(v)|, \qquad \text{J}(u,v) = \frac{|N(u)\cap N(v)|}{|N(u)\cup N(v)|}, \qquad \text{AA}(u,v) = \sum_{z \in N(u)\cap N(v)} \frac{1}{\log d_z}, \qquad \text{RA}(u,v) = \sum_{z \in N(u)\cap N(v)} \frac{1}{d_z}. \]</div>
-    <p>CN is common neighbours (Day 1's mutual-friend count). Jaccard (Day 4) divides by the size of the union, \( d_u + d_v - \text{CN} \). Adamic–Adar (AA) and resource allocation (RA) weight each mutual friend <var>z</var> by a decreasing function of <var>z</var>'s degree. Every <var>z</var> in a candidate pair knows both <var>u</var> and <var>v</var>, so \(d_z \ge 2\) and \(\log d_z > 0\). By hand, for YOU: X has Jaccard 2/|{A, B, H}| = 0.67, AA = 1/ln 2 + 1/ln 3 = 1.443 + 0.910 = 2.35, RA = 1/2 + 1/3 = 0.83. Y has the same CN and Jaccard (N(Y) = {B, H}), but AA = 1/ln 3 + 1/ln 6 = 0.910 + 0.558 = 1.47 and RA = 1/3 + 1/6 = 0.50. AA and RA break the tie in X's favour.</p>
-
-    <h4>5 · Why a mutual friend with many friends is weak evidence</h4>
-    <p><b>First attempt: every mutual friend counts 1.</b> That is CN. It treats an introduction by a friend with 2 friends and by a celebrity with 1,480 friends as equally telling. Day 2 showed why that matters here: your friends are biased towards hubs (the mean degree of a friend is 73.8, against 20 for a user), so many candidates are reached only through a hub.</p>
-    <p><b>The key idea, derived from a model of how friendships close.</b> Model one way friendships form: <var>u</var> picks one of its friends <var>z</var> uniformly at random (probability \(1/d_u\)), and <var>z</var> introduces <var>u</var> to one of <var>z</var>'s other friends uniformly at random (probability \(1/(d_z-1)\), since <var>z</var> will not introduce <var>u</var> to <var>u</var>). The introduction reaches <var>v</var> through <var>z</var> only if <var>z</var> is a mutual friend. The paths through different mutual friends are disjoint events, so their probabilities add:</p>
-    <div class="eq">\[ P(u \text{ is introduced to } v) \;=\; \sum_{z \in N(u)\cap N(v)} \frac{1}{d_u}\cdot\frac{1}{d_z - 1} \;=\; \frac{1}{d_u}\sum_{z \in N(u)\cap N(v)} \frac{1}{d_z-1}. \]</div>
-    <p>For one user <var>u</var>, the factor \(1/d_u\) is the same for every candidate, so the ranking is by \( \sum_z 1/(d_z - 1) \): resource allocation, up to the −1. Check it on the example: X gets (1/3)(1/1 + 1/2) = 0.50, Y gets (1/3)(1/2 + 1/5) = 0.23, and Z, P, Q, R get (1/3)(1/5) = 0.067 each. They add up to 0.50 + 0.23 + 4 × 0.067 = 1, as they must here, because every friend-of-friend of YOU is a candidate. A mutual friend's weight falls like 1/<var>d</var> because a popular friend spreads one unit of attention over many people. The week's generator makes 45% of its friendships with exactly this kind of step, so the model is not arbitrary for this graph.</p>
-    <p><b>Where 1/log <var>d</var> comes from.</b> Adamic and Adar (2003) built their score for a different setting: two web pages that share a rare feature are more likely related than two that share a common one, so they weighted each shared feature by 1/log(its frequency). Applied to graphs, the shared "feature" is a mutual friend and its frequency is its degree. 1/log <var>d</var> falls far more slowly than 1/<var>d</var>: going from <var>d</var> = 5 to <var>d</var> = 921 divides the RA weight by 184 but the AA weight only by 4.2. Both discount hubs; they disagree on how much. That is a question for data.</p>
-    <p><b>Confirm by measuring.</b> Take the test-cut candidate pairs with exactly one mutual friend <var>z</var>, bucket them by <var>d<sub>z</sub></var>, and measure how often they connect in the future window. The ratios compare each bucket with the first, using each bucket's median degree:</p>
+    <h4>The idea: estimate on paper, with every assumption labelled</h4>
+    <p>A <b>back-of-envelope estimate</b> is a calculation from round numbers that is right to within a factor of a few. Its job is to tell you which resource breaks first. It has three steps.</p>
+    <ol>
+      <li><b>Write every assumption down, with a label.</b> Then anyone can change one and redo the arithmetic.</li>
+      <li><b>Compute with round numbers.</b> A day is 86,400 seconds, close to 10⁵.</li>
+      <li><b>Sanity-check</b> against something known, and say which assumption the answer is most sensitive to.</li>
+    </ol>
     <div class="tablewrap"><table>
-      <tr><th>deg(z)</th><th class="num">pairs</th><th class="num">became friends</th><th class="num">P(future)</th><th class="num">measured ratio</th><th class="num">1/log d predicts</th><th class="num">1/d predicts</th></tr>
-      <tr><td>2–5 (median 5)</td><td class="num">5,098</td><td class="num">138</td><td class="num">2.71%</td><td class="num">1.000</td><td class="num">1.000</td><td class="num">1.000</td></tr>
-      <tr><td>6–10 (9)</td><td class="num">103,416</td><td class="num">1,398</td><td class="num">1.35%</td><td class="num">0.499</td><td class="num">0.732</td><td class="num">0.556</td></tr>
-      <tr><td>11–20 (15)</td><td class="num">543,888</td><td class="num">4,564</td><td class="num">0.84%</td><td class="num">0.310</td><td class="num">0.594</td><td class="num">0.333</td></tr>
-      <tr><td>21–50 (31)</td><td class="num">748,777</td><td class="num">3,270</td><td class="num">0.44%</td><td class="num">0.161</td><td class="num">0.469</td><td class="num">0.161</td></tr>
-      <tr><td>51–100 (71)</td><td class="num">543,077</td><td class="num">1,206</td><td class="num">0.22%</td><td class="num">0.082</td><td class="num">0.378</td><td class="num">0.070</td></tr>
-      <tr><td>101–300 (169)</td><td class="num">1,010,587</td><td class="num">1,238</td><td class="num">0.12%</td><td class="num">0.045</td><td class="num">0.314</td><td class="num">0.030</td></tr>
-      <tr><td>301+ (921)</td><td class="num">3,968,756</td><td class="num">2,300</td><td class="num">0.058%</td><td class="num">0.021</td><td class="num">0.236</td><td class="num">0.005</td></tr>
+      <tr><th>Assumption</th><th class="num">Value</th><th>Why this value</th></tr>
+      <tr><td>Users</td><td class="num">1,000,000,000</td><td>Given by the interviewer</td></tr>
+      <tr><td>Mean friends per user</td><td class="num">200</td><td>Assumed. For scale, a 2011 study of Facebook's graph reported 721 million active users and 69 billion friendships, a mean near 190 (Ugander et al., Further reading)</td></tr>
+      <tr><td>Bytes per stored friend id</td><td class="num">8</td><td>A 64-bit integer</td></tr>
+      <tr><td>Share of users active each day; PYMK loads per active user</td><td class="num">50%; 2</td><td>Assumed</td></tr>
+      <tr><td>Busiest hour / average hour</td><td class="num">3</td><td>Assumed: traffic follows the clock</td></tr>
+      <tr><td>How much more popular a friend is than a user</td><td class="num">3.69</td><td>Measured on the week's graph (Day 2), assumed to carry over</td></tr>
     </table></div>
-    <p>A mutual friend with a few hundred friends is worth about 1/20 of one with five. Up to degree about 100 the curve follows 1/<var>d</var> almost exactly; beyond that it falls more slowly. A least-squares fit of log P against log <var>d</var> gives a slope of −0.74 (pure 1/<var>d</var> would be −1; 1/log <var>d</var> is much flatter). The flattening is expected: 55% of the graph's friendships form through groups or popular users, routes that do not pass through <var>z</var> at all. Note also that 3,968,756 of these 6.9 million single-mutual pairs (57%) hang off a mutual friend with more than 300 friends: the friendship paradox from Day 2, seen from the candidate side.</p>
-
-    <h4>6 · The other features, and one that hurts</h4>
+    <p>Now the arithmetic, one line at a time.</p>
     <ul>
-      <li><b>Shared groups</b> \( |G(u)\cap G(v)| \): 35% of the graph's friendships form inside a group, so this should carry signal that the friendship graph cannot see.</li>
-      <li><b>Same city</b> (0 or 1). In this synthetic graph city plays no role in how friendships form, so a good model should learn a weight near zero. It is a useful honesty check.</li>
-      <li><b>Degrees</b> \(\log(1+d_u)\), \(\log(1+d_v)\). Sociable users make more friendships in every window, both as the one who reaches out and as the one reached (Day 2's preferential attachment).</li>
+      <li><b>Friendships.</b> Each friendship gives two people one friend each. So a billion people with 200 friends each hold 10⁹ × 200 / 2 = <b>100 billion friendships</b>.</li>
+      <li><b>Storage.</b> Each friendship is stored twice, once in each person's list: <b>200 billion stored ids</b>. At 8 bytes each, <b>1.6 TB</b>. One large server with 256 GB of memory holds a seventh of it, so it takes <b>7 servers</b> just to hold one copy, before replicas.</li>
+      <li><b>Traffic.</b> 500 million active users × 2 loads = 10⁹ requests a day, or 10⁹ / 86,400 = <b>11,574 requests per second</b> on average and <b>34,722</b> in the busiest hour.</li>
+      <li><b>Work per request.</b> The two-hop scan reads every friend's friend list. With 200 friends of 200 friends each: <b>40,000 ids per request</b>. But friends are more popular than average (Day 2's friendship paradox), and on the week's graph that makes the real work 3.69 times larger: about <b>148,000 ids</b>, or 1.2 MB per request.</li>
+      <li><b>Bandwidth.</b> 34,722 requests per second × 148,000 ids × 8 bytes = <b>41 GB of friend lists read every second</b> at peak.</li>
     </ul>
-    <p><b>Why Jaccard does worse than chance here.</b> Jaccard's denominator \(d_u + d_v - \text{CN}\) grows with the candidate's degree, so it pushes sociable candidates down. But sociable candidates are exactly the ones who make new friends: ranking the candidates by their degree alone already gives an AUC of 0.579. Jaccard measures how similar two neighbourhoods are, not how likely a new edge is, and here those point in opposite directions: its AUC on the candidates is 0.417, below the 0.5 of a coin flip (§10).</p>
-    <p><b>Cost.</b> CN, AA and RA are accumulated in the same scan that generates the candidates: for each friend <var>z</var> of <var>u</var> and each friend <var>v</var> of <var>z</var>, add 1, 1/log <var>d<sub>z</sub></var> and 1/<var>d<sub>z</sub></var>. That is O(<var>W</var>(<var>u</var>)) time, Day 2's work per request (mean 1,477 adjacency reads on the full graph), and O(|<var>C</var>(<var>u</var>)|) space. Jaccard then costs O(1) per candidate from CN and the two degrees. Shared groups cost O(|<var>G</var>(<var>u</var>)| + |<var>G</var>(<var>v</var>)|) per candidate with a hash set of <var>u</var>'s groups.</p>
-<div class="code"><div class="ch"><span>ranker/features.py · eight features per candidate, in one two-hop scan</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">FEATURES = ["log_cn", "jaccard", "log_aa", "log_ra", "shared_groups", "same_city", "log_du", "log_dv"]
+    <div class="code"><div class="ch"><span>estimate.py · every input is a labelled assumption</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def estimate(users=1_000_000_000,   # given by the interviewer
+             mean_deg=200,          # ASSUMPTION: mean friends per user
+             id_bytes=8,            # ASSUMPTION: one 64-bit id per stored friend
+             active_share=0.5,      # ASSUMPTION: half the users open the app on a given day
+             loads_per_day=2,       # ASSUMPTION: PYMK loads per active user per day
+             peak_factor=3,         # ASSUMPTION: busiest hour / average hour
+             skew=3.69,             # ASSUMPTION: E[d^2]/E[d]^2 as measured on the week's graph (Day 2)
+             latency_s=0.050):      # ASSUMPTION: time one request spends in the system
+    friendships = users * mean_deg // 2        # each friendship gives two people one friend each
+    entries = 2 * friendships                  # stored once in each person's list
+    qps_avg = users * active_share * loads_per_day / 86_400
+    qps_peak = qps_avg * peak_factor
+    reads_flat = mean_deg * mean_deg           # 200 friends, 200 friends each
+    reads = reads_flat * skew                  # your friends are more popular than you (Day 2)
+    return {
+        "friendships": friendships,
+        "entries": entries,
+        "storage_TB": entries * id_bytes / 1e12,
+        "servers_256GB": math.ceil(entries * id_bytes / 256e9),   # to hold ONE copy in memory
+        "qps_avg": qps_avg,
+        "qps_peak": qps_peak,
+        "reads_flat": reads_flat,
+        "reads_skewed": reads,
+        "read_GB_per_s": qps_peak * reads * id_bytes / 1e9,
+        "in_flight": qps_peak * latency_s,     # Little's law, later today
+        "top100_TB": users * 100 * (8 + 4) / 1e12,   # precomputed (id, score) pairs per user
+    }</code></pre></div>
+    <div class="metrics">
+      <div class="metric"><div class="v">1.6 TB</div><div class="l">of friend lists: big, but it fits on 7 servers</div></div>
+      <div class="metric"><div class="v">34,722</div><div class="l">requests per second at peak</div></div>
+      <div class="metric"><div class="v">~148,000</div><div class="l">ids read per request, spread across many machines</div></div>
+      <div class="metric"><div class="v">41 GB/s</div><div class="l">of reads at peak if every request scans two hops</div></div>
+    </div>
+    <p><b>What breaks first.</b> Not storage: 1.6 TB across a handful of machines is ordinary. What breaks is the <b>reading</b>: a hundred thousand ids per request, from many machines, tens of thousands of times a second, with a heavy tail. The rest of today attacks it from three sides: spread the reads well and cache the hot ones, keep the slowest machine from setting everyone's latency, and do the work before the request arrives.</p>
+    <p class="idea"><b>In one line.</b> Label every assumption, compute in round numbers, and let the estimate tell you which resource to design around; here it is reads per request, not storage.</p>
 
-def pair_features(adj, groups, city, u):
-    """Two-hop candidates of u in the graph adj, and one feature row per candidate."""
-    cn, aa, ra = Counter(), Counter(), Counter()
-    for z in adj[u]:                           # z = a mutual friend of u and v
-        dz = len(adj[z])                       # dz &gt;= 2: z knows u and v
-        for v in adj[z]:
-            if v != u and v not in adj[u]:
-                cn[v] += 1
-                aa[v] += 1.0 / math.log(dz)
-                ra[v] += 1.0 / dz
-    cands = sorted(cn)
-    du, gu = len(adj[u]), set(groups[u])
-    X = np.empty((len(cands), len(FEATURES)))
-    for i, v in enumerate(cands):
-        dv = len(adj[v])
-        X[i] = (math.log1p(cn[v]), cn[v] / (du + dv - cn[v]),  # |N(u) ∪ N(v)| = du + dv - cn
-                math.log1p(aa[v]), math.log1p(ra[v]),
-                len(gu.intersection(groups[v])), city[u] == city[v],
-                math.log1p(du), math.log1p(dv))
-    return cands, X</code></pre></div>
-    <p>The tests compare every row against a brute-force version (set intersections, one pair at a time) on the worked example and on 30 random graphs.</p>
-
-    <h4>7 · Logistic regression, derived</h4>
-    <p><b>The question.</b> We have eight numbers per candidate. How should they be combined into one score? Choosing weights by hand does not scale past two or three features, and the features overlap (CN, AA and RA measure nearly the same thing).</p>
-    <p><b>First attempt: linear regression on 0/1 labels.</b> Fit \( \hat y = w\cdot x + b \) by least squares. The predictions are not probabilities (they go below 0 and above 1), and squared error punishes a confident correct prediction (predict 3 for a positive: error 4) as if it were wrong. We want a model whose output is a probability and a loss that matches a yes/no outcome.</p>
-    <p><b>The model.</b> The <b>odds</b> of an event with probability <var>p</var> are \(p/(1-p)\), any number in (0, ∞); the <b>log-odds</b> or <b>logit</b> is \(\log\frac{p}{1-p}\), any real number. Logistic regression assumes the log-odds are linear in the features, and solves for <var>p</var>:</p>
-    <div class="eq">\[ \log\frac{p}{1-p} = z = w\cdot x + b \quad\Longrightarrow\quad p = \sigma(z) = \frac{1}{1+e^{-z}}, \qquad \sigma'(z) = \frac{e^{-z}}{(1+e^{-z})^2} = \sigma(z)\big(1-\sigma(z)\big). \]</div>
-    <p>A weight now has a meaning: increasing a feature by 1 multiplies the odds by \(e^{w_j}\).</p>
-    <p><b>The loss, from the likelihood.</b> Treat each label \(y_i \in \{0,1\}\) as a coin flip with probability \(p_i = \sigma(z_i)\), independent across pairs. The probability of all the observed labels (the <b>likelihood</b>) is \(\prod_i p_i^{y_i}(1-p_i)^{1-y_i}\): each factor is \(p_i\) when \(y_i = 1\) and \(1-p_i\) when \(y_i = 0\). Maximizing it is the same as minimizing the mean negative log:</p>
-    <div class="eq">\[ \ell(w,b) = -\frac1n\sum_{i=1}^{n}\Big[y_i \log p_i + (1-y_i)\log(1-p_i)\Big]. \]</div>
-    <p>This is the <b>log loss</b>. It is also the <b>cross-entropy</b> between the label distribution (\(y_i\), \(1-y_i\)) and the prediction (\(p_i\), \(1-p_i\)): the average number of nats a code built from the predictions spends on the true labels. A confident wrong prediction costs a lot (\(p = 0.01\) for a positive costs \(-\log 0.01 = 4.6\)); a confident right one costs almost nothing.</p>
-    <p><b>The gradient.</b> For one example, use \(\log p = \log\sigma(z)\) and \(\log(1-p) = \log\sigma(-z)\), with \(\frac{d}{dz}\log\sigma(z) = 1-\sigma(z)\):</p>
-    <div class="eq">\[ \frac{\partial}{\partial z}\Big[-y\log\sigma(z) - (1-y)\log\sigma(-z)\Big] = -y\,(1-p) + (1-y)\,p = p - y. \]</div>
-    <p>By the chain rule, \(\partial z_i/\partial w = x_i\). Put a column of 1s in front of <var>X</var> so the bias is just another weight; then</p>
-    <div class="eq">\[ \nabla \ell = \frac1n X^\top (p - y), \qquad \nabla^2 \ell = \frac1n X^\top S X, \quad S = \operatorname{diag}\big(p_i(1-p_i)\big). \]</div>
-    <p>The gradient reads naturally: each example pushes the weights along its features by its error \(p_i - y_i\).</p>
-    <p><b>Why it is correct: the loss is convex, so gradient descent finds the global minimum.</b> For any direction <var>v</var>, \( v^\top \nabla^2\ell\, v = \frac1n \sum_i p_i(1-p_i)\,(x_i\cdot v)^2 \ge 0 \), because every term is a non-negative weight times a square. A function whose Hessian is positive semidefinite everywhere is convex, and every local minimum of a convex function is a global one. Adding \(\frac{\lambda}{2}\|w\|^2\) (L2 regularization, bias excluded) adds \(\lambda\) to the Hessian on the non-bias weights, which makes the minimum unique and keeps the weights finite even when the data can be separated perfectly or the features are collinear, as CN, AA and RA nearly are.</p>
-    <p><b>The step size, derived.</b> Since \(p(1-p) \le \tfrac14\), the Hessian is bounded: \( v^\top\nabla^2\ell\,v \le \frac{1}{4n}\|Xv\|^2 + \lambda\|v\|^2 \le L\|v\|^2 \) with \( L = \|X\|_2^2/(4n) + \lambda \), where \(\|X\|_2\) is the largest singular value. Taylor's theorem with this bound gives, for the step \(w' = w - g/L\):</p>
-    <div class="eq">\[ \ell(w') \le \ell(w) - \frac1L\|g\|^2 + \frac{L}{2}\cdot\frac{1}{L^2}\|g\|^2 = \ell(w) - \frac{1}{2L}\|g\|^2 . \]</div>
-    <p>So every step lowers the loss unless the gradient is already zero; no step size needs tuning. With \(\lambda > 0\) the loss is also strongly convex, and the error shrinks by at least a factor \(1 - \lambda/L\) per step. <b>Standardizing</b> each feature to mean 0 and standard deviation 1 (with the training set's mean and deviation, reused unchanged at serving) keeps \(\|X\|_2\) small and the problem well conditioned.</p>
-    <p><b>Training on sampled negatives.</b> We kept each negative with probability <var>r</var>. By Bayes' rule, for a pair with features <var>x</var>:</p>
-    <div class="eq">\[ \frac{P(y=1\mid x,\text{kept})}{P(y=0\mid x,\text{kept})} = \frac{P(y=1\mid x)\cdot 1}{P(y=0\mid x)\cdot r} \quad\Longrightarrow\quad \text{logit}_{\text{true}}(x) = \text{logit}_{\text{sampled}}(x) + \log r . \]</div>
-    <p>Sampling multiplies every pair's odds by the same 1/<var>r</var>, so the weights are unchanged and only the bias moves, by exactly \(-\log r\). Rankings are unaffected; probabilities need the correction (§11 measures both).</p>
-<div class="code"><div class="ch"><span>ranker/logreg.py · the model, its loss and gradient, trained by gradient descent</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def sigmoid(z):
-    return 0.5 * (1.0 + np.tanh(0.5 * z))               # = 1/(1+e^-z), without overflow
-
-def loss_grad(w, X, y, lam):
-    """Mean log loss + (lam/2)|w|^2 (bias excluded), and its gradient. X has a column of 1s first."""
-    p = sigmoid(X @ w)
-    eps = 1e-12
-    loss = -np.mean(y * np.log(p + eps) + (1 - y) * np.log(1 - p + eps))
-    reg = np.r_[0.0, w[1:]]
-    return loss + 0.5 * lam * reg @ reg, X.T @ (p - y) / len(y) + lam * reg
-
-def train_logreg(X, y, lam=1e-3, iters=3000):
-    """Full-batch gradient descent with step 1/L, L = ||X||_2^2 / (4n) + lam (the Hessian bound)."""
-    X = np.c_[np.ones(len(X)), X]
-    L = np.linalg.norm(X, 2) ** 2 / (4 * len(y)) + lam
-    w = np.zeros(X.shape[1])
-    for _ in range(iters):
-        _, g = loss_grad(w, X, y, lam)
-        w -= g / L
-    return w
-
-def predict_logit(w, X):
-    return w[0] + X @ w[1:]
-
-def fit_scaler(X):
-    mu, sd = X.mean(0), X.std(0)
-    return mu, np.where(sd &gt; 0, sd, 1.0)
-
-def scale(X, scaler):
-    mu, sd = scaler
-    return (X - mu) / sd
-
-def prior_correct(logit, r):
-    """Negatives were kept with probability r: true log-odds = sampled log-odds + log r."""
-    return logit + math.log(r)</code></pre></div>
-    <p><b>Cost.</b> One gradient step multiplies <var>X</var> (<var>n</var> × <var>d</var>) by a vector twice: O(<var>nd</var>) time, O(<var>nd</var>) space for <var>X</var>. 3,000 steps on 244,152 rows × 9 columns is about 13 billion multiply-adds. Newton's method converges in a few dozen steps but each costs O(<var>nd</var>² + <var>d</var>³); with <var>d</var> = 9 both are cheap. Serving one candidate costs O(<var>d</var>).</p>
-    <p><b>Confirm by measuring.</b> On the training cut, gradient descent reaches a log loss of 0.21534 with a gradient norm of 7.1 × 10⁻⁸; Newton's method on the same objective reaches the same loss, and the two weight vectors differ by at most 2.3 × 10⁻⁵. (scikit-learn was not used; the Newton solver below is the independent check.) The learned weights, on standardized features:</p>
-    <div class="tablewrap"><table>
-      <tr><th>feature</th><th class="num">weight</th><th>reading</th></tr>
-      <tr class="hi"><td>log(1 + AA)</td><td class="num">+1.596</td><td>the strongest signal</td></tr>
-      <tr><td>log(1 + CN)</td><td class="num">−0.825</td><td>with AA held fixed, more mutual friends means they are bigger hubs: weaker evidence each</td></tr>
-      <tr><td>log(1 + RA)</td><td class="num">−0.272</td><td>overlaps with AA; L2 shares the weight between them</td></tr>
-      <tr><td>Jaccard</td><td class="num">+0.192</td><td>small once degrees are in the model</td></tr>
-      <tr><td>shared groups</td><td class="num">+0.256</td><td>signal the friendship graph cannot see</td></tr>
-      <tr><td>same city</td><td class="num">−0.006</td><td>nothing, as it should be: city plays no role in this graph</td></tr>
-      <tr><td>log(1 + d<sub>u</sub>), log(1 + d<sub>v</sub>)</td><td class="num">+0.336, +0.363</td><td>sociable users make more friends</td></tr>
-      <tr><td>bias</td><td class="num">−2.999</td><td>before the prior correction</td></tr>
-    </table></div>
-    <p>A negative weight on CN does not mean mutual friends are bad. CN and AA move together; the model uses their difference to learn a steeper discount for hubs than AA's 1/log <var>d</var>, which is what the measured curve in §5 asked for.</p>
-    <p><b>Where PYMK uses it.</b> This is the ranking box. A linear model over a handful of graph features is a strong baseline for this problem, cheap to serve (nine multiply-adds per candidate), and easy to debug: every weight can be read and checked against the data.</p>
-
-    <h4>8 · Evaluation 1: AUC is the Mann–Whitney statistic</h4>
-    <p><b>The question.</b> One number that says how well a score puts positives above negatives, whatever the threshold.</p>
-    <p><b>First attempt: accuracy.</b> With a base rate of 0.274%, the model "nobody ever becomes friends" is right on 99.73% of candidate pairs. Accuracy rewards ignoring the rare class.</p>
-    <p><b>The key idea.</b> Pick one positive and one negative at random. The <b>AUC</b> is the probability that the score ranks the positive higher, with ties counting half:</p>
-    <div class="eq">\[ \text{AUC} = P(s^+ > s^-) + \tfrac12 P(s^+ = s^-) = \frac{1}{n_+ n_-}\sum_{i \in \text{pos}}\sum_{j \in \text{neg}} \Big( [s_i > s_j] + \tfrac12 [s_i = s_j] \Big). \]</div>
-    <p>It is called the area under the ROC curve because sweeping a threshold from high to low and plotting the true-positive rate against the false-positive rate traces a curve whose area equals exactly this probability. 1 means every positive outranks every negative; 0.5 is a coin flip. By hand: scores (3, 2, 2, 1) with labels (1, 1, 0, 0). The four positive–negative pairs are (3, 2): 1, (3, 1): 1, (2, 2): ½, (2, 1): 1. AUC = 3.5/4 = 0.875.</p>
-    <p><b>Why the rank formula is correct.</b> The double sum costs \(n_+ n_-\) comparisons: 21,290 × 7,735,863 ≈ 1.6 × 10¹¹ on our test set. Sort instead. Give the scores ranks 1 to <var>n</var> from lowest to highest, and assume no ties first. The rank of a positive <var>i</var> is 1 plus the number of items below it, positives and negatives:</p>
-    <div class="eq">\[ R_+ = \sum_{i\in\text{pos}} \text{rank}_i = \sum_{i\in\text{pos}}\big(1 + \#\text{pos below } i\big) + \sum_{i\in\text{pos}} \#\text{neg below } i = \frac{n_+(n_+ + 1)}{2} + U . \]</div>
-    <p>The positives' own ranks among themselves are 1, 2, …, \(n_+\), which sum to \(n_+(n_++1)/2\). What is left, <var>U</var>, counts the (positive, negative) pairs with the positive on top: the Mann–Whitney <var>U</var> statistic. So \(\text{AUC} = \big(R_+ - n_+(n_++1)/2\big)/(n_+n_-)\). With ties, give every member of a tied run the average of the ranks it spans; a positive tied with <var>t</var> negatives then gains <var>t</var>/2, exactly the ½ per tied pair in the definition. On the example, ranks are 4, 2.5, 2.5, 1; \(R_+ = 6.5\); \((6.5 - 3)/4 = 0.875\).</p>
-    <p><b>Cost.</b> O(<var>n</var> log <var>n</var>) for the sort, O(<var>n</var>) for the ranks, O(<var>n</var>) space.</p>
-<div class="code"><div class="ch"><span>ranker/auc.py · Mann–Whitney AUC, and a vectorized, weighted version</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def auc(scores, labels):
-    """P(score of a random positive &gt; score of a random negative), ties count 1/2 (Mann-Whitney)."""
-    s, y = np.asarray(scores, float), np.asarray(labels, bool)
-    order = np.argsort(s, kind="mergesort")
-    s_sorted = s[order]
-    ranks = np.empty(len(s))
-    i = 0
-    while i &lt; len(s):                              # average rank over each run of tied scores
-        j = i
-        while j + 1 &lt; len(s) and s_sorted[j + 1] == s_sorted[i]:
-            j += 1
-        ranks[order[i:j + 1]] = (i + j) / 2 + 1    # ranks are 1-based
-        i = j + 1
-    n_pos, n_neg = y.sum(), (~y).sum()
-    return (ranks[y].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
-
-def auc_weighted(scores, labels, weights=None):
-    """Same AUC, vectorized, with an optional weight per pair (used to bootstrap over users)."""
-    s, y = np.asarray(scores, float), np.asarray(labels, bool)
-    w = np.ones(len(s)) if weights is None else np.asarray(weights, float)
-    order = np.argsort(s, kind="mergesort")
-    s, y, w = s[order], y[order], w[order]
-    starts = np.r_[0, np.flatnonzero(np.diff(s)) + 1]         # first index of each tie group
-    pos = np.add.reduceat(w * y, starts)                      # positive weight per tie group
-    neg = np.add.reduceat(w * ~y, starts)
-    neg_below = np.cumsum(neg) - neg                          # negatives strictly lower
-    return (pos * (neg_below + 0.5 * neg)).sum() / (pos.sum() * neg.sum())</code></pre></div>
-    <p>The weighted version sums, over groups of tied scores, (positive weight) × (negative weight strictly below + half the tied negative weight). With integer weights it equals the plain AUC on duplicated rows (tested), which is what the bootstrap in §9 needs. On a 200,000-pair subsample both functions give 0.810048.</p>
-    <p><b>A caution about pooling.</b> AUC here is pooled over all users' pairs. Features such as <var>d<sub>u</sub></var> are constant within one user, so they change pooled AUC (they separate busy users from quiet ones) without changing any user's ranking. The metric that matches the product is per user.</p>
-
-    <h4>9 · Evaluation 2: what the user sees, recall@10, and error bars over users</h4>
-    <p><b>Definitions.</b> Let \(T_{10}(u)\) be the 10 candidates shown (ties by smaller id, as in Day 1). Then</p>
-    <div class="eq">\[ \text{recall@10}(u) = \frac{|T_{10}(u)\cap F(u)|}{|F(u)|}, \quad \text{precision@10}(u) = \frac{|T_{10}(u)\cap F(u)|}{10}, \quad \text{NDCG@10}(u) = \frac{\sum_{i=1}^{10} [\,v_i \in F(u)\,]/\log_2(i+1)}{\sum_{i=1}^{\min(10,|F(u)|)} 1/\log_2(i+1)} . \]</div>
-    <p>The denominator of recall is all of <var>F</var>(<var>u</var>), including future friends outside the candidate set, so the ceiling of §2 applies. NDCG (normalized discounted cumulative gain) also rewards putting hits near the top: slot <var>i</var> counts \(1/\log_2(i+1)\), and dividing by the best possible ordering puts it in [0, 1]. Each metric is averaged over the 9,357 users.</p>
-<div class="code"><div class="ch"><span>ranker/metrics.py · top-10, recall, precision and NDCG per user</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def top_k(cands, scores, k=10):
-    """The k best candidates; ties by smaller id, as in the exact baseline."""
-    best = heapq.nsmallest(k, range(len(cands)), key=lambda i: (-scores[i], cands[i]))
-    return [cands[i] for i in best]
-
-def recall_at_k(top, future):
-    """Share of u's future friends that appear in the shown list. Friends outside it are misses."""
-    return len(set(top) &amp; future) / len(future)
-
-def precision_at_k(top, future, k=10):
-    return len(set(top) &amp; future) / k
-
-def ndcg_at_k(top, future, k=10):
-    dcg = sum(1 / math.log2(i + 2) for i, v in enumerate(top[:k]) if v in future)
-    ideal = sum(1 / math.log2(i + 2) for i in range(min(k, len(future))))
-    return dcg / ideal</code></pre></div>
-    <p><b>Error bars: resample users, not pairs.</b> Pairs of the same user share that user's degree, friends and future, so they are not independent; the roughly independent unit is the user (the same argument as Day 3's bootstrap for p99, where the unit was the request). Draw 9,357 users with replacement, recompute the mean, repeat 1,000 times, and take the 2.5th and 97.5th percentiles. To compare two rankers, use the <em>same</em> resampled users for both and bootstrap the per-user difference: users who are easy for one ranker are easy for the other, and the paired interval removes that shared variation. For pooled AUC, a resample is just a weight per pair (how many times its user was drawn), so the scores are sorted once and each of the 200 replicates is a weighted pass.</p>
-<div class="code"><div class="ch"><span>ranker/bootstrap.py · percentile interval for a per-user mean</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def bootstrap_ci(per_user, B=1000, alpha=0.05, seed=0):
-    """Percentile CI for the mean of a per-user metric, resampling users with replacement."""
-    rng = np.random.default_rng(seed)
-    x = np.asarray(per_user, float)
-    idx = rng.integers(0, len(x), size=(B, len(x)))
-    means = x[idx].mean(1)
-    return x.mean(), np.quantile(means, alpha / 2), np.quantile(means, 1 - alpha / 2)</code></pre></div>
-    <p><b>Cost.</b> O(<var>B</var>·<var>U</var>) for <var>B</var> resamples of <var>U</var> users, after the per-user metrics are computed once. Never rescore inside the loop.</p>
-
-    <h4>10 · The measured comparison</h4>
-    <p>Everything below uses the test cut of §2 and the model trained on the training cut. Intervals are 95% bootstrap intervals over users (1,000 resamples for the ranking metrics, 200 for AUC).</p>
-    <div class="tablewrap"><table>
-      <tr><th>ranker</th><th class="num">AUC on candidates</th><th class="num">recall@10</th><th class="num">precision@10</th><th class="num">NDCG@10</th></tr>
-      <tr><td>random order (expected)</td><td class="num">0.500</td><td class="num">0.0134</td><td class="num">–</td><td class="num">–</td></tr>
-      <tr><td>Jaccard</td><td class="num">0.417 [0.403, 0.430]</td><td class="num">0.0287 [0.0265, 0.0309]</td><td class="num">0.0101</td><td class="num">0.0215</td></tr>
-      <tr><td>common neighbours (Day 1)</td><td class="num">0.620 [0.610, 0.630]</td><td class="num">0.0524 [0.0496, 0.0554]</td><td class="num">0.0197</td><td class="num">0.0425</td></tr>
-      <tr><td>resource allocation</td><td class="num">0.810 [0.806, 0.814]</td><td class="num">0.0616 [0.0587, 0.0650]</td><td class="num">0.0223</td><td class="num">0.0477</td></tr>
-      <tr><td>Adamic–Adar</td><td class="num">0.805 [0.801, 0.810]</td><td class="num">0.0638 [0.0609, 0.0670]</td><td class="num">0.0230</td><td class="num">0.0501</td></tr>
-      <tr><td>logistic regression, graph features only</td><td class="num">0.821 [0.816, 0.825]</td><td class="num">0.0659 [0.0628, 0.0691]</td><td class="num">0.0242</td><td class="num">0.0521</td></tr>
-      <tr class="hi"><td>logistic regression, all eight features</td><td class="num">0.832 [0.828, 0.836]</td><td class="num">0.0718 [0.0685, 0.0753]</td><td class="num">0.0257</td><td class="num">0.0562</td></tr>
-      <tr><td>ceiling: every candidate-set friend found</td><td class="num">–</td><td class="num">0.484 [0.478, 0.491]</td><td class="num">–</td><td class="num">–</td></tr>
-    </table></div>
-    <div class="chart"><div class="t">recall@10 on the future friendships (mean over 9,357 users)</div>
-      <div class="br"><span>random order</span><span class="tr"><i style="width:15%;--c:var(--muted)"></i></span><span class="v">0.0134</span></div>
-      <div class="br"><span>Jaccard</span><span class="tr"><i style="width:32%;--c:var(--bad)"></i></span><span class="v">0.0287</span></div>
-      <div class="br"><span>common neighbours</span><span class="tr"><i style="width:58%"></i></span><span class="v">0.0524</span></div>
-      <div class="br"><span>resource allocation</span><span class="tr"><i style="width:68%"></i></span><span class="v">0.0616</span></div>
-      <div class="br"><span>Adamic–Adar</span><span class="tr"><i style="width:71%"></i></span><span class="v">0.0638</span></div>
-      <div class="br"><span>LR, graph only</span><span class="tr"><i style="width:73%;--c:var(--ml)"></i></span><span class="v">0.0659</span></div>
-      <div class="br"><span>LR, all features</span><span class="tr"><i style="width:80%;--c:var(--ml)"></i></span><span class="v">0.0718</span></div>
-      <div class="cap">Bars on a 0–0.09 scale. The ceiling (0.484) is off the chart: half of all future friendships are not two-hop candidates at all.</div></div>
-    <p><b>Paired differences</b> (same resampled users for both rankers):</p>
-    <ul>
-      <li>Adamic–Adar vs common neighbours: AUC +0.186 [+0.178, +0.194], recall@10 +0.0114 [+0.0092, +0.0137]. Discounting hubs is the biggest single step.</li>
-      <li>Logistic regression vs Adamic–Adar: AUC +0.027 [+0.025, +0.029], recall@10 +0.0080 [+0.0052, +0.0108], a 12.5% relative gain. Of that, the non-graph features (groups, city) add +0.0059 [+0.0038, +0.0081] recall and +0.011 [+0.010, +0.013] AUC over the graph-only model.</li>
-      <li>Resource allocation vs Adamic–Adar: AUC +0.0042 [+0.0031, +0.0054] but recall@10 −0.0022 [−0.0046, +0.0004]. On the metric users see, they are not distinguishable. A better pooled AUC does not guarantee a better top 10.</li>
-      <li>Jaccard vs common neighbours: recall@10 −0.0238 [−0.0269, −0.0206]. Normalizing by degree throws away the strongest signal (§6).</li>
-    </ul>
-    <p><b>Why the absolute numbers are small.</b> A user forms on average 40,000/9,357 = 4.3 friendships in the future window and has 829 candidates. Even the best ranker finds 0.26 future friends per user in 10 slots (precision 2.57%), more than five times a random order (0.0134). Over half of the misses are structural: those friends were never two-hop candidates. The Algorithms block measures what happens when other candidate sources are added.</p>
-
-    <h4>11 · Calibration: is a 2% prediction really 2%?</h4>
-    <p><b>The question.</b> The ranking only needs scores in the right order. But the system also needs the numbers themselves: to merge lists from different sources (Algorithms block), to decide whether a suggestion is worth a notification, and to report expected value. A model is <b>calibrated</b> if, among all pairs it gives probability <var>p</var>, a fraction <var>p</var> actually connect.</p>
-    <p><b>How to check it.</b> Sort the predictions, cut them into 10 equal-count bins, and compare the mean prediction with the observed rate in each bin (a <b>reliability table</b>). Two summaries: the <b>expected calibration error</b> \( \text{ECE} = \sum_b \frac{n_b}{n} |\bar p_b - \bar y_b| \), and the <b>Brier score</b> \( \frac1n\sum_i (p_i - y_i)^2 \), the squared error of the probabilities.</p>
-<div class="code"><div class="ch"><span>ranker/calibration.py · reliability table and ECE</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def reliability(p, y, bins=10):
-    """Bin by predicted probability (equal-count bins); mean prediction vs observed rate per bin."""
-    p, y = np.asarray(p, float), np.asarray(y, float)
-    order = np.argsort(p)
-    rows = []
-    for chunk in np.array_split(order, bins):
-        rows.append((p[chunk].mean(), y[chunk].mean(), len(chunk)))
-    ece = sum(n * abs(pm - om) for pm, om, n in rows) / len(p)  # expected calibration error
-    return rows, ece</code></pre></div>
-    <p><b>Confirm by measuring</b> on the 7,757,153 test pairs:</p>
-    <div class="tablewrap"><table>
-      <tr><th>bin (low → high)</th><th class="num">predicted, no correction</th><th class="num">predicted, + log r</th><th class="num">observed</th></tr>
-      <tr><td>1</td><td class="num">1.63%</td><td class="num">0.083%</td><td class="num">0.017%</td></tr>
-      <tr><td>2</td><td class="num">1.90%</td><td class="num">0.097%</td><td class="num">0.021%</td></tr>
-      <tr><td>3</td><td class="num">2.19%</td><td class="num">0.112%</td><td class="num">0.029%</td></tr>
-      <tr><td>4</td><td class="num">2.61%</td><td class="num">0.134%</td><td class="num">0.048%</td></tr>
-      <tr><td>5</td><td class="num">3.12%</td><td class="num">0.161%</td><td class="num">0.086%</td></tr>
-      <tr><td>6</td><td class="num">3.78%</td><td class="num">0.196%</td><td class="num">0.114%</td></tr>
-      <tr><td>7</td><td class="num">4.87%</td><td class="num">0.255%</td><td class="num">0.198%</td></tr>
-      <tr><td>8</td><td class="num">6.88%</td><td class="num">0.368%</td><td class="num">0.323%</td></tr>
-      <tr><td>9</td><td class="num">10.67%</td><td class="num">0.595%</td><td class="num">0.566%</td></tr>
-      <tr><td>10</td><td class="num">24.20%</td><td class="num">2.094%</td><td class="num">1.341%</td></tr>
-      <tr class="hi"><td>ECE · Brier</td><td class="num">0.0591 · 0.0115</td><td class="num">0.00135 · 0.00285</td><td class="num">–</td></tr>
-    </table></div>
-    <p>Without the correction, the model trained on 7.5% positives predicts as if 7.5% of pairs connected: a mean prediction of 6.2% against an observed 0.27%. Adding log <var>r</var> = log 0.05 to every logit cuts the ECE 44-fold. The ordering, and so the AUC and recall, is unchanged.</p>
-    <p><b>The part the correction cannot fix: drift.</b> After the correction the model still predicts a mean of 0.41% against 0.27% observed, and in its top 1% it predicts 9.0% against 3.6%. The training window had a base rate of 0.403% (18,322 positives in 4,541,304 pairs); the test window has 0.274%. Both windows add 20,000 friendships, but the graph grew in between, so the same number of new friendships is spread over 71% more candidate pairs. A model's probabilities are calibrated to the period it was trained on. In production this is why a ranker is recalibrated on the most recent window (for example by fitting a one-feature logistic regression on its logit, Platt scaling, or a monotone step function, isotonic regression) more often than it is retrained.</p>
-
-    <h4>12 · Feedback loops and exposure bias</h4>
-    <p><b>The question.</b> Our labels came from a graph that grew without any recommender. Once PYMK is live, most new friendships start from a suggestion, so the next training set records mostly the pairs the current model chose to show. What does a model trained on that learn?</p>
-    <p><b>The bias, derived.</b> Let <var>S</var> = 1 if a pair was shown and <var>Y</var> = 1 if it connected. A pair that is never shown rarely connects whatever its merit, so the logged labels estimate \(P(Y=1 \mid S=1, x)\) at best, only for the kinds of pairs the old model liked. A new model trained on them learns to imitate the old one, and the pairs the old model never showed stay negatives forever. This is a <b>feedback loop</b>; in a social graph it also compounds Day 2's rich-get-richer effect, because positive degree weights show hubs more, hubs gain more friends, and their degree weights grow.</p>
-    <p><b>Confirm by measuring the starting point.</b> The 100 users with the highest past degree (the top 1%) take part in 10.8% of the future friendships. They fill 50.9% of the shown slots when ranking by CN, 41.4% by Adamic–Adar, 43.9% by the logistic regression, 34.2% by the union ranker of the Algorithms block and 22.6% by RA (Jaccard, which penalizes degree, gives them 0.4%). Every useful ranker over-exposes hubs by 2–5× relative to their share of new friendships; a live system would turn that exposure into more hub friendships, and a model retrained on them would learn even larger degree weights.</p>
-    <p><b>The standard fix, and why it works.</b> Show each candidate with a known probability \(\pi(x) > 0\) (most slots by the ranker, a few by controlled randomization: <b>exploration</b>). Weight each logged outcome by \(1/\pi\). Then for any function <var>f</var> of the outcome,</p>
-    <div class="eq">\[ \mathbb{E}\Big[\frac{S}{\pi(x)}\, f(Y)\Big] = \mathbb{E}\Big[\frac{\mathbb{E}[S\mid x]}{\pi(x)}\, f(Y)\Big] = \mathbb{E}\big[f(Y)\big], \]</div>
-    <p>using that <var>S</var> is drawn independently of <var>Y</var> given <var>x</var>, with \(\mathbb{E}[S \mid x] = \pi(x)\). This is <b>inverse propensity weighting</b>: unbiased as long as every candidate has a nonzero chance of being shown, and noisy when \(\pi\) is small, which is why exploration slots cannot be too rare. The week's graph has no impression log, so there is nothing to measure here beyond the exposure shares above; the derivation is the point.</p>
-
-    <h4>13 · Privacy and fairness are constraints, not features</h4>
-    <ul>
-      <li><b>Privacy.</b> A suggestion leaks information: showing <var>v</var> to <var>u</var> "because you have 3 mutual friends" tells <var>u</var> something about <var>v</var>'s friend list, and a suggestion driven by a private signal (an uploaded address book, a hidden group, a location) can reveal that signal. So the eligibility rules (Day 1's contract: not self, not already friends, not blocked, privacy settings respected) are applied as a hard filter on every response, never as a feature weight that a large enough score could outvote. Features may only use data the user has allowed to be used for this purpose.</li>
-      <li><b>Fairness of exposure.</b> Ten slots are a scarce resource. A ranker that learns "sociable people make more friends" gives hubs more of the slots, and quiet or new users fewer, even when they would welcome the connection. Measure who receives exposure (by degree bucket, by account age), as §12 did for the top 1%, and set explicit limits, for example a cap on how many users a hub can be suggested to per day, rather than hoping the model balances it.</li>
-    </ul>
+    <details class="deep"><summary>The math, step by step: why the work per request grows with the square of the degree</summary><div>
+      <p>We want the average number of ids a request reads, and why it is 3.69 times the "200 × 200" guess.</p>
+      <p><b>Small numbers first.</b> In the six-person example, You have friends Ben (4 friends) and Chloe (4 friends). Your request reads 4 + 4 = 8 ids. Your own degree is 2, so "degree × degree" would guess 4. The guess is low because your friends are better connected than you.</p>
+      <p><b>The work of one request.</b> For user <var>u</var>, the request reads the list of every friend <var>f</var>, and that list has \(\deg(f)\) entries. Write \(W(u) = \sum_{f \in N(u)} \deg(f)\), where \(N(u)\) is the set of <var>u</var>'s friends.</p>
+      <p><b>Average over all users.</b> Sum \(W(u)\) over every <var>u</var>. Each person <var>f</var> appears in that double sum once for each of their friends, that is \(\deg(f)\) times, and each time contributes \(\deg(f)\). So \(\sum_u W(u) = \sum_f \deg(f)^2\). Dividing by the number of users <var>n</var>:</p>
+      <div class="eq">\[ \text{mean } W = \frac{1}{n}\sum_f \deg(f)^2 = E[d^2], \]</div>
+      <p>where \(E[d^2]\) is the average squared degree. It is not \(E[d]^2\), the squared average degree.</p>
+      <p><b>Compare the two.</b> On the week's graph \(E[d] = 20.0\) and \(E[d^2] = 1{,}476.8\) (Day 2), so</p>
+      <div class="eq">\[ \frac{E[d^2]}{E[d]^2} = \frac{1476.8}{400} = 3.69 . \]</div>
+      <p>The ratio is \(1 + \mathrm{Var}(d)/E[d]^2\): it is 1 only when everyone has the same degree, and it grows with the spread of degrees. Assuming the same shape at a billion users with \(E[d] = 200\): \(E[d^2] \approx 3.69 \times 40{,}000 \approx 147{,}600\) ids per request (147,683 with the unrounded ratio 3.692).</p>
+      <p><b>What this shows.</b> The mean work is the average <em>squared</em> degree. Storage grows with the degree, reads grow with its square, and a heavy tail multiplies the reads again. That is why reading, not storage, breaks first.</p>
+    </div></details>
 
     <div class="part"><b>Practice</b><ul>
-      <li>Derive \(\nabla\ell = X^\top(p-y)/n\) on paper for <var>n</var> = 2 and <var>d</var> = 1, then confirm it with central differences as the tests do.</li>
-      <li>Compute CN, Jaccard, AA and RA by hand for every candidate of B in the worked example (B's friends are YOU, X and Y).</li>
-      <li>Reproduce the comparison table with <code>day_5_measure.py</code>. Then change <var>r</var> to 0.2 and check that the weights except the bias barely move.</li>
-      <li>Compute per-user AUC (one AUC per user with at least one positive and one negative candidate, then average). Does it order the rankers the same way as pooled AUC?</li>
-      <li>Implement Newton's method (iteratively reweighted least squares) and compare its weights with gradient descent's.</li>
-      <li>Add a recency feature: the number of mutual friends whose friendship with <var>u</var> formed in the last 10,000 edges. Does recall@10 improve?</li>
+      <li>Run <code>estimate()</code>, then <code>estimate(mean_deg=500, id_bytes=4)</code>. What happens to storage, and what happens to reads per request?</li>
+      <li>Estimate the memory to store, for every user, a precomputed top 100 as (8-byte id, 4-byte score) pairs. Compare it with the graph.</li>
+      <li>Mark every number on this page's estimate as given, assumed, measured or derived.</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>A directed follow graph (follow, not friend). Which features become asymmetric, and what does "mutual" mean?</li>
-      <li>Cold start: the 5 evaluation users with no past friend have no two-hop candidates. Which features still work for them?</li>
-      <li>Predict acceptance of a sent request instead of formation of a friendship. Which pairs are now in the training set?</li>
-      <li>Optimize precision@10 directly: why is it not differentiable, and what is a pairwise loss that approximates AUC?</li>
+      <li>Three loads per active user and a peak factor of 2. Which lines of the estimate change?</li>
+      <li>A professional network with mean degree 1,000 and many weak ties. Which conclusion changes?</li>
     </ul></div>
-    <details class="sol"><summary>Solution: Newton's method, the cross-check used above</summary><div>
-<div class="code"><div class="ch"><span>ranker/newton.py · Newton's method on the same objective</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def newton(X, y, lam, iters=30):
-    """Newton's method on the same objective: w &lt;- w - H^-1 g, with H = X^T S X / n + lam (bias excluded)."""
-    X = np.c_[np.ones(len(X)), X]
-    w = np.zeros(X.shape[1])
-    R = lam * np.eye(X.shape[1]); R[0, 0] = 0
-    for _ in range(iters):
-        p = sigmoid(X @ w)
-        g = X.T @ (p - y) / len(y) + R @ w
-        H = (X * (p * (1 - p))[:, None]).T @ X / len(y) + R
-        w -= np.linalg.solve(H, g)
-    return w</code></pre></div>
-    <p>Each step solves the second-order Taylor model of the loss exactly. Because the Hessian is \(X^\top S X/n\), each step is a weighted least-squares problem with weights \(p_i(1-p_i)\), hence the name iteratively reweighted least squares. On the training set it agrees with gradient descent to 2.3 × 10⁻⁵ in every weight. The gradient for <var>n</var> = 2, <var>d</var> = 1: \(\partial\ell/\partial w = \tfrac12[(p_1-y_1)x_1 + (p_2-y_2)x_2]\). For B in the example (friends YOU, X, Y): the candidates are A (via YOU and X) and H (via YOU and Y). Both have CN 2, and AA and RA tie as well: AA = 1/ln 3 + 1/ln 2 = 2.35 and RA = 1/3 + 1/2 = 0.83 for each, since YOU has 3 friends and X and Y have 2 each. Jaccard separates them, the wrong way round for this graph: 2/3 for A but 2/7 for H, whose six friends inflate the union. The tests check these numbers with <code>pair_features</code>. Per-user AUC, recency and <var>r</var> = 0.2 are left for you to measure; the bias should fall by about log(0.2/0.05) = 1.39.</p></div></details>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Degree 500, 4-byte ids.</b> 2.5 × 10¹¹ friendships, 5 × 10¹¹ stored ids, 2.0 TB. Reads per request without skew: 500 × 500 = 250,000, more than six times the 40,000 at degree 200. Storage grows with the degree; reads with its square.</p>
+      <p><b>Precomputed top 100.</b> 10⁹ × 100 × 12 bytes = 1.2 TB, about the size of the graph, and serving it is one key lookup per request. The cost moves from request time to a batch job and to staleness (part 3 below).</p>
+      <p><b>Three loads, peak 2.</b> Average traffic rises to 17,361 requests per second, but the peak is 2 × 17,361 = 34,722, unchanged, because the peak depends on loads × peak factor, which is 6 both times. Every line after the peak stays the same.</p>
+      <p><b>Mean degree 1,000.</b> Storage is 8 TB, still a few dozen servers. Reads per request are 10⁶ before skew: a full two-hop scan per request is out of the question, so precomputation and sampling (Day 3) stop being optimizations and become the design.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ 2 · SPLIT -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · split the graph across machines</span></div>
+
+    <h4>1 · The situation</h4>
+    <p>The friend lists need several machines (call each one a <b>shard</b>). Every server that handles a request must work out, from a user id alone, which shard holds that user's list, without asking anyone. When we add machines, as few lists as possible should move, because every moved list is copied over the network while the service runs. And every shard should hold about the same amount.</p>
+
+    <h4>2 · Try the obvious thing: hash mod N</h4>
+    <p>A <b>hash function</b> turns a user id into a large number that looks random: change the id a little and the number changes completely. The code below uses one called splitmix64. <b>Mod-N sharding</b> puts user <var>k</var> on shard "hash of <var>k</var>, modulo <var>N</var>". It needs no stored state and balances well: with 16 shards on the week's graph, the fullest holds 1.08 times the average.</p>
+    <p><b>Now add one machine.</b> Take keys 0 to 11 and pretend each key hashes to itself:</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">mod 3</span><span class="seq"><span class="nd hot">0</span><span class="nd hot">1</span><span class="nd hot">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span><span class="nd">0</span><span class="nd">1</span><span class="nd">2</span></span><span class="why">the shard of keys 0…11 with 3 shards</span></div>
+      <div class="step"><span class="k">mod 4</span><span class="seq"><span class="nd hot">0</span><span class="nd hot">1</span><span class="nd hot">2</span><span class="nd new">3</span><span class="nd new">0</span><span class="nd new">1</span><span class="nd new">2</span><span class="nd new">3</span><span class="nd new">0</span><span class="nd new">1</span><span class="nd new">2</span><span class="nd new">3</span></span><span class="why">Only keys 0, 1, 2 stay put: <b>3 of 12</b>. The other 9 move.</span></div>
+    </div></div>
+    <p>Almost everything moved, although the new machine only needed a quarter of the keys. Measured on the week's 10,000 users:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Change</th><th class="num">share of users moved</th><th class="num">predicted N/(N+1)</th></tr>
+      <tr><td>16 → 17 shards</td><td class="num">0.9442</td><td class="num">0.9412</td></tr>
+      <tr><td>64 → 65 shards</td><td class="num">0.9845</td><td class="num">0.9846</td></tr>
+      <tr><td>256 → 257 shards</td><td class="num">0.9953</td><td class="num">0.9961</td></tr>
+      <tr><td>16 → 32 shards (doubling)</td><td class="num">0.5014</td><td class="num">1/2</td></tr>
+    </table></div>
+    <p>Adding a 17th machine to 16 would copy 94% of the graph. The ideal is the new machine's fair share, 1/17 = 5.9%, and nothing else.</p>
+    <details class="deep"><summary>The math, step by step: why mod N moves N/(N+1) of the keys</summary><div>
+      <p>We want the share of keys whose shard changes when we go from <var>N</var> to <var>N</var>+1 shards.</p>
+      <p><b>Small numbers first.</b> With <var>N</var> = 3, look at hash values 0 to 11, a block of 3 × 4 = 12 values. A key stays when "value mod 3" equals "value mod 4". That happens for 0, 1, 2 only: 3 of 12, a quarter. So three quarters move, which is <var>N</var>/(<var>N</var>+1) = 3/4.</p>
+      <p><b>In general.</b> Take any block of <var>N</var>(<var>N</var>+1) consecutive hash values. Because <var>N</var> and <var>N</var>+1 share no common factor, the Chinese remainder theorem says each pair (<var>a</var>, <var>b</var>), with <var>a</var> = value mod <var>N</var> and <var>b</var> = value mod (<var>N</var>+1), appears exactly once in the block. A key stays exactly when <var>a</var> = <var>b</var>. The possible equal pairs are (0, 0), (1, 1), …, (<var>N</var>−1, <var>N</var>−1): <var>N</var> of them (<var>b</var> = <var>N</var> matches no <var>a</var>). So <var>N</var> of the <var>N</var>(<var>N</var>+1) values stay, a share of 1/(<var>N</var>+1), and <var>N</var>/(<var>N</var>+1) move. A 64-bit hash spans so many blocks that the partial last block does not matter.</p>
+      <p><b>Doubling.</b> Going from <var>N</var> to 2<var>N</var>, "value mod 2<var>N</var>" equals "value mod <var>N</var>" exactly when value mod 2<var>N</var> is below <var>N</var>: half the time. So half the keys move.</p>
+      <p><b>What this shows.</b> With mod N, nearly every key moves on every resize, because the shard of a key depends on <var>N</var> itself.</p>
+    </div></details>
+
+    <h4>3 · Consistent hashing</h4>
+    <p><b>The idea in plain words.</b> Bend the range of hash values into a circle, the <b>ring</b>. Hash the <em>servers</em> onto the ring too. Each key walks clockwise from its own position and belongs to the first server it meets. Adding a server only takes over the stretch of ring just before it; every other key still meets the same server first.</p>
+    <div class="dg"><svg viewBox="0 0 320 320" width="100%" style="max-width:22rem;display:block;margin:0 auto" role="img" aria-label="A hash ring with servers A, B, C and new server D; key k2 moves from B to D">
+<circle cx="160" cy="160" r="110" fill="none" stroke="var(--line)" stroke-width="3"/>
+<path d="M224.7,71.0 A110,110 0 0,1 264.6,194.0" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linecap="round" opacity=".45"/>
+<circle cx="224.7" cy="71.0" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="238.8" y="56.6" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">A 10</text>
+<circle cx="194.0" cy="264.6" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="201.4" y="292.4" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">B 45</text>
+<circle cx="50.0" cy="160.0" r="9" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="26.0" y="165.0" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">C 75</text>
+<circle cx="264.6" cy="194.0" r="9" fill="var(--panel)" stroke="var(--accent)" stroke-width="2.5"/>
+<text x="287.4" y="206.4" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent)" font-family="var(--f-mono)">D 30</text>
+<rect x="189.5" y="50.9" width="9" height="9" fill="var(--ink)"/>
+<text x="186.0" y="84.1" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k1 5</text>
+<rect x="260.1" y="121.5" width="9" height="9" fill="var(--ink)"/>
+<text x="239.9" y="138.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k2 20</text>
+<rect x="155.5" y="265.5" width="9" height="9" fill="var(--ink)"/>
+<text x="160.0" y="248.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k3 50</text>
+<rect x="90.8" y="244.5" width="9" height="9" fill="var(--ink)"/>
+<text x="110.6" y="232.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k4 60</text>
+<rect x="90.8" y="66.5" width="9" height="9" fill="var(--ink)"/>
+<text x="110.6" y="96.0" text-anchor="middle" font-size="12" fill="var(--ink)" font-family="var(--f-mono)">k5 90</text>
+<text x="160" y="156" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="var(--f-display)">positions 0–99,</text>
+<text x="160" y="172" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="var(--f-display)">clockwise from the top</text>
+</svg><div class="cap">Servers A, B, C at positions 10, 45, 75 (filled). Keys (squares) go clockwise to the next server: k1 (5) → A, k2 (20) → B, k3 (50) and k4 (60) → C, k5 (90) wraps to A. Add server D at 30 (hollow). Only the shaded arc (10, 30] changes owner: k2 moves from B to D. Nothing else moves.</div></div>
+    <p>One point per server balances badly, because the gaps between random points vary a lot. The fix is to give each server many points, its <b>virtual nodes</b>; a server's share is then the sum of many small gaps, which evens out. Looking up a key is a binary search in the sorted list of points.</p>
+    <div class="code"><div class="ch"><span>consistent_hash.py · splitmix64, mod N, a ring with virtual nodes, rendezvous</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import bisect
+
+MASK = (1 &lt;&lt; 64) - 1
+
+def h64(x):
+    """splitmix64: a fast, well-mixed 64-bit hash of a non-negative integer."""
+    z = (x + 0x9E3779B97F4A7C15) &amp; MASK
+    z = ((z ^ (z &gt;&gt; 30)) * 0xBF58476D1CE4E5B9) &amp; MASK
+    z = ((z ^ (z &gt;&gt; 27)) * 0x94D049BB133111EB) &amp; MASK
+    return z ^ (z &gt;&gt; 31)
+
+def mod_shard(key, n):
+    return h64(key) % n                       # the shard of a key among n shards
+
+class Ring:
+    """Consistent hashing with v virtual nodes per server."""
+    def __init__(self, servers, v=100, salt=0):
+        self.v, self.salt = v, salt
+        self.points = []                      # sorted list of (position, server)
+        for s in servers:
+            self.add(s)
+
+    def _positions(self, s):
+        # salt the server id: hashing raw (s, i) like a key would put key i exactly on a point
+        base = h64(s ^ (self.salt &lt;&lt; 32) ^ 0x632BE59BD9B4E019)
+        return [h64((base + i) &amp; MASK) for i in range(self.v)]
+
+    def add(self, s):
+        for p in self._positions(s):
+            bisect.insort(self.points, (p, s))
+
+    def remove(self, s):
+        self.points = [(p, t) for p, t in self.points if t != s]
+
+    def lookup(self, key):
+        i = bisect.bisect_left(self.points, (h64(key), -1))
+        return self.points[i % len(self.points)][1]   # first point clockwise; wrap at the end
+
+def rendezvous(key, servers):
+    """Highest-random-weight hashing: the server with the largest h(key, server) wins."""
+    return max(servers, key=lambda s: h64(h64(key) ^ (s * 0xD6E8FEB86659FD93 &amp; MASK)))</code></pre></div>
+    <p><b>Use it.</b> On the week's users with 16 servers and 100 virtual nodes each, adding a 17th server moved 6.02% of users, every one of them to the new server (the ideal is 5.88%). Removing server 3 moved exactly the 6.13% of users it held. How evenly do servers share the ring, as the number of virtual nodes grows?</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">virtual nodes per server</th><th class="num">points on the ring</th><th class="num">spread of shares (std / mean)</th><th class="num">predicted</th><th class="num">largest share / mean</th></tr>
+      <tr><td class="num">1</td><td class="num">16</td><td class="num">0.915</td><td class="num">0.939</td><td class="num">3.36</td></tr>
+      <tr><td class="num">10</td><td class="num">160</td><td class="num">0.303</td><td class="num">0.305</td><td class="num">1.62</td></tr>
+      <tr class="hi"><td class="num">100</td><td class="num">1,600</td><td class="num">0.096</td><td class="num">0.097</td><td class="num">1.18</td></tr>
+      <tr><td class="num">1,000</td><td class="num">16,000</td><td class="num">0.031</td><td class="num">0.031</td><td class="num">1.06</td></tr>
+    </table></div>
+    <p>With one point per server, the fullest server holds 3.36 times its fair share; with 100 points, 1.18 times. Growth also becomes predictable. Over 100 random ring layouts, adding the 17th server moved 0.0617 of users on average with one point per server and 0.0580 with 100, but the worst layout moved 0.2915 with one point and only 0.0820 with 100.</p>
+    <p><b>A pitfall worth testing for.</b> Hash servers and keys from different inputs. If virtual node <var>i</var> of server 0 is hashed exactly like user <var>i</var>, users 0 to 999 land exactly on server 0's points, and with 1,000 virtual nodes server 0 ends up with 2.51 times its share. The code salts the server id, and the tests check that no key sits on a server point.</p>
+    <p class="idea"><b>In one line.</b> Consistent hashing moves only about 1/(N+1) of the keys when a server joins, all of them to the new server; virtual nodes keep the shares even.</p>
+    <details class="deep"><summary>The math, step by step: only the new server gains keys, about K/(N+1) of them, and virtual nodes cut the spread to about 1/√V</summary><div>
+      <p><b>Claim 1: every key that moves, moves to the new server.</b> The old server points stay where they were. A key's owner is the first point clockwise from it. After the addition, that first point is either an old point, and then it is the same old point as before (no old point appeared in between), or it is one of the new server's points. So a key either keeps its owner or goes to the new server. Removing a server is the same argument in reverse: only its own keys move, each to the next point clockwise.</p>
+      <p><b>Claim 2: about K/(N+1) of K keys move.</b> Treat the <var>N</var>+1 servers' points as independent random positions. Fix one key. It moves exactly when the first point clockwise from it belongs to the new server. All <var>N</var>+1 servers are placed by the same random rule, so each is equally likely to own that first point: the chance is 1/(<var>N</var>+1). Add this up over <var>K</var> keys (the expected count of a sum is the sum of the expected counts): <var>K</var>/(<var>N</var>+1) keys move on average. For 10,000 users and 17 servers, that is 588.</p>
+      <p><b>Why one point per server is uneven.</b> Put <var>M</var> random points on a ring of length 1. A server's share is the gap before its point. That gap is longer than <var>x</var> exactly when the other <var>M</var>−1 points all miss the stretch of length <var>x</var> before it, which has probability \((1-x)^{M-1}\). Averaging over <var>x</var>:</p>
+      <div class="eq">\[ E[\text{gap}] = \int_0^1 (1-x)^{M-1}\,dx = \frac{1}{M}, \qquad E[\text{gap}^2] = \int_0^1 2x(1-x)^{M-1}\,dx = \frac{2}{M(M+1)} . \]</div>
+      <p>So the variance is \( \frac{2}{M(M+1)} - \frac{1}{M^2} = \frac{M-1}{M^2(M+1)} \) and the standard deviation divided by the mean is \(\sqrt{(M-1)/(M+1)}\), almost 1: the spread is as large as the share itself.</p>
+      <p><b>With V virtual nodes.</b> Now there are <var>M</var> = <var>NV</var> points and a server's load <var>L</var> is the sum of its <var>V</var> gaps. The gaps always add to 1, so the variance of their total is 0. Writing that out, \(M\,\mathrm{Var} + M(M-1)\,\mathrm{Cov} = 0\), fixes the covariance between two gaps: \(\mathrm{Cov} = -\mathrm{Var}/(M-1)\). For one server's <var>V</var> gaps:</p>
+      <div class="eq">\[ \mathrm{Var}(L) = V\,\mathrm{Var} + V(V-1)\,\mathrm{Cov} = \frac{V(M-V)}{M^2(M+1)} = \frac{N-1}{N^2(NV+1)} . \]</div>
+      <p>Divide its square root by the mean load 1/<var>N</var>: \(\text{std}/\text{mean} = \sqrt{(N-1)/(NV+1)} \approx 1/\sqrt{V}\). With <var>N</var> = 16 and <var>V</var> = 100 that is \(\sqrt{15/1601} = 0.097\), the "predicted" column of the table.</p>
+      <p><b>What was shown.</b> Adding a server moves only keys that go to it, about <var>K</var>/(<var>N</var>+1) on average, and <var>V</var> virtual nodes shrink the unevenness of shares by a factor of about √<var>V</var>.</p>
+    </div></details>
+
+    <h4>4 · Rendezvous hashing</h4>
+    <p><b>The idea.</b> For each key, score every server with a hash of the pair (key, server) and pick the highest score. There is no ring and nothing to store except the list of servers. When a server joins, a key moves only if the new server's score is the new maximum, which happens for about 1/(<var>N</var>+1) of keys, and then it moves to the new server. Measured: adding a 17th server moved 0.0577 of users, and the fullest of 16 servers held 1.05 times the average.</p>
+    <p><b>When to use which.</b> A rendezvous lookup computes one hash per server, so it is ideal for a few dozen servers or for choosing among replicas and caches, and easy to weight. The ring's binary search wins when there are thousands of servers.</p>
+
+    <h4>5 · Scatter-gather: how many machines one request touches</h4>
+    <p><b>The situation.</b> Your request reads every friend's list, and those lists now live on different shards. One call per friend means one network round trip per friend.</p>
+    <p><b>The idea.</b> Group your friends' ids by shard and send one call per shard, all at once (the <b>scatter</b>); then add up the answers (the <b>gather</b>). For example, friends 3, 8, 11, 14 and 21 on 4 shards (shard = id mod 4) fall on shards 3, 0, 3, 2, 1: four calls instead of five.</p>
+    <div class="code"><div class="ch"><span>fanout.py · shards touched, batching, cross-shard edges</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import defaultdict
+
+def shards_touched(adj, u, shard_of):
+    """The distinct shards a two-hop request must read: one per shard holding a friend's list."""
+    return {shard_of(f) for f in adj[u]}
+
+def batch_by_shard(friends, shard_of):
+    """Group the keys to read by shard: one RPC per shard instead of one per friend."""
+    batches = defaultdict(list)
+    for f in friends:
+        batches[shard_of(f)].append(f)
+    return batches
+
+def expected_shards(d, s):
+    """E[distinct shards] when d keys land uniformly on s shards."""
+    return s * (1 - (1 - 1 / s) ** d)
+
+def cross_shard_fraction(edges, part):
+    return sum(part[u] != part[v] for u, v, *_ in edges) / len(edges)</code></pre></div>
+    <p><b>Use it.</b> Every one of the 10,000 users as the requester, lists placed by hash:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">shards</th><th class="num">shards touched, mean</th><th class="num">predicted</th><th class="num">median</th><th class="num">p99</th><th class="num">max</th><th class="num">friends, mean</th></tr>
+      <tr><td class="num">16</td><td class="num">10.05</td><td class="num">10.05</td><td class="num">10</td><td class="num">16</td><td class="num">16</td><td class="num">20.0</td></tr>
+      <tr><td class="num">64</td><td class="num">15.48</td><td class="num">15.47</td><td class="num">14</td><td class="num">51</td><td class="num">64</td><td class="num">20.0</td></tr>
+      <tr><td class="num">256</td><td class="num">18.23</td><td class="num">18.23</td><td class="num">15</td><td class="num">83</td><td class="num">255</td><td class="num">20.0</td></tr>
+    </table></div>
+    <p>Batching saves little once there are more shards than a typical user has friends: nearly every friend is on a different shard. At a billion users with 200 friends each and 1,000 shards, a typical request touches about 181 shards; with 10,000 shards, about 198. Hold that number: the next block shows what it does to latency.</p>
+    <details class="deep"><summary>The math, step by step: expected shards touched</summary><div>
+      <p>We want the average number of distinct shards among <var>d</var> friends placed independently and uniformly on <var>S</var> shards.</p>
+      <p><b>One shard at a time.</b> A given shard holds none of the <var>d</var> friends when each friend independently lands elsewhere, with probability \(1 - 1/S\) each: \((1-1/S)^d\) in all. So it is touched with probability \(1 - (1-1/S)^d\).</p>
+      <p><b>Add over shards.</b> The expected number of touched shards is the sum of these probabilities over the <var>S</var> shards:</p>
+      <div class="eq">\[ E[\text{shards touched}] = S\Big(1 - \big(1 - \tfrac{1}{S}\big)^{d}\Big). \]</div>
+      <p><b>Plug in.</b> <var>d</var> = 20, <var>S</var> = 16: \(16(1 - (15/16)^{20}) = 11.6\). <var>d</var> = 200, <var>S</var> = 1,000: \(1000(1 - 0.999^{200}) = 181.4\). When <var>d</var> is small compared with <var>S</var>, \((1-1/S)^d \approx 1 - d/S\) and the answer is close to <var>d</var>: one shard per friend. When <var>d</var> is much larger than <var>S</var>, it approaches <var>S</var>: every shard. The table's "predicted" column averages this formula over the real degrees, and it is lower than the value at the mean degree because the curve bends downward.</p>
+      <p><b>What was shown.</b> Under hashing, a request touches about one shard per friend until the friend count approaches the number of shards.</p>
+    </div></details>
+
+    <h4>6 · Hash or locality: placing friends together</h4>
+    <p>A friendship <b>crosses shards</b> when the two friends live on different shards. Hashing places people independently, so a friendship crosses with probability 1 − 1/<var>S</var>: 93.8% with 16 shards, and measured 0.937. The alternative is <b>locality</b>: try to put friends on the same shard. A simple heuristic packs each user's main group onto a shard, then moves users towards the shard holding most of their friends while that shard has room.</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">shards</th><th>placement</th><th class="num">friendships crossing shards</th><th class="num">shards touched, mean</th><th class="num">fullest shard / mean</th></tr>
+      <tr><td class="num">16</td><td>hash</td><td class="num">0.937</td><td class="num">10.05</td><td class="num">1.08</td></tr>
+      <tr><td class="num">16</td><td>groups, then move to friends</td><td class="num">0.733</td><td class="num">8.46</td><td class="num">1.05</td></tr>
+      <tr><td class="num">64</td><td>hash</td><td class="num">0.984</td><td class="num">15.48</td><td class="num">1.17</td></tr>
+      <tr><td class="num">64</td><td>groups, then move to friends</td><td class="num">0.809</td><td class="num">12.69</td><td class="num">1.06</td></tr>
+    </table></div>
+    <p>The gain is real but modest on this graph: one in five friendships goes to a random popular user, the largest group has 3,035 members (more than a shard holds), and city is no better (only 12.5% of friendships are within a city, and the largest city holds 27.7% of users). Published partitioners report bigger gains on real social graphs (Further reading). The price is that a user's shard can no longer be computed from the id: every server needs a <b>directory</b> from user to shard, and the placement must be redone as the graph changes.</p>
+    <p class="idea"><b>In one line.</b> Hashing is simple and balanced but scatters friends; locality saves shards per request at the price of a directory and ongoing re-placement.</p>
+
+    <h4>7 · Caching the hot lists</h4>
+    <p><b>The situation.</b> Your request reads the list of each of your friends. So a person's list is read once for each of their friends: <b>a list is read as often as its owner has friends</b>. That is Day 2's friendship paradox, seen from the storage side. Popular people's lists are read most often, and they are also the longest.</p>
+    <p><b>The obvious cache</b> is <b>LRU</b> (least recently used): keep the most recently read lists and throw out the one unused for longest. It needs a hash map from key to entry, for finding an entry at once, and a list in order of use, for moving an entry to the front and dropping the last one, also at once.</p>
+    <div class="code"><div class="ch"><span>lru.py · LeetCode 146 with OrderedDict (a hash map plus a recency order)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import OrderedDict
+
+class LRUCache:
+    """LeetCode 146. get/put in O(1): a hash map plus a recency order."""
+    def __init__(self, capacity):
+        self.cap = capacity
+        self.d = OrderedDict()                 # least recent first
+
+    def get(self, key):
+        if key not in self.d:
+            return -1
+        self.d.move_to_end(key)                # now the most recent
+        return self.d[key]
+
+    def put(self, key, value):
+        if key in self.d:
+            self.d.move_to_end(key)
+        self.d[key] = value
+        if len(self.d) &gt; self.cap:
+            self.d.popitem(last=False)         # evict the least recent</code></pre></div>
+    <p><b>Use it, against the simplest alternative:</b> a fixed cache of the most popular people's lists, chosen by degree before any traffic arrives. 20,000 requests from users picked at random, 397,439 list reads:</p>
+    <div class="chart"><div class="t">Share of reading served by the cache</div>
+      <div class="sub">by number of list reads</div>
+      <div class="br"><span>LRU, 1% of lists</span><span class="tr"><i style="width:2.9%;--c:var(--ai)"></i></span><span class="v">0.029</span></div>
+      <div class="br"><span>top-degree, 1%</span><span class="tr"><i style="width:11.2%"></i></span><span class="v">0.112</span></div>
+      <div class="br"><span>LRU, 10%</span><span class="tr"><i style="width:19.8%;--c:var(--ai)"></i></span><span class="v">0.198</span></div>
+      <div class="br"><span>top-degree, 10%</span><span class="tr"><i style="width:32.1%"></i></span><span class="v">0.321</span></div>
+      <div class="sub">by ids read (bytes)</div>
+      <div class="br"><span>LRU, 1% of lists</span><span class="tr"><i style="width:22.8%;--c:var(--ai)"></i></span><span class="v">0.228</span></div>
+      <div class="br"><span>top-degree, 1%</span><span class="tr"><i style="width:69.5%"></i></span><span class="v">0.695</span></div>
+      <div class="br"><span>LRU, 10%</span><span class="tr"><i style="width:68.6%;--c:var(--ai)"></i></span><span class="v">0.686</span></div>
+      <div class="br"><span>top-degree, 10%</span><span class="tr"><i style="width:84.1%"></i></span><span class="v">0.841</span></div>
+      <div class="cap">Caching the 100 most popular people's lists (1% of users, 22,269 of 200,000 stored ids) serves 69.5% of all ids read. LRU wastes room on lists read once.</div>
+    </div>
+    <p>When each request picks its lists at random with fixed odds, the best fixed cache simply holds the most likely lists, and here the odds follow the degree, so the top-degree cache wins. LRU's strength is adapting when popularity shifts; in practice the two are combined (pin the hubs, LRU for the rest).</p>
+    <p><b>Coalescing.</b> When many requests in flight at once need the same list, send one read and share the answer. Over windows of 10, 100 and 1,000 concurrent requests, this removed 2.9%, 17.2% and 61.7% of reads. It also protects a shard when a hot list falls out of the cache and a crowd of requests misses at the same moment.</p>
+    <p class="idea"><b>In one line.</b> A list is read as often as its owner has friends, so pin the hub lists in cache and coalesce concurrent reads of the same list.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/lru-cache/">146 · LRU Cache</a>: write it with <code>OrderedDict</code>, then with the doubly linked list spelled out. Why must the map store the node, not the value?</li>
+      <li><a href="https://leetcode.com/problems/design-hashmap/">706 · Design HashMap</a>: separate chaining with resizing; show that <code>put</code> is O(1) on average over many calls.</li>
+      <li><a href="https://leetcode.com/problems/time-based-key-value-store/">981 · Time Based Key-Value Store</a>: values with timestamps; you will reuse it for point-in-time features below.</li>
+      <li>Rerun the shards-touched measurement with the top 1% of users' lists copied to every shard. How much do the mean and the p99 fall?</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Servers of two sizes (2× and 1×). Adapt the ring and rendezvous hashing so each server's expected share is proportional to its size.</li>
+      <li><a href="https://leetcode.com/problems/lfu-cache/">460 · LFU Cache</a>: evict the least <em>frequently</em> used key. When does it beat LRU on PYMK traffic, and when does it fail?</li>
+      <li>Store each friendship on the shard of hash(<var>u</var>, <var>v</var>) instead of by user. What does a two-hop request cost now?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>lru_scratch.py · LeetCode 146 with the list written out</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Node:
+    __slots__ = ("key", "val", "prev", "next")
+    def __init__(self, key=0, val=0):
+        self.key, self.val, self.prev, self.next = key, val, None, None
+
+class LRUFromScratch:
+    """The same cache with the doubly linked list written out. Sentinels avoid edge cases."""
+    def __init__(self, capacity):
+        self.cap, self.map = capacity, {}
+        self.head, self.tail = Node(), Node()  # head.next = most recent, tail.prev = least recent
+        self.head.next, self.tail.prev = self.tail, self.head
+
+    def _unlink(self, x):
+        x.prev.next, x.next.prev = x.next, x.prev
+
+    def _push_front(self, x):
+        x.prev, x.next = self.head, self.head.next
+        self.head.next.prev = x
+        self.head.next = x
+
+    def get(self, key):
+        x = self.map.get(key)
+        if x is None:
+            return -1
+        self._unlink(x); self._push_front(x)
+        return x.val
+
+    def put(self, key, value):
+        x = self.map.get(key)
+        if x:
+            x.val = value
+            self._unlink(x); self._push_front(x)
+            return
+        if len(self.map) == self.cap:
+            lru = self.tail.prev
+            self._unlink(lru); del self.map[lru.key]
+        x = Node(key, value)
+        self.map[key] = x; self._push_front(x)</code></pre></div>
+      <p><b>Why the map stores the node.</b> Moving a key to the front needs its place in the list. Storing the node gives that place at once; storing only the value would force a search through the list.</p>
+      <div class="code"><div class="ch"><span>hashmap.py · LeetCode 706</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MyHashMap:
+    """LeetCode 706. Separate chaining; the table doubles when the load factor passes 0.75."""
+    def __init__(self):
+        self.size, self.buckets = 0, [[] for _ in range(8)]
+
+    def _bucket(self, key):
+        return self.buckets[h64(key) % len(self.buckets)]
+
+    def put(self, key, value):
+        b = self._bucket(key)
+        for i, (k, _) in enumerate(b):
+            if k == key:
+                b[i] = (key, value); return
+        b.append((key, value)); self.size += 1
+        if self.size &gt; 0.75 * len(self.buckets):
+            old = [kv for b in self.buckets for kv in b]
+            self.buckets = [[] for _ in range(2 * len(self.buckets))]
+            for k, v in old:
+                self._bucket(k).append((k, v))
+
+    def get(self, key):
+        for k, v in self._bucket(key):
+            if k == key:
+                return v
+        return -1
+
+    def remove(self, key):
+        b = self._bucket(key)
+        for i, (k, _) in enumerate(b):
+            if k == key:
+                b.pop(i); self.size -= 1; return</code></pre></div>
+      <p><b>Average O(1) put.</b> The table doubles when it is three-quarters full. A resize to 2<var>b</var> buckets moves about 0.75<var>b</var> entries and comes after about 0.375<var>b</var> new inserts since the last resize, so each insert pays a constant extra on average.</p>
+      <div class="code"><div class="ch"><span>timemap.py · LeetCode 981</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class TimeMap:
+    """LeetCode 981. Timestamps arrive increasing per key, so each list stays sorted."""
+    def __init__(self):
+        self.times, self.vals = defaultdict(list), defaultdict(list)
+
+    def set(self, key, value, timestamp):
+        self.times[key].append(timestamp); self.vals[key].append(value)
+
+    def get(self, key, timestamp):
+        i = bisect.bisect_right(self.times[key], timestamp)   # first time &gt; timestamp
+        return self.vals[key][i - 1] if i else ""</code></pre></div>
+      <p><b>Weighted servers.</b> Ring: give a server of size <var>w</var> about <var>w</var>·<var>V</var> virtual nodes. Rendezvous: score each server by \(-w_s/\ln u_s\), with \(u_s\) the hash scaled into (0, 1); server <var>s</var> wins with probability \(w_s/\sum w\).</p>
+      <p><b>Edge hashing.</b> Each friend's edges are now spread over up to deg(<var>f</var>) shards, so a request touches up to the smaller of <var>S</var> and <var>W</var>(<var>u</var>) shards: worse for lookups by user. It helps batch jobs that scan all edges evenly.</p>
+    </div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>D. Liben-Nowell and J. Kleinberg, "The link-prediction problem for social networks", <em>JASIST</em> 2007: the comparison of CN, Jaccard, Adamic–Adar and others on co-authorship graphs with a temporal split, the template for this block.</li>
-      <li>L. Adamic and E. Adar, "Friends and neighbors on the Web", <em>Social Networks</em> 2003: the origin of the 1/log weighting.</li>
-      <li>T. Zhou, L. Lü and Y.-C. Zhang, "Predicting missing links via local information", <em>European Physical Journal B</em> 2009: resource allocation.</li>
-      <li>L. Backstrom and J. Leskovec, "Supervised random walks: predicting and recommending links in social networks", WSDM 2011.</li>
-      <li>Hastie, Tibshirani and Friedman, <em>The Elements of Statistical Learning</em>, §4.4 (logistic regression, Newton's method); Bishop, <em>Pattern Recognition and Machine Learning</em>, §4.3.</li>
-      <li><a href="https://cs229.stanford.edu/">Stanford CS229</a> lecture notes on supervised learning: logistic regression and Newton's method.</li>
-      <li>J. Hanley and B. McNeil, "The meaning and use of the area under a receiver operating characteristic (ROC) curve", <em>Radiology</em> 1982; T. Fawcett, "An introduction to ROC analysis", <em>Pattern Recognition Letters</em> 2006; <a href="https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test">Mann–Whitney U test</a> (Wikipedia).</li>
-      <li>K. Järvelin and J. Kekäläinen, "Cumulated gain-based evaluation of IR techniques", <em>ACM TOIS</em> 2002 (NDCG).</li>
-      <li>A. Niculescu-Mizil and R. Caruana, "Predicting good probabilities with supervised learning", ICML 2005; C. Guo et al., <a href="https://arxiv.org/abs/1706.04599">On calibration of modern neural networks</a>, ICML 2017.</li>
-      <li>X. He et al., "Practical lessons from predicting clicks on ads at Facebook", ADKDD 2014: negative downsampling and the recalibration it needs.</li>
-      <li>T. Joachims, A. Swaminathan and T. Schnabel, "Unbiased learning-to-rank with biased feedback", WSDM 2017; A. Chaney, B. Stewart and B. Engelhardt, "How algorithmic confounding in recommendation systems increases homogeneity and decreases utility", RecSys 2018.</li>
+      <li>David Karger et al., "Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web", STOC 1997.</li>
+      <li>David Thaler and Chinya Ravishankar, "Using Name-Based Mappings to Increase Hit Rates", <em>IEEE/ACM Transactions on Networking</em>, 1998 (rendezvous hashing).</li>
+      <li>Giuseppe DeCandia et al., "Dynamo: Amazon's Highly Available Key-value Store", SOSP 2007: virtual nodes in practice.</li>
+      <li>John Lamping and Eric Veach, <a href="https://arxiv.org/abs/1406.2294">"A Fast, Minimal Memory, Consistent Hash Algorithm"</a>, 2014 (jump hash).</li>
+      <li>Johan Ugander and Lars Backstrom, "Balanced Label Propagation for Partitioning Massive Graphs", WSDM 2013; Igor Kabiljo et al., "Social Hash Partitioner", VLDB 2017.</li>
+      <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, chapter 6 (partitioning).</li>
     </ul></div>
   </div>
 
-  <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · merging ranked lists with a heap</span></div>
+  <!-- ============================================================ 3 · FAST, FRESH, CONSISTENT -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">System Design · fast at the tail, fresh, and consistent enough</span></div>
 
-    <h4>1 · The question</h4>
-    <p>Day 3 sharded the graph. Suppose the ranker runs on 16 shards, each scoring the candidates it stores and returning its own best 10, sorted. The user needs the best 10 overall. More generally: given <var>L</var> lists, each sorted from best to worst, with <var>N</var> items in total, output the best <var>k</var> items overall, each user once. A tiny case: lists (0.9 Ana, 0.5 Ben, 0.1 Cy), (0.8 Ben, 0.7 Dee), and an empty one; <var>k</var> = 3.</p>
-    <p><b>First attempt: concatenate and sort.</b> Correct, but O(<var>N</var> log <var>N</var>) time and O(<var>N</var>) space, and it reads every item although only <var>k</var> are needed. The second attempt, scanning all <var>L</var> heads to find the largest for each output, is O(<var>kL</var>): fine for 3 lists, slow for 1,000 shards.</p>
+    <h4>1 · Fast: fan-out makes the slow machine everyone's problem</h4>
+    <p><b>The situation.</b> A request sends calls to many shards in parallel and must wait for all of them. Any single call is occasionally slow: a garbage-collection pause, a busy disk. Say each call is slow 1% of the time. How often is the request slow?</p>
+    <p><b>Try the obvious answer.</b> "1%." That is right only for one call. A request that waits for all its calls is as slow as the slowest one.</p>
+    <p><b>The idea.</b> The request is fast only if <em>every</em> call is fast. With 10 calls the chance that all ten are fast is 0.99 × 0.99 × … ten times, 0.904, so the request is slow 9.6% of the time. With 100 calls, all fast has probability 0.366, so <b>63% of requests are slow</b> although each machine is fine 99% of the time. As a formula: with <var>n</var> calls each slow with probability <var>p</var>,</p>
+    <div class="eq">\[ P(\text{request slow}) = 1 - (1-p)^n . \]</div>
+    <div class="code"><div class="ch"><span>tail.py · fan-out and Little's law</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def p_any_slow(p, n):
+    """A request waits for n independent calls, each slow with probability p."""
+    return 1 - (1 - p) ** n
 
-    <h4>2 · The key idea: a heap of heads</h4>
-    <p>Each list's best remaining item is its <b>head</b>. Keep the heads in a max-heap (Day 1's binary heap: a complete binary tree in an array where each parent is at least its children, so the maximum is at the root). Pop the root, output it, and push the next item of the list it came from. If a user was already output (the same person found by two sources), skip it.</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">start</span><span class="seq"><span class="nd hot">0.9 Ana</span><span class="nd">0.8 Ben</span></span><span class="why">heap holds one head per non-empty list</span></div>
-      <div class="step"><span class="k">pop 1</span><span class="seq"><span class="pp add">Ana 0.9</span><span class="lk">push</span><span class="nd">0.5 Ben</span></span><span class="why">heap: 0.8 Ben, 0.5 Ben · <b>output Ana</b></span></div>
-      <div class="step"><span class="k">pop 2</span><span class="seq"><span class="pp add">Ben 0.8</span><span class="lk">push</span><span class="nd">0.7 Dee</span></span><span class="why">heap: 0.7 Dee, 0.5 Ben · <b>output Ben</b></span></div>
-      <div class="step"><span class="k">pop 3</span><span class="seq"><span class="pp add">Dee 0.7</span></span><span class="why">list 2 is exhausted · <b>output Dee</b>; done, <var>k</var> = 3</span></div>
-    </div><div class="cap">Ben's second copy (0.5) is still in the heap when we stop; had it popped, it would have been skipped as a duplicate.</div></div>
-<div class="code"><div class="ch"><span>ranker/merge.py · k-way merge of sorted candidate lists, with dedupe</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def merge_top_k(lists, k=10):
-    """lists: several candidate lists, each sorted by probability, highest first: [(prob, user), ...].
-    Returns the k best distinct users across all lists."""
-    heap = [(-lst[0][0], lst[0][1], s, 0) for s, lst in enumerate(lists) if lst]
-    heapq.heapify(heap)                         # one entry per list: its current head
-    out, seen = [], set()
-    while heap and len(out) &lt; k:
-        neg_p, user, s, i = heapq.heappop(heap) # the best head is the best remaining item overall
-        if user not in seen:                    # dedupe: the first time a user pops is its best score
-            seen.add(user); out.append((-neg_p, user))
-        if i + 1 &lt; len(lists[s]):
-            p, v = lists[s][i + 1]
-            heapq.heappush(heap, (-p, v, s, i + 1))
-    return out</code></pre></div>
+def per_call_quantile(target, n):
+    """How often each call must be fast so that all n are fast with probability `target`."""
+    return target ** (1 / n)
 
-    <h4>3 · Why it is correct</h4>
-    <p><b>Invariant.</b> Before each pop, the heap contains exactly one entry for each list that still has unread items: that list's head. It holds after <code>heapify</code>, and each iteration removes one list's head and inserts that same list's next item, so it is preserved.</p>
-    <p><b>Each pop is the best unread item.</b> Every unread item is in some list behind that list's head, and the lists are sorted, so it is no better than its head. The root is the best head. So the root is at least as good as every unread item. By induction, items come out in non-increasing order of score.</p>
-    <p><b>Dedupe keeps each user's best score.</b> Copies of one user pop in non-increasing order, so the first copy to pop has the highest score of all copies; later copies are skipped. The output is therefore the <var>k</var> users with the highest best-score, which is what the tests check against a brute force on 200 random cases.</p>
-    <p><b>Why per-shard top 10 is enough.</b> Let <var>v</var> be in the global top <var>k</var> and stored on shard <var>s</var>. Fewer than <var>k</var> items in the whole system beat <var>v</var>, so fewer than <var>k</var> on shard <var>s</var> do, and <var>v</var> is in shard <var>s</var>'s top <var>k</var>. So asking every shard for <var>k</var> items and merging is exact, not an approximation.</p>
-
-    <h4>4 · Cost</h4>
-    <p><code>heapify</code> on <var>L</var> heads is O(<var>L</var>). Each pop and push is O(log <var>L</var>), since the heap never holds more than <var>L</var> entries. To output <var>k</var> users while skipping <var>D</var> duplicates takes <var>k</var> + <var>D</var> pops: O(<var>L</var> + (<var>k</var> + <var>D</var>) log <var>L</var>) time, O(<var>L</var> + <var>k</var>) space. The cost does not depend on <var>N</var> at all, which matters when lists are long or lazily generated. Merging everything (Python's <code>heapq.merge</code>, or LeetCode 23) is O(<var>N</var> log <var>L</var>).</p>
-
-    <h4>5 · Confirm by measuring: shards, then sources</h4>
-    <p><b>Shards.</b> Split each user's candidates over 16 shards by <code>v mod 16</code>, let each shard return its top 10 by the logistic-regression score, and merge. For all 9,352 evaluation users with candidates, the merged list was identical to the global top 10. The merge read 150.4 items per user on average instead of the 829 candidates, and in a real system those 150 items are all that crosses the network.</p>
-    <p><b>Sources: when scores are not on one scale.</b> Day 4 added candidate sources that two-hop cannot see. Here: group-mates (score \(\sum_{g \in G(u)\cap G(v)} 1/|g|\), the RA idea applied to groups) and globally popular users (score: degree). A heap merge needs comparable scores, so each source's score was turned into a probability by <b>histogram binning</b> on the training cut (10 quantile bins of the score, each mapped to its observed connection rate), and the two-hop list used the prior-corrected logistic regression. Measured on the test cut:</p>
-    <div class="chart"><div class="t">recall@10, two-hop ranker vs adding other sources (mean over 9,357 users)</div>
-      <div class="br"><span>LR, two-hop only</span><span class="tr"><i style="width:80%;--c:var(--ml)"></i></span><span class="v">0.0718</span></div>
-      <div class="br"><span>heap merge of 3 calibrated lists</span><span class="tr"><i style="width:76%;--c:var(--bad)"></i></span><span class="v">0.0684</span></div>
-      <div class="br"><span>one LR over the union</span><span class="tr"><i style="width:91%;--c:var(--good)"></i></span><span class="v">0.0818</span></div>
-      <div class="cap">Same 0–0.09 scale as the ML chart. The union is two-hop candidates + group top 50 + popular top 50, scored by one logistic regression with an extra group-score feature, trained on the training cut.</div></div>
-    <p>Adding sources raises the ceiling from 48.4% to 57.2% of future friendships. Merging per-source calibrated lists still <em>lost</em> recall: −0.0034 [−0.0061, −0.0007] against the two-hop ranker alone. Scoring the union with one model gained +0.0099 [+0.0071, +0.0126]. The reason is §11 of the ML block: each source's probabilities were calibrated on a different window and with a different method, so they drifted differently, and a mis-calibrated source steals slots. One model scoring every candidate puts all scores on one scale by construction. The heap merge is exact for lists scored by the same model (shards); for lists scored by different models it is only as good as their calibration.</p>
-
-    <h4>6 · Top-<var>k</var> relatives</h4>
+def in_flight(qps, seconds):
+    """Little's law: requests inside the system = arrival rate x time each one stays."""
+    return qps * seconds</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>each call slow</th><th class="num">1 call</th><th class="num">10</th><th class="num">15</th><th class="num">100</th><th class="num">200</th><th class="num">1,000</th></tr>
+      <tr><td>1% of the time</td><td class="num">1.0%</td><td class="num">9.6%</td><td class="num">14.0%</td><td class="num">63.4%</td><td class="num">86.6%</td><td class="num">≈100%</td></tr>
+      <tr><td>0.1% of the time</td><td class="num">0.1%</td><td class="num">1.0%</td><td class="num">1.5%</td><td class="num">9.5%</td><td class="num">18.1%</td><td class="num">63.2%</td></tr>
+    </table></div>
+    <p><b>On the week's graph.</b> One call per friend means a median user waits on 15 calls, the p99 user on 100, the top hub on 1,480. At 1% per call, averaged over all users, 16.6% of requests are slow: 14.0% for a median user and essentially every request for the top hub. And the billion-user request that touches 181 shards would be slow 84% of the time. Turned around: for a request with 100 calls to be fast 99% of the time, each call must be fast 99.99% of the time. A request's p99 is set by its backends' p99.99 (Day 2 showed how to measure a p99 and its error bar).</p>
+    <p><b>What to do about it.</b> The formula names the three levers.</p>
     <ul>
-      <li><b>Top <var>k</var> of a stream</b> (<a class="lc" href="https://leetcode.com/problems/k-closest-points-to-origin/">973</a>): keep a heap of size <var>k</var> whose root is the <em>worst</em> item kept; a new item replaces the root only if it is better. O(<var>n</var> log <var>k</var>) time, O(<var>k</var>) space; Day 1 derived it and compared quickselect.</li>
-      <li><b>An implicit k-way merge</b> (<a class="lc" href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">373</a>): the pairs (<var>i</var>, <var>j</var>) for a fixed <var>i</var> form a sorted list in <var>j</var>, so the problem is a merge of len(nums1) lists that are never built.</li>
-      <li><b>Heads plus a running maximum</b> (<a class="lc" href="https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/">632</a>): the range covering one item from each list is [min of heads, max of heads]; advance the list with the minimum head.</li>
+      <li><b>Make n smaller.</b> Batch by shard (above), cap hub lists (Day 2), sample friends (Day 3), or, best of all, precompute so the request reads one key (part 4).</li>
+      <li><b>Make p smaller with hedged requests.</b> If a call has not answered by about its p95 time, send a copy to another replica and take whichever answers first. If the two are slow independently, a call is now slow with probability about <var>p</var>²: at 1% and 100 calls, the request is slow 1.0% of the time instead of 63.4%. In a simulation with an assumed read time (1 ms, or 50 ms with probability 1%), the share of slow requests fell from 16.8% to 0.21% (the simulation sends both copies at once, a simplification). The cost is the extra copies, roughly 5% more reads.</li>
+      <li><b>Stop waiting.</b> Give the fan-out a deadline and rank with the lists that arrived. Mutual counts can be a little off; the eligibility check (part 6) cannot, so it is never skipped.</li>
     </ul>
-    <p><b>Where PYMK uses it.</b> In the scatter-gather step of serving (Day 3): every shard ranks its own candidates with the same model and returns its top 10; the front end merges them with a heap and applies the final filter. When the lists come from different sources, merge them into one candidate set and let one ranker score it.</p>
+    <p class="idea"><b>In one line.</b> A request that waits for n calls is slow with probability 1 − (1 − p)ⁿ, so cut n, hedge to shrink p, or stop waiting; the slowest machine sets everyone's latency.</p>
+    <details class="deep"><summary>The math, step by step: 1 − (1 − p)ⁿ, a quick bound, and the per-call target</summary><div>
+      <p><b>The formula.</b> Assume each of the <var>n</var> calls is slow with probability <var>p</var>, independently of the others. "Request fast" means "call 1 fast and call 2 fast and … call <var>n</var> fast". For independent events the probability of all of them is the product: \((1-p)^n\). The request is slow otherwise: \(1 - (1-p)^n\). With <var>p</var> = 0.01 and <var>n</var> = 100: \(0.99^{100} = 0.366\), so 0.634.</p>
+      <p><b>A quick bound.</b> The chance that at least one of several events happens is at most the sum of their chances (the union bound), so \(1 - (1-p)^n \le np\). For <var>p</var> = 0.005 and <var>n</var> = 10, 50, 100 the exact values are 4.9%, 22.2%, 39.4% against <var>np</var> = 5%, 25%, 50%: good while <var>np</var> is well below 1. A better approximation uses \(1-p \approx e^{-p}\), so \(1-(1-p)^n \approx 1 - e^{-np}\): once <var>np</var> reaches 1, most requests are slow.</p>
+      <p><b>The per-call target.</b> We want \((1-p)^n \ge 0.99\). Take the <var>n</var>-th root of both sides: \(1-p \ge 0.99^{1/n}\). For <var>n</var> = 100 that is 0.9999: each call must be fast 99.99% of the time.</p>
+      <p><b>Hedging.</b> A hedged call is slow only if both copies are slow: probability \(p \cdot p\) when they are independent. Put \(p^2 = 0.0001\) into the formula with <var>n</var> = 100: \(1 - 0.9999^{100} = 0.0100\).</p>
+      <p><b>What was shown.</b> Waiting for all of <var>n</var> independent calls multiplies the chance of a slow request by roughly <var>n</var> while it is small, and drives it towards 1 once <var>np</var> nears 1.</p>
+    </div></details>
 
-    <div class="part"><b>Practice</b><ul>
-      <li><a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">23</a> Merge k Sorted Lists</li>
-      <li><a class="lc" href="https://leetcode.com/problems/k-closest-points-to-origin/">973</a> K Closest Points to Origin</li>
-      <li><a class="lc" href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">373</a> Find K Pairs with Smallest Sums</li>
-      <li><a class="lc" href="https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/">632</a> Smallest Range Covering Elements from K Lists</li>
-      <li><a class="lc" href="https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/">378</a> Kth Smallest Element in a Sorted Matrix (each row is a sorted list)</li>
-      <li><a class="lc" href="https://leetcode.com/problems/merge-sorted-array/">88</a> Merge Sorted Array (the two-list case, in place)</li>
-      <li>Own: rerun the shard check with 256 shards. How many items does the merge read per user now, and why does it approach the candidate count?</li>
-    </ul></div>
-    <div class="part"><b>Problem variations</b><ul>
-      <li>Combine scores instead of taking the maximum: a user's final score is the <em>sum</em> of its scores across lists. When can you stop reading early? (Fagin's threshold algorithm.)</li>
-      <li>Quotas: at most 3 of the 10 slots may come from the popular-users source. Change the merge.</li>
-      <li>One shard is slow (Day 2's tail at scale). Merge what has arrived by a deadline; what can you say about the answer's exactness?</li>
-    </ul></div>
-    <details class="sol"><summary>Solutions: 23, 973, 373, 632</summary><div>
-<div class="code"><div class="ch"><span>merge_problems.py · 23, 973, 373, 632</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class ListNode:
-    def __init__(self, val=0, next=None):
-        self.val, self.next = val, next
+    <h4>2 · Hot keys</h4>
+    <p>If every user makes one request, a person's list is read once per friend, and each read returns their whole list. So reads follow the degree, but <em>bytes</em> follow the degree squared. Measured: reads per list have median 15 and maximum 1,480; the top 1% of lists receive 11.1% of the reads but 69.1% of the bytes. The hottest list alone serves 1,480 × 1,480 × 8 bytes = 17.5 MB per round of requests, against 1.8 KB for a median list. A key that receives far more traffic than the rest is a <b>hot key</b>. Its shard saturates while the others idle, and adding shards does not help, because the key still lives on one shard. The fixes: copy hot lists to several shards and spread reads across the copies, cache them near the servers that compute candidates (the pinned cache above), or skip them (hub capping, Day 2). All three need the hot set, and the degree names it before any traffic arrives.</p>
 
-def mergeKLists(lists):                         # 23
-    heap = [(node.val, i, node) for i, node in enumerate(lists) if node]
-    heapq.heapify(heap)
-    dummy = tail = ListNode()
-    while heap:
-        _, i, node = heapq.heappop(heap)        # i breaks ties: nodes are not comparable
-        tail.next = tail = node
-        if node.next:
-            heapq.heappush(heap, (node.next.val, i, node.next))
-    return dummy.next
+    <h4>3 · Little's law: how many requests are in flight</h4>
+    <p><b>The situation.</b> To size thread pools, connection pools and memory, you need to know how many requests are inside the system at once.</p>
+    <p><b>The idea.</b> In any stable system, the average number of items inside equals the rate at which they arrive times the average time each one stays: <b>L = λW</b>. A coffee shop where 2 customers arrive each minute and each stays 5 minutes, holds 10 customers on average. No assumption about how arrivals or service times vary is needed.</p>
+    <p><b>Use it.</b> At the peak of 34,722 requests per second and an assumed 50 ms per request: 34,722 × 0.050 = <b>1,736 requests in flight</b>. If each issues 200 friend-list reads in parallel, storage holds about 347,000 outstanding reads. If one server can hold 100 requests in flight, the fleet needs at least 18 servers before any headroom. And a slower tail raises <var>W</var>, which raises the concurrency the fleet must absorb.</p>
+    <p><b>Checked by measuring.</b> A simulated single-server queue with random arrivals at rate 0.8 and random service at rate 1: measured arrival rate 0.8004, mean time inside 4.938, their product 3.952, and the time-average number inside, measured directly, 3.952.</p>
+    <p class="idea"><b>In one line.</b> In-flight requests = arrival rate × time in system; it turns a latency budget into a fleet size.</p>
+    <details class="deep"><summary>The math, step by step: why L = λW holds for any stable system</summary><div>
+      <p>We compute one quantity, the total "customer-time" spent in the system, in two ways.</p>
+      <p><b>Small numbers first.</b> Over 10 minutes, 20 customers arrive (λ = 2 per minute), and each stays 5 minutes (<var>W</var> = 5). Total customer-minutes: 20 × 5 = 100. Spread over 10 minutes, that is 10 customers inside on average: <var>L</var> = 10 = λ<var>W</var>.</p>
+      <p><b>In general.</b> Watch the system for a long time <var>T</var>. Let <var>N</var>(<var>t</var>) be the number of items inside at time <var>t</var>, and draw it as a curve.</p>
+      <ul>
+        <li><b>Area by time.</b> The area under the curve is \(\int_0^T N(t)\,dt\). By definition of the time-average <var>L</var>, this area is \(L \cdot T\).</li>
+        <li><b>Area by item.</b> Each item raises the curve by 1 for exactly as long as it stays. So the area is also the sum of all stay times, \(\sum_i W_i\). About \(\lambda T\) items arrived, staying <var>W</var> on average, so the sum is \(\lambda T \cdot W\).</li>
+      </ul>
+      <p>Set the two areas equal, \(L T = \lambda T W\), and divide by <var>T</var>: \(L = \lambda W\). Items still inside at the start or end of the window add an error that stays bounded while <var>T</var> grows, so it vanishes in the average.</p>
+      <p><b>What was shown.</b> The law follows from counting the same area twice; it does not depend on how arrivals or service times are distributed, only on the system being stable.</p>
+    </div></details>
 
-def kClosest(points, k):                        # 973: keep the k closest in a max-heap of size k
-    heap = []
-    for x, y in points:
-        d = -(x * x + y * y)                    # negate: heapq is a min-heap
-        if len(heap) &lt; k:
-            heapq.heappush(heap, (d, x, y))
-        elif d &gt; heap[0][0]:
-            heapq.heapreplace(heap, (d, x, y))
-    return [[x, y] for _, x, y in heap]
+    <h4>4 · Fresh: precompute, or compute on request?</h4>
+    <p><b>The situation.</b> Computing two hops on request reads about 1,477 ids on average and 7,284 at the p99 on the week's graph, from about 15 of 64 shards. It is always fresh, but slow and fragile in the tail. The alternative: compute every user's candidates ahead of time, store them by user, and serve one key per request.</p>
+    <p><b>The idea: precompute as a self-join.</b> Write the friendships as a table of pairs (<var>x</var>, <var>v</var>), both directions. Join the table with itself on the middle person <var>v</var>: every path <var>x</var> – <var>v</var> – <var>y</var> becomes one row (<var>x</var>, <var>y</var>). Count rows per pair and you have the mutual-friend count of every pair at once, the same count as Day 1, for everyone.</p>
+    <div class="code"><div class="ch"><span>precompute.py · the batch two-hop self-join</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def precompute_all(adj):
+    """Batch two-hop: the self-join of the edge list with itself on the middle user."""
+    m = defaultdict(Counter)
+    for v in range(len(adj)):                  # v is the mutual friend
+        for x in adj[v]:
+            for y in adj[v]:
+                if x != y:
+                    m[x][y] += 1               # deg(v)·(deg(v)-1) rows for this v
+    return m                                   # m[x][y] = |N(x) ∩ N(y)|, friends included</code></pre></div>
+    <p><b>Use it</b> on the past graph (the first 80,000 friendships): the join emits 9,519,454 rows, which group into 8,214,888 ordered pairs with at least one mutual friend; 8,091,284 of them are not yet friends, 809.1 candidates per user. The store keeps only each user's top few hundred for the ranker (Day 4), so the stored output is small even though the join is large. A distributed batch job splits the join by middle person, so each machine expands its own users.</p>
+    <div class="tablewrap"><table>
+      <tr><th></th><th>Compute on request</th><th>Precompute in batch</th></tr>
+      <tr><td>Reads per request</td><td>every friend's list, from many shards</td><td>one key</td></tr>
+      <tr><td>Tail latency</td><td>set by the slowest of many shards</td><td>set by one shard</td></tr>
+      <tr><td>Freshness</td><td>always current</td><td>stale since the last run</td></tr>
+      <tr><td>Extra cost</td><td>41 GB/s of reads at peak (estimate)</td><td>a batch job, and about 1.2 TB for a top 100 per user</td></tr>
+    </table></div>
 
-def kSmallestPairs(nums1, nums2, k):            # 373: k-way merge of len(nums1) implicit sorted lists
-    if not nums1 or not nums2:
-        return []
-    heap = [(nums1[i] + nums2[0], i, 0) for i in range(min(k, len(nums1)))]
-    heapq.heapify(heap)
+    <h4>5 · Incremental updates: when two people connect, whose suggestions change?</h4>
+    <p><b>The situation.</b> Rerunning a 9.5-million-row join after each new friendship is absurd. Which stored counts does one new friendship actually change?</p>
+    <p><b>Work it by hand.</b> In the six-person example, Dev and Farid become friends. Before, Dev's only friend was Ben and Farid's only friend was Chloe. A count changes only where a new path through the new friendship appears:</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">new path</span><span class="seq"><span class="nd">Ben</span><span class="lk">–</span><span class="nd hot">Dev</span><span class="lk">–</span><span class="nd hot">Farid</span></span><span class="why">Ben and Farid gain a mutual friend: Ben now sees Farid with <b>2</b> mutual friends (Chloe and Dev) instead of 1.</span></div>
+      <div class="step"><span class="k">new path</span><span class="seq"><span class="nd">Chloe</span><span class="lk">–</span><span class="nd hot">Farid</span><span class="lk">–</span><span class="nd hot">Dev</span></span><span class="why">Chloe now sees Dev with <b>2</b> mutual friends instead of 1; Dev sees Chloe with 2.</span></div>
+      <div class="step"><span class="k">unchanged</span><span class="seq"><span class="nd">You</span><span class="lk"> </span><span class="nd">Esha</span></span><span class="why">No new path passes through them. Your list is still Esha (2), Dev (1), Farid (1).</span></div>
+    </div></div>
+    <p>So the people whose stored suggestions change are Dev and Farid themselves (they leave each other's lists and gain new counts) and their friends, Ben and Chloe. Nobody else. In general: when <var>u</var> and <var>v</var> connect, every friend of <var>v</var> gains a mutual friend with <var>u</var>, every friend of <var>u</var> gains one with <var>v</var>, and the people touched are <var>u</var>, <var>v</var> and their friends.</p>
+    <div class="code"><div class="ch"><span>incremental.py · update mutual counts for one new friendship</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def add_friendship(adj, m, u, v):
+    """Update mutual counts m in place when u and v become friends. Returns the users touched."""
+    for x in adj[u]:                           # new two-hop paths x - u - v
+        m[x][v] += 1; m[v][x] += 1
+    for y in adj[v]:                           # new two-hop paths u - v - y
+        m[u][y] += 1; m[y][u] += 1
+    adj[u].add(v); adj[v].add(u)
+    return {u, v} | adj[u] | adj[v]</code></pre></div>
+    <p><b>Use it.</b> Start from the precomputed counts of the past graph and replay the 20,000 future friendships in order:</p>
+    <div class="metrics">
+      <div class="metric"><div class="v">127.0</div><div class="l">users touched per new friendship, mean (median 46, p99 1,297, max 1,747 of 10,000)</div></div>
+      <div class="metric"><div class="v">126.2</div><div class="l">counts changed per friendship, mean (p99 1,299, max 1,836)</div></div>
+      <div class="metric"><div class="v">63.1</div><div class="l">mean friend count of a person forming a new friendship, against 16.0 for a random user</div></div>
+      <div class="metric"><div class="v">5.0 M</div><div class="l">counts changed by all 20,000 updates, about half of one batch join (9.5 M rows)</div></div>
+    </div>
+    <p>People who make new friends are sociable: the endpoints of a new friendship average 63.1 friends, close to Day 2's prediction for "a person reached by following a friendship" (60.5 on the past graph). A friendship with a hub is expensive: the largest single update touched 1,747 users. That is <b>write amplification</b>, the mirror image of Day 2's read skew, and the same fix applies: cap or delay updates through hubs. A check on 50 replayed friendships confirmed that the updated counts match a full recompute and that untouched users did not change; the tests check the same on random graphs and on Dev and Farid.</p>
+    <p class="idea"><b>In one line.</b> A new friendship u–v changes only the counts of u, v and their friends, deg(u) + deg(v) of them; the batch job is the safety net, the incremental update keeps things fresh.</p>
+    <details class="deep"><summary>The math, step by step: exactly which counts one new friendship changes</summary><div>
+      <p>We want every pair (<var>x</var>, <var>y</var>) whose mutual count changes when the friendship <var>u</var>–<var>v</var> is added.</p>
+      <p><b>Write the count as a sum over middle people.</b> For each possible middle person <var>w</var>, the bracket \([w \in N(x)]\) is 1 if <var>w</var> is a friend of <var>x</var> and 0 otherwise. A mutual friend is a <var>w</var> with both brackets equal to 1:</p>
+      <div class="eq">\[ m(x,y) = \sum_{w} [\,w \in N(x)\,]\,[\,w \in N(y)\,] . \]</div>
+      <p><b>What the new friendship changes.</b> Exactly two memberships: <var>v</var> joins \(N(u)\), and <var>u</var> joins \(N(v)\). A term of the sum can change only if one of its brackets is one of those two.</p>
+      <ul>
+        <li>Bracket \([v \in N(x)]\) with <var>x</var> = <var>u</var>, <var>w</var> = <var>v</var>: the term becomes \([v \in N(y)]\), so \(m(u,y)\) rises by 1 for every friend <var>y</var> of <var>v</var>. These are the new paths <var>u</var> – <var>v</var> – <var>y</var>.</li>
+        <li>Symmetrically, \(m(v,x)\) rises by 1 for every friend <var>x</var> of <var>u</var>: the paths <var>v</var> – <var>u</var> – <var>x</var>.</li>
+        <li>The pair (<var>u</var>, <var>v</var>) itself would need <var>v</var> to be its own friend, which never happens, so \(m(u,v)\) does not change.</li>
+      </ul>
+      <p><b>Count them.</b> \(\deg(u) + \deg(v)\) pairs change by +1 each (degrees before the new friendship), stored in both directions. With Dev and Farid, 1 + 1 = 2 pairs: (Dev, Chloe) and (Farid, Ben).</p>
+      <p><b>The expected cost.</b> A person at the end of a random new friendship is picked in proportion to their degree, so their expected degree is \(E[d^2]/E[d]\) (Day 2), not \(E[d]\). The expected update is therefore about \(2E[d^2]/E[d]\) counts.</p>
+      <p><b>What was shown.</b> Only the rows of <var>u</var>, <var>v</var> and their friends change, by exactly \(\deg(u) + \deg(v)\) increments; every other stored suggestion stays exactly correct.</p>
+    </div></details>
+
+    <h4>6 · Consistent enough: why the final check runs on every response</h4>
+    <p><b>The situation.</b> Updates travel through a queue to the shards that hold the touched rows, and the batch job rebuilds everything periodically. In between, a reader can see an old row. This is <b>eventual consistency</b>: if writes stop, every copy converges, but a read can return an old value.</p>
+    <p><b>How stale, measured.</b> Take 2,000 users' top-10 lists at the end of the past graph and let the 20,000 future friendships happen without any update: <b>17.3% of those users</b> now have at least one suggestion who is already their friend (2.0% of all suggestions). Blocks and privacy settings change the same way, and showing someone a person they blocked is a safety failure, not a ranking error.</p>
+    <p><b>The idea.</b> Tolerate stale <em>counts</em> (a slightly wrong order) but never stale <em>eligibility</em>. The last step of every response re-checks the short list against the source of truth: the friend list, the block list in both directions, and privacy settings. It is ten or so lookups per request, cheap enough to run every time.</p>
+    <div class="code"><div class="ch"><span>final_check.py · exact rules on every response, and a reason that reveals nothing hidden</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def final_check(u, ranked, friends, blocked, opted_out, k=10):
+    """Last step of every response: exact rules, read from the source of truth right now.
+    friends[x] and blocked[x] are sets; opted_out holds users who asked never to be suggested."""
     out = []
-    while heap and len(out) &lt; k:
-        _, i, j = heapq.heappop(heap)
-        out.append([nums1[i], nums2[j]])
-        if j + 1 &lt; len(nums2):
-            heapq.heappush(heap, (nums1[i] + nums2[j + 1], i, j + 1))
+    for v in ranked:
+        if v == u or v in friends[u]:
+            continue                           # never yourself, never a current friend
+        if v in blocked[u] or u in blocked[v]:
+            continue                           # blocked, in either direction
+        if v in opted_out:
+            continue                           # privacy: "do not suggest me"
+        out.append(v)
+        if len(out) == k:
+            break
     return out
 
-def smallestRange(nums):                        # 632: heap of heads + the running max of the heads
-    heap = [(lst[0], r, 0) for r, lst in enumerate(nums)]
-    heapq.heapify(heap)
-    hi = max(lst[0] for lst in nums)
-    best = (heap[0][0], hi)
-    while True:
-        lo, r, i = heapq.heappop(heap)
-        if hi - lo &lt; best[1] - best[0]:
-            best = (lo, hi)
-        if i + 1 == len(nums[r]):
-            return list(best)
-        nxt = nums[r][i + 1]
-        hi = max(hi, nxt)
-        heapq.heappush(heap, (nxt, r, i + 1))</code></pre></div>
-    <p>In 23 the list index <code>i</code> breaks ties because nodes cannot be compared. In 373 the heap starts with at most <var>k</var> rows, since no pair from a row beyond the <var>k</var>-th can be among the <var>k</var> smallest. With 256 shards, most shards hold fewer than 10 of a user's candidates and return all of them, so the merge reads nearly every candidate: per-shard top-<var>k</var> saves network only when shards hold many more than <var>k</var> candidates each.</p></div></details>
+def shown_mutuals(u, v, friends, hides_list):
+    """Mutual friends that may be NAMED in the reason ("Ben and Chloe are friends with Esha").
+    Naming f reveals the friendship f-v, so skip f if f or v hides their friend list."""
+    if v in hides_list:
+        return []
+    return sorted(f for f in friends[u] &amp; friends[v] if f not in hides_list)</code></pre></div>
+    <p><b>Use it on the six people.</b> Your stored list is Esha, Dev, Farid. Farid blocks you: the check drops him, although the stored list still has him. Then you and Esha connect: the check drops her on your very next page load, before any update reaches the store. You never see a person you just befriended, which is the promise called <b>read-your-writes</b>.</p>
+    <p class="idea"><b>In one line.</b> Everything upstream may be stale or approximate; the final exact check on fresh data is what makes the rules hold on every response.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>On the week's graph, compute the share of slow requests at 1% per call with hub capping at 200 (skipped lists are not read).</li>
+      <li>Derive the update for an <em>unfriend</em>. Which counts fall, and why can a user's top 10 then need a candidate that was not stored?</li>
+      <li>Write the self-join in SQL over a table <code>friends(x, v)</code> holding both directions, and give its row count in terms of degrees.</li>
+      <li>Keep each touched user's top 10 up to date under +1 updates only, with a size-10 heap. Show that a candidate outside the top 10 can enter only if its own count was just incremented.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>With probability 0.5% the whole storage tier is slow at once; otherwise calls are slow independently with <var>p</var> = 0.5%. What is the chance a 100-call request is slow? Does hedging help with the shared part?</li>
+      <li>Replace the nightly batch with incremental updates only. What goes wrong over months, and how does a periodic batch fix it?</li>
+      <li>A user joins a group of 3,035 people, and group-mates are a candidate source. Whose candidates change?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Unfriend.</b> The same derivation with −1: \(m(u,y)\) falls for each friend <var>y</var> of <var>v</var>, and \(m(v,x)\) for each friend <var>x</var> of <var>u</var>; <var>u</var> and <var>v</var> become candidates of each other again. If only the top 10 is stored and one of them drops below the 11th, the new 10th was never stored, so the store must keep more than 10 (or the full counts) or recompute that user.</p>
+      <p><b>SQL.</b> <code>SELECT a.x, b.x AS y, COUNT(*) AS m FROM friends a JOIN friends b ON a.v = b.v AND a.x &lt;&gt; b.x GROUP BY a.x, b.x</code>, then remove pairs that are already friends. It emits \(\sum_v d_v(d_v-1)\) rows before grouping.</p>
+      <p><b>Top 10 under increments.</b> Counts only grow. A candidate outside the top 10 has count at most the 10th largest; if it was not incremented, its count is unchanged and the 10th did not fall, so it still cannot pass. After each increment, compare only the incremented candidate with the heap's smallest.</p>
+      <p><b>Shared slowness.</b> \(0.005 + 0.995 \times (1 - 0.995^{100}) = 0.005 + 0.995 \times 0.3942 = 0.3973\). A hedge to another replica of the same slow tier does not remove the shared 0.5%.</p>
+      <p><b>Incremental only.</b> Lost events and bugs accumulate silently and are never repaired. A periodic batch recomputes from the source of truth and resets the drift.</p>
+      <p><b>Group join.</b> The new member and every one of the 3,035 members gain a shared group, so all of them are touched. That is why large groups are capped or sampled as a candidate source.</p>
+    </div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>, chapter 6 (heaps and priority queues), including the exercise on merging <var>k</var> sorted lists.</li>
-      <li>R. Fagin, A. Lotem and M. Naor, "Optimal aggregation algorithms for middleware", PODS 2001 (the threshold algorithm).</li>
-      <li>Python's <a href="https://docs.python.org/3/library/heapq.html"><code>heapq</code> documentation</a>, including <code>heapq.merge</code> and <code>nsmallest</code>.</li>
+      <li>Jeffrey Dean and Luiz André Barroso, "The Tail at Scale", <em>Communications of the ACM</em> 56(2), 2013: fan-out and hedged requests.</li>
+      <li>John D. C. Little, "A Proof for the Queuing Formula: L = λW", <em>Operations Research</em> 9(3), 1961.</li>
+      <li>Nathan Bronson et al., <a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">"TAO: Facebook's Distributed Data Store for the Social Graph"</a>, USENIX ATC 2013 (see the architecture below).</li>
+      <li>Rajesh Nishtala et al., <a href="https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala">"Scaling Memcache at Facebook"</a>, NSDI 2013: leases against stale sets and thundering herds.</li>
+      <li>Jeffrey Dean and Sanjay Ghemawat, "MapReduce: Simplified Data Processing on Large Clusters", OSDI 2004.</li>
+      <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>: chapter 1 (percentiles, tail amplification), chapter 5 (replication, read-your-writes) and chapter 10 (batch joins).</li>
     </ul></div>
   </div>
 
+  <!-- ============================================================ 4 · PRODUCT + ARCHITECTURE -->
   <div class="blk des">
-    <div class="bh"><span class="kind">System design · the full architecture, and testing it on users</span></div>
+    <div class="bh"><span class="kind">System Design · the product: rules people trust, goals traded off, the whole architecture</span></div>
 
-    <h4>1 · The question: what is the whole system?</h4>
-    <p>Every box in the final design exists because a measurement earlier in the week demanded it. Here is the request path, with the problem each box answers.</p>
-    <div class="dg"><div class="vflow">
-      <div class="vbox"><b>request: user u opens the app</b><span class="small muted">latency budget, p99 not mean (Day 2)</span></div>
-      <div class="varr">↓</div>
-      <div class="vbox"><b>result cache (LRU, keyed by u)</b><span class="small muted">a repeat visit soon after costs nothing (Day 3)</span></div>
-      <div class="varr">↓ miss</div>
-      <div class="vbox"><b>candidate store + sources</b><span class="small muted">precomputed two-hop lists, refreshed incrementally on new friendships (Day 3); hubs capped and friends sampled (Days 2, 4); group, MinHash/LSH and random-walk sources (Day 4)</span></div>
-      <div class="varr">↓ hundreds to thousands of candidates, merged and deduplicated</div>
-      <div class="vbox"><b>feature store</b><span class="small muted">offline: degrees, AA/RA, shared groups, computed in batch as of a timestamp · online: counts updated by recent friendships</span></div>
-      <div class="varr">↓</div>
-      <div class="vbox" style="border-color:var(--accent)"><b>ranker, sharded</b><span class="small muted">one logistic regression per candidate (today); each shard returns its top k, merged with a heap (today)</span></div>
-      <div class="varr">↓</div>
-      <div class="vbox"><b>final filter</b><span class="small muted">exact checks on every response: not self, not friends, not blocked, privacy; Bloom filter for "already shown" (Days 1, 3, 4)</span></div>
-      <div class="varr">↓ top 10</div>
-      <div class="vbox"><b>response + impression log</b><span class="small muted">what was shown, with its probability: the next training set (today, §12)</span></div>
-    </div><div class="cap">Offline, a batch job recomputes the candidate store and the offline features, and retrains and recalibrates the ranker on the latest time window.</div></div>
-    <div class="tablewrap"><table>
-      <tr><th>box</th><th>the problem it answers</th><th>where measured</th></tr>
-      <tr><td>candidate store</td><td>exact two-hop work W(u) has mean 1,477 and max 51,806 reads; too slow and too skewed to do from scratch per request</td><td>reading R.5, Days 2–3</td></tr>
-      <tr><td>hub capping, sampling, LSH</td><td>hubs dominate the work; approximate candidates keep most of recall@K at a fraction of the reads</td><td>Days 2, 4</td></tr>
-      <tr><td>several sources</td><td>only 48.4% of future friendships are two-hop candidates</td><td>today, ML §2</td></tr>
-      <tr><td>feature store</td><td>features must be identical in training and serving, and as of the right time</td><td>today, §2 below</td></tr>
-      <tr><td>ranker</td><td>CN puts hub-reached candidates first; LR lifts recall@10 from 0.0524 to 0.0718</td><td>today, ML §10</td></tr>
-      <tr><td>heap merge</td><td>shards each hold part of the candidates; per-shard top 10 is exact</td><td>today, Algorithms §5</td></tr>
-      <tr><td>final filter</td><td>caches and precomputed lists are eventually consistent; a block must never be violated</td><td>Days 1, 3</td></tr>
-      <tr><td>impression log</td><td>without logged exposure, the next model learns from its own choices</td><td>today, ML §12</td></tr>
-    </table></div>
-
-    <h4>2 · Training–serving skew, and point-in-time features</h4>
-    <p><b>The question.</b> The model's weights are only valid for features computed exactly as in training. What goes wrong otherwise?</p>
-    <p><b>First attempt: compute training features from today's tables.</b> To build a training row for a pair labelled in last month's window, look up the pair's features in the current feature store. But today's mutual-friend count already includes friendships formed during the label window, some of them caused by the very friendship being predicted. This is the random-split leak of the ML block (§1) in production form, and it inflated recall 2.7× there.</p>
-    <p><b>The key idea.</b> A <b>point-in-time</b> feature store keeps each feature value with the time it became true, and a training row for a label at time <var>t</var> reads every feature as of <var>t</var>. The <code>temporal_split</code> with two cuts is the offline version of the same rule. The second rule is <b>one code path</b>: the function that computes features for training is the one that computes them for serving (on this page, <code>pair_features</code> for both cuts), so a change cannot reach one and not the other. Offline features (batch: AA over the whole graph, group overlaps) and online features (streaming: a friendship accepted just now) are both stored with timestamps.</p>
-    <p><b>Where PYMK uses it.</b> In the feature-store box, and in the retraining job: every retrain draws a fresh pair of cuts from the most recent data, and recalibrates on the latest window (ML §11 measured why).</p>
-
-    <h4>3 · Online experiments: A/B testing a new ranker</h4>
-    <p><b>The question.</b> Offline, logistic regression beats Adamic–Adar by 0.008 recall@10. Will users actually make more connections they value? Offline metrics are computed on a graph that grew without the new ranker; only showing it to users answers the question.</p>
-    <p><b>First attempt: ship it and compare this week with last week.</b> Anything else that changed between the weeks (a holiday, a marketing campaign, an app release) is mixed into the difference, and there is no way to separate it.</p>
-    <p><b>The key idea: randomize.</b> Assign each user by a hash of the user id to control (old ranker) or treatment (new ranker), so each user always sees the same arm. Randomization makes the two groups alike in everything except the ranker, on average, so a difference in outcome is caused by the ranker. Define, before starting:</p>
+    <h4>1 · The rules people must be able to trust</h4>
+    <p><b>The situation.</b> A ranking can be wrong on average and still be useful: a so-so suggestion costs a glance. Some mistakes are different. They are not "a bit less relevant"; they break the product or hurt someone. Those become <b>rules that hold on every response</b>, and the design checks them exactly, at the end, on fresh data (the final check above).</p>
     <ul>
-      <li>a <b>primary metric</b>, per user: for example the share of users who accept at least one suggestion during the test, or accepted connections per user;</li>
-      <li><b>guardrail metrics</b> that must not get worse: p95 latency of the PYMK request, block and report rates on suggested connections, requests left unanswered, notification opt-outs. A ranker that raises requests by pushing users towards strangers who then block them has failed.</li>
+      <li><b>Never yourself.</b> You are never in your own list.</li>
+      <li><b>Never a current friend.</b> Suggesting someone you already know is a visible bug, and stale lists produce it (17.3% of users after one batch of new friendships).</li>
+      <li><b>Never a blocked person, in either direction.</b> If you blocked Farid, or Farid blocked you, neither is ever suggested to the other. Blocking is often a safety tool; a single leak can do real harm.</li>
+      <li><b>Privacy.</b> Respect the settings of the person being suggested, such as "do not suggest me". And the reason shown must not reveal what someone chose to hide: "Ben and Chloe are friends with Esha" reveals two friendships. If Chloe hides her friend list, the reason names only Ben (<code>shown_mutuals</code> above). The ranker may still use the full count; the display may not.</li>
     </ul>
-    <p><b>How many users? Derived.</b> Let the primary metric be a proportion: <var>p</var> in control, \(q = p(1+\text{lift})\) in treatment, with <var>n</var> users per arm. The difference of sample proportions is approximately normal with standard deviation \(\sqrt{(p(1-p) + q(1-q))/n}\). A two-sided test at level α rejects when the observed difference exceeds \(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)/n}\) (its spread when there is no effect, with \(\bar p = (p+q)/2\)). For the test to reject with probability 1 − β when the true difference is \(q-p\), the threshold must sit \(z_{1-\beta}\) true standard deviations below \(q-p\):</p>
-    <div class="eq">\[ q - p = \frac{z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}}{\sqrt n} \quad\Longrightarrow\quad n = \frac{\Big(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}\Big)^2}{(q-p)^2}. \]</div>
-<div class="code"><div class="ch"><span>experiment/sample_size.py · users per arm for a two-proportion test</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def users_per_arm(p, lift, alpha=0.05, power=0.8):
+    <p>These rules are cheap to check and absolute, which is exactly why they sit in a small separate step instead of inside the model: the model can be retrained, approximated or replaced, and the rules still hold. Day 1 wrote them into the contract and its tests; here they hold at a billion users.</p>
+
+    <h4>2 · The goals traded off against each other</h4>
+    <p>Everything else is a goal to balance, and the week has measured each one.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Goal</th><th>What it means</th><th>What pulls against it</th></tr>
+      <tr><td><b>Relevance</b></td><td>suggestions people accept and keep, not just clicks</td><td>more candidates and a bigger model cost latency and machines; the learned ranker lifted recall@10 from 0.0524 to 0.0718 (Day 4)</td></tr>
+      <tr><td><b>Freshness</b></td><td>a new friendship changes the list soon</td><td>precomputed lists are cheap but stale; incremental updates cost 127 user rows per friendship on average, 1,747 for a hub</td></tr>
+      <tr><td><b>Latency</b></td><td>the page waits; stated as a p99, agreed with the interviewer (an assumption, not a fact)</td><td>fan-out: 100 calls at 1% each make 63% of requests slow</td></tr>
+      <tr><td><b>Cost</b></td><td>machines, memory, bandwidth</td><td>online two hops would read 41 GB/s at peak; a precomputed top 100 costs about 1.2 TB</td></tr>
+    </table></div>
+    <p>A good answer names the trade-off and picks a point on it, with numbers: "precompute daily, update incrementally on new friendships, cap hubs, check eligibility on every response".</p>
+
+    <h4>3 · The whole architecture, where every box answers a problem from the week</h4>
+    <p>Large recommenders split "find the right 10 out of a billion" into stages; each stage sees fewer people and can spend more on each. This funnel shape is described publicly, for example in YouTube's "Deep Neural Networks for YouTube Recommendations" (RecSys 2016). Here it is applied to People You May Know as a hypothetical design.</p>
+    <div class="dg"><div class="vflow">
+      <div class="vbox"><b>Request: suggest(u, k = 10)</b><span class="muted small">the page waits; budget stated as a p99 (<a href="day_2.html">Day 2</a>)</span></div>
+      <div class="varr">↓ a repeat visit soon after is served from a result cache (LRU, today)</div>
+      <div class="vbox"><b>Graph store</b><span class="muted small">friend lists sharded by user with consistent hashing, hub lists pinned in cache, reads coalesced (today); stored compactly (<a href="day_1.html">Day 1</a>)</span></div>
+      <div class="varr">↓ read precomputed candidates and live sources</div>
+      <div class="vbox"><b>Candidate generation</b><span class="muted small">a billion → about a thousand. Two-hop counts precomputed by self-join and updated incrementally (today); exact counting (<a href="day_1.html">Day 1</a>); hubs capped (<a href="day_2.html">Day 2</a>); sampled friends, MinHash and LSH, random walks, group-mates under a budget (<a href="day_3.html">Day 3</a>)</span></div>
+      <div class="varr">↓ for each candidate, look up features as of now</div>
+      <div class="vbox"><b>Feature store</b><span class="muted small">mutual counts, Adamic–Adar, shared groups, degrees; batch and streaming values, each stored with its time (part 4 below)</span></div>
+      <div class="varr">↓ score</div>
+      <div class="vbox"><b>Ranker</b><span class="muted small">a model of "will they connect", trained on a time split and calibrated (<a href="day_4.html">Day 4</a>); per-shard top 10 merged with a heap (<a href="day_4.html">Day 4</a>)</span></div>
+      <div class="varr">↓ keep the eligible best</div>
+      <div class="vbox" style="border-color:var(--accent)"><b>Final check and top-k</b><span class="muted small">exact rules on fresh data: self, friends, blocks both ways, privacy (today; the contract and its tests, <a href="day_1.html">Day 1</a>); Bloom filter for "already shown" (<a href="day_3.html">Day 3</a>)</span></div>
+      <div class="varr">↓ return the 10, and log what was shown</div>
+      <div class="vbox"><b>Impression log → training data and experiments</b><span class="muted small">what was shown and what was accepted; tomorrow's training set and today's A/B test (<a href="day_4.html">Day 4</a>, and below)</span></div>
+    </div><div class="cap">Offline, a batch job rebuilds the candidate store and the batch features, and retrains and recalibrates the ranker on the latest window. Only the final check is never approximate.</div></div>
+    <div class="tablewrap"><table>
+      <tr><th>Box</th><th>The problem it answers, as measured</th><th>Built on</th></tr>
+      <tr><td>Graph store</td><td>1.6 TB does not fit one machine; a request touches ~one shard per friend; 1% of lists carry 69% of the bytes read</td><td>today; <a href="day_1.html">Day 1</a> (storage)</td></tr>
+      <tr><td>Candidate generation</td><td>two hops hold 53.2% of future friendships (<a href="index.html">week reading</a>); exact work per request has mean 1,477 and max 51,806 ids</td><td><a href="day_1.html">Day 1</a>, <a href="day_2.html">Day 2</a>, <a href="day_3.html">Day 3</a>, today</td></tr>
+      <tr><td>Several sources</td><td>only 48.4% of a user's future friends are two-hop candidates; adding group-mates and popular users lifts the reachable share to 57.2%</td><td><a href="day_3.html">Day 3</a></td></tr>
+      <tr><td>Feature store</td><td>features must be computed the same way in training and serving, and as of the right time</td><td>today (part 4)</td></tr>
+      <tr><td>Ranker</td><td>raw mutual counts put hub-reached candidates first; learning lifts recall@10 from 0.0524 to 0.0718, and 0.0818 over the union of sources</td><td><a href="day_4.html">Day 4</a></td></tr>
+      <tr><td>Final check</td><td>stored lists go stale (17.3% of users after a batch of new friendships); a block must never leak</td><td><a href="day_1.html">Day 1</a>, today</td></tr>
+      <tr><td>Impression log</td><td>ranking by raw count gives 50.9% of shown slots to the top 1% of users, who form 10.8% of future friendships; without logged exposure, the next model learns from its own choices</td><td><a href="day_4.html">Day 4</a></td></tr>
+    </table></div>
+    <p><b>A published graph store, for comparison.</b> The TAO paper (Bronson et al., USENIX ATC 2013) describes Facebook's store for the social graph: typed <b>objects</b> (users, posts, places) and typed directed <b>associations</b> between them, each with a time; reads dominated by "the associations of this type from this object, newest first" and "how many are there"; storage in sharded MySQL behind a two-level cache tier; eventual consistency between regions. It is the same pattern as the graph store box: adjacency lists, sharded by id, read through caches. It is cited here as a public example of the pattern, not as a description of any current system.</p>
+
+    <h4>4 · Training–serving skew, and point-in-time features</h4>
+    <p><b>The situation.</b> The ranker's weights are valid only for features computed exactly as they were in training. Two things break that.</p>
+    <p><b>Try the obvious thing.</b> To build a training row for a friendship formed last month, look up the pair's features in today's feature store. But today's mutual count already includes friendships formed <em>after</em> the one being predicted, some of them caused by it. That is the leak Day 4 measured with a random edge split, which inflated recall@10 from 0.0524 to 0.1421, 2.7 times, and here it is in production form.</p>
+    <p><b>The idea.</b> Store every feature value with the time it became true, and build each training row from the values <em>as of</em> its label's time. That is LeetCode 981 again:</p>
+    <div class="code"><div class="ch"><span>point_in_time.py · features as of the label's time, with the TimeMap from 981</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">store = TimeMap()                              # (key, value, time the value became true)
+store.set("mutuals:You,Esha", 1, 100)          # Ben introduced them
+store.set("mutuals:You,Esha", 2, 250)          # Chloe met Esha too
+store.set("mutuals:You,Esha", 5, 900)          # three more, AFTER the label below
+
+label_time = 300                               # You and Esha became friends at t = 300
+store.get("mutuals:You,Esha", label_time)      # 2: what the model could have known then
+store.get("mutuals:You,Esha", 1000)            # 5: "today's" value leaks the future</code></pre></div>
+    <p>The second rule is <b>one code path</b>: the same function computes features for training and for serving, so a change cannot reach one and not the other. Computing a feature one way offline and another way online is <b>training–serving skew</b>; the model then sees inputs at serving time that it never saw in training, and its offline numbers no longer predict what users get.</p>
+    <p class="idea"><b>In one line.</b> Train on features as they were at the label's time, computed by the same code that serves them.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Draw the architecture from memory. For each box, write the one measurement from this week that justifies it, and what goes wrong if you remove it.</li>
+      <li>Write the test that proves a blocked person never appears, whatever the stored list contains, in both directions.</li>
+      <li>Give an example training row where a feature computed "as of now" leaks the label.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li><b>Batch only.</b> Every list is computed nightly and served from a key-value store. What does freshness lose, and what must the final check now catch?</li>
+      <li><b>Online only.</b> Everything is computed per request. Which number of the estimate becomes the bottleneck?</li>
+      <li>A user switches on "hide my friend list". Which stored data and which displayed reasons must change, and how fast?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Removing boxes.</b> No candidate generation: scoring a billion people per request. No ranker: hub-reached candidates crowd the list. No final check: a block or a new friendship leaks through a stale list. No graph store sharding or cache: the graph does not fit, and hub lists melt their shard. No impression log: the next model is trained only on what the old one chose to show.</p>
+      <p><b>Batch only.</b> Lists are up to a day old: new friends stay suggested and new friends-of-friends do not appear until the next run. The final check still catches friends, blocks and privacy, so the product stays correct, only less fresh.</p>
+      <p><b>Online only.</b> Reads per request: about 148,000 ids from about 181 shards, 41 GB/s at peak, and a tail set by the slowest shard.</p>
+      <p><b>Hide my friend list.</b> The displayed reasons must change at once, which <code>shown_mutuals</code> does because it reads the setting on every response. Stored counts may keep using the friendship for ranking; whether they should is a product and policy decision to state explicitly.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ 5 · A/B -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · proving it helps: A/B tests</span></div>
+
+    <h4>The situation</h4>
+    <p>Offline, the learned ranker beats Adamic–Adar by 0.0080 recall@10 (95% interval 0.0052 to 0.0108, Day 4). Will people actually make more connections they value? Offline numbers come from a graph that grew without the new ranker. Only showing it to people answers the question.</p>
+
+    <h4>Try the obvious thing</h4>
+    <p>"Ship it, and compare this week with last week." Anything else that changed between the weeks, a holiday, a marketing push, an app release, is mixed into the difference, and nothing can separate it out.</p>
+
+    <h4>The idea: randomize by user</h4>
+    <p>Split users at random into <b>control</b> (old ranker) and <b>treatment</b> (new ranker). Because the split is random, the two groups are alike in everything except the ranker, on average, so a difference in outcome is caused by the ranker. Assign by a hash of the user id, so the same person always sees the same arm on every request and every device:</p>
+    <div class="code"><div class="ch"><span>assign.py · sticky, independent assignment by hashing</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def arm(user_id, experiment_id, treatment_share=0.5):
+    """Same user and experiment -&gt; same arm on every request; experiments are independent."""
+    x = h64(h64(user_id) ^ h64(experiment_id + 0x5EED))
+    return "treatment" if x &lt; treatment_share * 2**64 else "control"</code></pre></div>
+    <p>Decide before starting:</p>
+    <ul>
+      <li>a <b>primary metric</b> per user, for example the share of users who accept at least one suggestion during the test;</li>
+      <li><b>guardrails</b> that must not get worse: p95 latency of the request, block and report rates on suggested connections, requests left unanswered, notification opt-outs. A ranker that raises requests by pushing people towards strangers who then block them has failed.</li>
+    </ul>
+
+    <h4>How many users?</h4>
+    <p>A small lift hides in noise unless the groups are large. The function below gives the users needed per arm to detect a relative lift with the usual settings (a 5% false-alarm rate and an 80% chance of catching a real effect):</p>
+    <div class="code"><div class="ch"><span>sample_size.py · users per arm for a two-proportion test</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def users_per_arm(p, lift, alpha=0.05, power=0.8):
     """Users per arm to detect p -&gt; p*(1+lift) with a two-sided two-proportion z-test."""
     q = p * (1 + lift)
     z_a = NormalDist().inv_cdf(1 - alpha / 2)
@@ -853,58 +1023,91 @@ def smallestRange(nums):                        # 632: heap of heads + the runni
     pbar = (p + q) / 2
     n = (z_a * math.sqrt(2 * pbar * (1 - pbar)) + z_b * math.sqrt(p * (1 - p) + q * (1 - q))) ** 2
     return math.ceil(n / (q - p) ** 2)</code></pre></div>
-    <p><b>Worked numbers</b> (computed by the function; the baselines are <em>assumptions</em> for illustration, not measurements of any product), α = 0.05, power 0.8:</p>
     <div class="tablewrap"><table>
-      <tr><th>assumed baseline p</th><th class="num">relative lift 1%</th><th class="num">2%</th><th class="num">5%</th></tr>
+      <tr><th>assumed baseline (illustration, not a measurement)</th><th class="num">relative lift 1%</th><th class="num">2%</th><th class="num">5%</th></tr>
       <tr><td>5% of users accept a suggestion</td><td class="num">2,996,698</td><td class="num">752,703</td><td class="num">122,124</td></tr>
       <tr><td>10% of users accept a suggestion</td><td class="num">1,419,073</td><td class="num">356,335</td><td class="num">57,763</td></tr>
     </table></div>
-    <p>The <var>n</var> ∝ 1/(<var>q</var> − <var>p</var>)² law dominates: halving the lift you want to detect needs four times the users. Small lifts are why these tests need very large user bases, and why a 10,000-user graph like ours can only ever be evaluated offline.</p>
-    <p><b>Two ways the result can mislead.</b></p>
-    <ul>
-      <li><b>Novelty effects.</b> A new set of faces in the PYMK panel attracts clicks at first simply because it is new; the effect fades as users get used to it. (The opposite, a primacy effect, hurts a change at first.) Plot the treatment effect by day since a user's first exposure; if it shrinks, the early numbers overstate the long-run gain. Run long enough to see it flatten, or compare users who joined after the test started.</li>
-      <li><b>Interference.</b> A friendship involves two users, who may be in different arms. If a treatment user sends more requests and control users accept them, the control arm's numbers rise too and the measured difference shrinks; the assumption that one user's outcome does not depend on another's assignment is broken. Randomizing by graph clusters (whole communities in one arm) reduces it, at the cost of fewer independent units and wider intervals.</li>
-    </ul>
-    <p><b>Where PYMK uses it.</b> As the last step of every change to the ranker: offline evaluation on the temporal split decides what is worth testing; the A/B test decides what ships.</p>
+    <p>Halving the lift you want to detect needs about four times the users. That is why these tests need very large user bases, and why a 10,000-user graph like ours can only be evaluated offline.</p>
+    <details class="deep"><summary>The math, step by step: the users-per-arm formula</summary><div>
+      <p>We want the number of users per arm, <var>n</var>, so that a real lift from <var>p</var> to <var>q</var> is detected most of the time.</p>
+      <p><b>The noise.</b> In an arm of <var>n</var> users with true rate <var>p</var>, the observed share wobbles with standard deviation \(\sqrt{p(1-p)/n}\). The difference between two arms wobbles with standard deviation \(\sqrt{(p(1-p)+q(1-q))/n}\), adding the two variances.</p>
+      <p><b>The alarm threshold.</b> If there is no effect, both arms have rate about \(\bar p = (p+q)/2\) and the difference has standard deviation \(\sqrt{2\bar p(1-\bar p)/n}\). We raise the alarm when the observed difference exceeds \(z_{1-\alpha/2}\) of these, where \(z_{0.975} = 1.96\) gives a 5% false-alarm rate.</p>
+      <p><b>Catching a real effect.</b> If the true difference is \(q-p\), we want the observed difference above the threshold 80% of the time. That means the threshold must sit \(z_{0.8} = 0.84\) true standard deviations below \(q-p\):</p>
+      <div class="eq">\[ q - p = \frac{z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}}{\sqrt n} . \]</div>
+      <p>Solve for <var>n</var> by squaring both sides and rearranging:</p>
+      <div class="eq">\[ n = \frac{\Big(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}\Big)^2}{(q-p)^2} . \]</div>
+      <p><b>Plug in.</b> <var>p</var> = 0.10, a 2% relative lift, so <var>q</var> = 0.102 and \(\bar p = 0.101\): the numerator is \((1.96\sqrt{0.18160} + 0.84\sqrt{0.18160})^2 \approx 1.425\), the denominator \(0.002^2 = 4 \times 10^{-6}\), so <var>n</var> ≈ 356,000, the table's 356,335.</p>
+      <p><b>What was shown.</b> The users needed grow like one over the square of the difference you want to detect.</p>
+    </div></details>
 
-    <h4>4 · Week 2 teaser: from hand-made features to learned representations</h4>
-    <p>This week every feature was designed by hand: mutual friends weighted by 1/log <var>d</var>, shared groups, degrees. Each captures one idea, and the union ranker showed that the gains came from adding the right idea. Next week asks whether the ideas can be learned instead. In language, word2vec gives every word a vector, trained so that words appearing in similar contexts get similar vectors, and nobody writes down a feature for "is a colour" or "is a city". The same trick applies to people: treat a random walk on the friendship graph as a sentence and each user as a word (DeepWalk, node2vec), and every user gets a vector whose dot products predict who will connect, including across groups and over more than two hops. Week 2 builds representation learning from first principles, from word embeddings to user embeddings, and those embeddings become both a candidate source (nearest neighbours in vector space) and the features that replace much of today's hand-made list.</p>
+    <h4>Two ways the result can mislead</h4>
+    <ul>
+      <li><b>Novelty effects.</b> New faces in the panel attract clicks at first simply because they are new, and the effect fades. Plot the treatment effect by day since each user's first exposure; if it shrinks, the early numbers overstate the long-run gain. Run until it flattens, or compare users who joined after the test began.</li>
+      <li><b>Interference.</b> A friendship involves two people, who may be in different arms. If treatment users send more requests and control users accept them, the control arm's numbers rise too and the measured difference shrinks. Randomizing whole communities together (graph cluster randomization) reduces this, at the cost of fewer independent units and wider intervals.</li>
+    </ul>
+    <p class="idea"><b>In one line.</b> Randomize by user with a sticky hash, fix one primary metric and the guardrails in advance, size the test from the lift you need, and watch for novelty and interference.</p>
 
     <div class="part"><b>Practice</b><ul>
-      <li>Draw the architecture from memory and, for each box, write the one measurement from this week that justifies it.</li>
-      <li>For a test of a new ranker, write the primary metric, three guardrails, the unit of randomization and the sample size, with every assumption labelled.</li>
-      <li>Compute the users per arm for a 3% relative lift on a 7% baseline with <code>users_per_arm</code>, then for 80% vs 90% power.</li>
-      <li>Explain, with an example row, how a feature computed "as of now" leaks the label in a training set for last month.</li>
+      <li>Write the plan for testing a new ranker: unit of randomization, primary metric, three guardrails, and the sample size, with every assumption labelled.</li>
+      <li>Compute the users per arm for a 3% relative lift on a 7% baseline, then at 90% power instead of 80%.</li>
+      <li>Check with <code>arm</code> that 100,000 users split close to 50/50, and that two experiments' assignments are independent (about 25% of users in both treatments).</li>
     </ul></div>
     <div class="part"><b>Problem variations</b><ul>
-      <li>The primary metric is a mean (connections per user), not a proportion. What replaces <var>p</var>(1 − <var>p</var>) in the sample-size formula?</li>
-      <li>You test 20 metrics at α = 0.05. How many "significant" results do you expect when nothing changed?</li>
-      <li>Design an A/A test (both arms get the old ranker). What does it check, and what result would worry you?</li>
+      <li>The primary metric is a mean (connections per user), not a proportion. What replaces <var>p</var>(1 − <var>p</var>)?</li>
+      <li>You test 20 metrics at a 5% level. How many "significant" results do you expect when nothing changed?</li>
+      <li>Design an A/A test (both arms get the old ranker). What does it check?</li>
     </ul></div>
     <details class="sol"><summary>Solution</summary><div>
-    <p><b>Means.</b> Replace \(p(1-p)\) and \(q(1-q)\) by the variance σ² of the per-user metric in each arm: \(n = (z_{1-\alpha/2} + z_{1-\beta})^2 \cdot 2\sigma^2/\delta^2\) for a difference δ in means. Heavy-tailed metrics (connections per user, like degrees on Day 2) have a large σ², so they are often capped or replaced by a proportion. <b>Twenty metrics.</b> 20 × 0.05 = 1 false positive expected; pre-register one primary metric, or correct the level (for example α/20 for each). <b>A/A.</b> It checks the randomization and the metric pipeline: about 5% of A/A tests should show a significant difference at α = 0.05, the two arms should have the same size up to chance (a large imbalance means assignment or logging is broken), and the p-values of repeated A/A tests should be roughly uniform.</p></div></details>
+      <p><b>Means.</b> Use the variance σ² of the per-user metric in each arm: \(n = (z_{1-\alpha/2} + z_{1-\beta})^2 \cdot 2\sigma^2/\delta^2\) for a difference δ in means. Heavy-tailed metrics such as connections per user (degrees, Day 2) have a large σ², so they are often capped or replaced by a proportion.</p>
+      <p><b>Twenty metrics.</b> 20 × 0.05 = 1 false alarm expected. Fix one primary metric in advance, or lower the level for each (for example 0.05/20).</p>
+      <p><b>A/A.</b> It checks assignment and the metric pipeline: about 5% of A/A tests should be "significant", the arms should match in size up to chance (a large imbalance means assignment or logging is broken), and the p-values of repeated A/A tests should be spread evenly between 0 and 1.</p>
+    </div></details>
     <div class="part"><b>Further reading</b><ul>
-      <li>R. Kohavi, D. Tang and Y. Xu, <em>Trustworthy Online Controlled Experiments: A Practical Guide to A/B Testing</em>, Cambridge University Press, 2020.</li>
-      <li>J. Ugander, B. Karrer, L. Backstrom and J. Kleinberg, "Graph cluster randomization: network exposure to multiple universes", KDD 2013.</li>
-      <li>P. Gupta et al., "WTF: The Who to Follow service at Twitter", WWW 2013: a public description of a production who-to-follow architecture (candidate generation by random walks, then ranking).</li>
-      <li>T. Mikolov et al., <a href="https://arxiv.org/abs/1301.3781">Efficient estimation of word representations in vector space</a>, 2013; B. Perozzi, R. Al-Rfou and S. Skiena, <a href="https://arxiv.org/abs/1403.6652">DeepWalk</a>, KDD 2014; A. Grover and J. Leskovec, <a href="https://arxiv.org/abs/1607.00653">node2vec</a>, KDD 2016: next week's starting points.</li>
+      <li>Ron Kohavi, Diane Tang and Ya Xu, <em>Trustworthy Online Controlled Experiments: A Practical Guide to A/B Testing</em>, Cambridge University Press, 2020.</li>
+      <li>Johan Ugander, Brian Karrer, Lars Backstrom and Jon Kleinberg, "Graph cluster randomization: network exposure to multiple universes", KDD 2013.</li>
     </ul></div>
   </div>
+
+  <!-- ============================================================ 6 · INTERVIEW -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">System Design · how to walk an interviewer through it</span></div>
+    <p>"Design People You May Know" is a classic interview problem, asked at companies such as Meta and LinkedIn. The design on these pages is hypothetical. The whole week fits into one answer if you take it in this order and say the numbers out loud.</p>
+    <ol>
+      <li><b>Restate and ask.</b> Mutual friendship or follows? How many users, how many friends on average, how many requests per second, what latency, how fresh? Any signals beyond the graph (groups, city, contacts)? Write the answers down as labelled assumptions.</li>
+      <li><b>State the rules that always hold.</b> Never yourself, never a current friend, never a blocked person in either direction, respect privacy. Say they will be checked exactly at the end of every response.</li>
+      <li><b>Give the simple baseline.</b> Friends of friends ranked by mutual count, with why it works (most new friendships close a triangle) and its cost (the sum of your friends' friend counts).</li>
+      <li><b>Estimate.</b> 100 billion friendships, 1.6 TB, tens of thousands of requests per second, about 148,000 ids per request. Conclude: reading breaks first, not storage.</li>
+      <li><b>Draw the funnel.</b> Candidate generation → features → ranker → final check, with the graph store underneath and the impression log at the end.</li>
+      <li><b>Go deep where the interviewer points.</b> Storage: consistent hashing, hot lists, caching. Latency: fan-out and the tail, precompute versus online. Freshness: incremental updates and who they touch. Candidates: sampling, MinHash, random walks under a budget. Ranking: a time split, features, calibration.</li>
+      <li><b>Say how you would know it works.</b> Offline: recall@10 with error bars on a time split. Online: an A/B test by user, with one primary metric and guardrails on blocks and latency.</li>
+      <li><b>Close with the risks.</b> Feedback loops and exposure bias, hub write amplification, privacy of displayed reasons, and what you would build next.</li>
+    </ol>
+    <p class="idea"><b>In one line.</b> Rules, baseline, estimate, funnel, depth on request, measurement, risks: in that order, every claim with a number.</p>
+  </div>
+
+  <p><b>What breaks next: the features themselves.</b> Every feature this week was designed by hand: mutual friends weighted by 1/log of their degree, shared groups, degrees. Each captures one idea, and the gains came from adding the right idea. The next question is whether the ideas can be <b>learned</b> instead. In language, word2vec gives every word a vector, trained so that words appearing in similar contexts get similar vectors; nobody writes a feature for "is a city". The same trick applies to people: treat a random walk on the friendship graph as a sentence and each person as a word (DeepWalk, node2vec), and every user gets a vector whose closeness predicts who will connect, across groups and beyond two hops. Those <b>user embeddings</b> become both a candidate source (nearest neighbours in vector space) and features that replace much of the hand-made list, and the impression log becomes their training signal.</p>
+  <p><b>What's next.</b> First the <a href="worksheet.html">weekend build</a>: ship a tested <code>pymk</code> package in the same order as the week, measure its recall and latency on the week's graph, and check yourself. Then Week 2 builds representation learning from first principles, from word embeddings to user embeddings, starting from Mikolov et al., <a href="https://arxiv.org/abs/1301.3781">"Efficient Estimation of Word Representations in Vector Space"</a> (2013); Perozzi, Al-Rfou and Skiena, <a href="https://arxiv.org/abs/1403.6652">"DeepWalk"</a> (KDD 2014); and Grover and Leskovec, <a href="https://arxiv.org/abs/1607.00653">"node2vec"</a> (KDD 2016).</p>
+  <div class="part"><b>Further reading for the whole day</b><ul>
+    <li>Johan Ugander, Brian Karrer, Lars Backstrom and Cameron Marlow, <a href="https://arxiv.org/abs/1111.4503">"The Anatomy of the Facebook Social Graph"</a>, 2011.</li>
+    <li>Pankaj Gupta et al., "WTF: The Who to Follow Service at Twitter", WWW 2013: a public account of a follow-recommendation system and its trade-offs.</li>
+    <li>Paul Covington, Jay Adams and Emre Sargin, "Deep Neural Networks for YouTube Recommendations", RecSys 2016: the candidate generation → ranking funnel.</li>
+  </ul></div>
 
   <div class="check" data-check="day5">
     <div class="ch"><b>Checkpoint · Day 5</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="p5a" data-dim="ml"><span class="tx">Set up link prediction with two time cuts, state the evaluation population and the miss rule, and explain why a random edge split inflated recall 2.7×.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5b" data-dim="ml"><span class="tx">Derive the 1/(<var>d</var> − 1) weight of a mutual friend from the introduction model, and compute CN, Jaccard, AA and RA by hand on the worked example.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5c" data-dim="ml"><span class="tx">Derive the log loss from the likelihood, its gradient \(X^\top(p-y)/n\), its convexity and the 1/<var>L</var> step; train it in NumPy and match Newton's method.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5d" data-dim="ml"><span class="tx">Prove that AUC equals the Mann–Whitney <var>U</var> over \(n_+n_-\), ties included, and compute recall@10 with out-of-candidate friends counted as misses.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5e" data-dim="ml"><span class="tx">Reproduce the comparison of CN, Jaccard, AA, RA and logistic regression with bootstrap intervals over users and paired differences.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5f" data-dim="ml"><span class="tx">Derive the log <var>r</var> correction for sampled negatives, measure calibration before and after, and explain the drift that remains; explain exposure bias and inverse propensity weighting.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5g" data-dim="dsa"><span class="tx">Prove the heap k-way merge correct (invariant, dedupe, per-shard top-<var>k</var> is exact) and O(<var>L</var> + <var>k</var> log <var>L</var>); solve 23, 973 and 373.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5h" data-dim="sys"><span class="tx">Draw the full serving architecture, name the measured problem behind each box, and explain point-in-time features and training–serving skew.</span><span class="dim sys">System Design</span></label>
-    <label class="ck"><input type="checkbox" data-id="p5i" data-dim="sys"><span class="tx">Design an A/B test for a new ranker: unit, primary metric, guardrails, sample size from the derived formula; explain novelty effects and interference.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5a" data-dim="sys"><span class="tx">Produce the billion-user estimate from labelled assumptions (100 billion friendships, 1.6 TB, 34,722 requests per second at peak, about 148,000 ids per request) and say which resource breaks first and why reads grow with the squared degree.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5b" data-dim="dsa"><span class="tx">Show by hand that mod N moves N/(N+1) of keys; implement the ring with virtual nodes and rendezvous hashing, and prove that a new server takes about K/(N+1) keys, all to itself.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5c" data-dim="dsa"><span class="tx">Solve 146 (both versions), 706 and 981, and explain with the measured numbers why caching the top-degree lists beats LRU and what coalescing saves.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5d" data-dim="sys"><span class="tx">Derive 1 − (1 − p)ⁿ, explain why 100 calls at 1% make 63% of requests slow, name three mitigations, explain hot keys, and use Little's law to get 1,736 requests in flight at peak.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5e" data-dim="sys"><span class="tx">Compare precompute and compute-on-request; when Dev and Farid connect, name whose suggestions change and why, and quote the measured cost of incremental updates (127 users touched on average, 1,747 for a hub).</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5f" data-dim="sys"><span class="tx">State the rules that hold on every response (self, friends, blocks both ways, privacy of the person and of the displayed reason) and explain why an exact final check on fresh data runs on every response.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5g" data-dim="sys"><span class="tx">Walk an interviewer through the design in order, drawing the architecture and naming for each box the measured problem it answers and the day that built it.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5h" data-dim="ml"><span class="tx">Design an A/B test for a new ranker: sticky assignment by user, primary metric, guardrails, users per arm from the derived formula; explain novelty effects and interference.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d5i" data-dim="ai"><span class="tx">Explain training–serving skew and point-in-time features, why the impression log is needed to learn from behaviour without a feedback loop, and how learned user embeddings would replace hand-made features.</span><span class="dim ai">AI</span></label>
   </div>
 </section>
-<div class="pager"><a class="btn" href="day_4.html">← Approximation and candidates</a><a class="btn pri" href="worksheet.html">Worksheet and checks →</a></div>
+<div class="pager"><a class="btn" href="day_4.html">← Learn who connects</a><a class="btn pri" href="worksheet.html">Worksheet and checks →</a></div>
 <footer>
   <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
   <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
@@ -1083,8 +1286,8 @@ simInit(); simRender();
 }
 
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
-const KEY = "pymk-week1-progress-v1";
-const ITEMS = [{"id": "pr1", "dim": "sys", "page": "index.html"}, {"id": "pr2", "dim": "ml", "page": "index.html"}, {"id": "pr3", "dim": "ml", "page": "index.html"}, {"id": "pr4", "dim": "dsa", "page": "index.html"}, {"id": "pr5", "dim": "dsa", "page": "index.html"}, {"id": "pr6", "dim": "dsa", "page": "index.html"}, {"id": "pr7", "dim": "del", "page": "index.html"}, {"id": "pr8", "dim": "sys", "page": "index.html"}, {"id": "pr9", "dim": "sys", "page": "index.html"}, {"id": "p1a", "dim": "ml", "page": "day_1.html"}, {"id": "p1b", "dim": "ml", "page": "day_1.html"}, {"id": "p1c", "dim": "ml", "page": "day_1.html"}, {"id": "p1d", "dim": "dsa", "page": "day_1.html"}, {"id": "p1e", "dim": "dsa", "page": "day_1.html"}, {"id": "p1f", "dim": "dsa", "page": "day_1.html"}, {"id": "p1g", "dim": "dsa", "page": "day_1.html"}, {"id": "p1h", "dim": "del", "page": "day_1.html"}, {"id": "p2a", "dim": "ml", "page": "day_2.html"}, {"id": "p2b", "dim": "ml", "page": "day_2.html"}, {"id": "p2c", "dim": "ml", "page": "day_2.html"}, {"id": "p2d", "dim": "dsa", "page": "day_2.html"}, {"id": "p2e", "dim": "dsa", "page": "day_2.html"}, {"id": "p2f", "dim": "dsa", "page": "day_2.html"}, {"id": "p2g", "dim": "sys", "page": "day_2.html"}, {"id": "p2h", "dim": "sys", "page": "day_2.html"}, {"id": "p2i", "dim": "sys", "page": "day_2.html"}, {"id": "p3a", "dim": "ml", "page": "day_3.html"}, {"id": "p3b", "dim": "dsa", "page": "day_3.html"}, {"id": "p3c", "dim": "dsa", "page": "day_3.html"}, {"id": "p3d", "dim": "dsa", "page": "day_3.html"}, {"id": "p3e", "dim": "sys", "page": "day_3.html"}, {"id": "p3f", "dim": "dsa", "page": "day_3.html"}, {"id": "p3g", "dim": "sys", "page": "day_3.html"}, {"id": "p3h", "dim": "sys", "page": "day_3.html"}, {"id": "p4a", "dim": "ml", "page": "day_4.html"}, {"id": "p4b", "dim": "ml", "page": "day_4.html"}, {"id": "p4c", "dim": "dsa", "page": "day_4.html"}, {"id": "p4d", "dim": "dsa", "page": "day_4.html"}, {"id": "p4e", "dim": "dsa", "page": "day_4.html"}, {"id": "p4f", "dim": "dsa", "page": "day_4.html"}, {"id": "p4g", "dim": "dsa", "page": "day_4.html"}, {"id": "p4h", "dim": "sys", "page": "day_4.html"}, {"id": "p5a", "dim": "ml", "page": "day_5.html"}, {"id": "p5b", "dim": "ml", "page": "day_5.html"}, {"id": "p5c", "dim": "ml", "page": "day_5.html"}, {"id": "p5d", "dim": "ml", "page": "day_5.html"}, {"id": "p5e", "dim": "ml", "page": "day_5.html"}, {"id": "p5f", "dim": "ml", "page": "day_5.html"}, {"id": "p5g", "dim": "dsa", "page": "day_5.html"}, {"id": "p5h", "dim": "sys", "page": "day_5.html"}, {"id": "p5i", "dim": "sys", "page": "day_5.html"}, {"id": "pw1", "dim": "del", "page": "worksheet.html"}, {"id": "pw2", "dim": "dsa", "page": "worksheet.html"}, {"id": "pw3", "dim": "sys", "page": "worksheet.html"}, {"id": "pw4", "dim": "ml", "page": "worksheet.html"}, {"id": "pw5", "dim": "dsa", "page": "worksheet.html"}, {"id": "pw6", "dim": "ml", "page": "worksheet.html"}, {"id": "pw7", "dim": "del", "page": "worksheet.html"}, {"id": "pw8", "dim": "sys", "page": "worksheet.html"}, {"id": "pc1", "dim": "dsa", "page": "worksheet.html"}, {"id": "pc2", "dim": "dsa", "page": "worksheet.html"}, {"id": "pc3", "dim": "dsa", "page": "worksheet.html"}, {"id": "pc4", "dim": "ml", "page": "worksheet.html"}, {"id": "pc5", "dim": "ml", "page": "worksheet.html"}, {"id": "pc6", "dim": "sys", "page": "worksheet.html"}, {"id": "pc7", "dim": "sys", "page": "worksheet.html"}, {"id": "pc8", "dim": "dsa", "page": "worksheet.html"}, {"id": "pc9", "dim": "ml", "page": "worksheet.html"}, {"id": "pc10", "dim": "dsa", "page": "worksheet.html"}, {"id": "pc11", "dim": "ml", "page": "worksheet.html"}, {"id": "pc12", "dim": "del", "page": "worksheet.html"}];
+const KEY = "pymk-week1-progress-v2";
+const ITEMS = [{"id": "r1", "dim": "dsa", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ml", "page": "index.html"}, {"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ai", "page": "index.html"}, {"id": "r8", "dim": "sys", "page": "index.html"}, {"id": "d1a", "dim": "dsa", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "ml", "page": "day_1.html"}, {"id": "d1g", "dim": "ml", "page": "day_1.html"}, {"id": "d1h", "dim": "del", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "ml", "page": "day_2.html"}, {"id": "d2d", "dim": "ml", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "ml", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "sys", "page": "day_3.html"}, {"id": "d3i", "dim": "del", "page": "day_3.html"}, {"id": "d4a", "dim": "ai", "page": "day_4.html"}, {"id": "d4b", "dim": "ml", "page": "day_4.html"}, {"id": "d4c", "dim": "ml", "page": "day_4.html"}, {"id": "d4d", "dim": "ml", "page": "day_4.html"}, {"id": "d4e", "dim": "ml", "page": "day_4.html"}, {"id": "d4f", "dim": "ml", "page": "day_4.html"}, {"id": "d4g", "dim": "ai", "page": "day_4.html"}, {"id": "d4h", "dim": "dsa", "page": "day_4.html"}, {"id": "d5a", "dim": "sys", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "d5f", "dim": "sys", "page": "day_5.html"}, {"id": "d5g", "dim": "sys", "page": "day_5.html"}, {"id": "d5h", "dim": "ml", "page": "day_5.html"}, {"id": "d5i", "dim": "ai", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "sys", "page": "worksheet.html"}, {"id": "w4", "dim": "ml", "page": "worksheet.html"}, {"id": "w5", "dim": "dsa", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "del", "page": "worksheet.html"}, {"id": "w8", "dim": "sys", "page": "worksheet.html"}, {"id": "c1", "dim": "dsa", "page": "worksheet.html"}, {"id": "c2", "dim": "dsa", "page": "worksheet.html"}, {"id": "c3", "dim": "ml", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "sys", "page": "worksheet.html"}, {"id": "c7", "dim": "ml", "page": "worksheet.html"}, {"id": "c8", "dim": "dsa", "page": "worksheet.html"}, {"id": "c9", "dim": "ml", "page": "worksheet.html"}, {"id": "c10", "dim": "ai", "page": "worksheet.html"}, {"id": "c11", "dim": "sys", "page": "worksheet.html"}, {"id": "c12", "dim": "sys", "page": "worksheet.html"}, {"id": "c13", "dim": "del", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

@@ -4,51 +4,47 @@ Statistics and core ML: each idea derived from first principles, checked by meas
 
 ## Week 1: People You May Know
 
-- **[Day 1: Graphs and counting](../week_01/day_1.html):** triadic closure
-    - 1 · Do friendships close triangles? The clustering coefficient
-    - 2 · Does a mutual friend predict a future friendship?
-    - 3 · Why ranking by mutual friends is a sensible first score
-- **[Day 2: Scale and skew](../week_01/day_2.html):** heavy tails and the friendship paradox
-    - 1 · The question
-    - 2 · First attempt: plug in the average
-    - 3 · The degree distribution, and why averages mislead
-    - 4 · Where heavy tails come from: preferential attachment, derived
-    - 5 · The friendship paradox, proved
-    - 6 · Expected work per request
-    - 7 · Where PYMK uses it
-- **[Day 3: The distributed graph](../week_01/day_3.html):** measuring latency: percentiles and a confidence interval for p99
-    - The question
-    - First attempt: report the mean
-    - Definitions: quantiles and order statistics
-    - Why the estimator works, and how far off it can be
-    - The bootstrap
-    - Confirm by measuring
-    - Where PYMK uses it
-    - Practice: [295 · Find Median from Data Stream](https://leetcode.com/problems/find-median-from-data-stream/)
-- **[Day 4: Approximation and candidates](../week_01/day_4.html):** sampling estimators and recall against the exact answer
-    - 1 · The question
-    - 2 · First attempt: read the first lists that fit
-    - 3 · The key idea, derived: a uniform sample of friends, scaled up
-    - 4 · Why it is correct: unbiasedness and the variance, proved
-    - 5 · The budgeted version, and its cost
-    - 6 · The fidelity metric: recall@10 against the exact answer
-    - 7 · Hub capping as a bias–variance trade-off
-    - 8 · Confirm by measuring
-    - 9 · Where PYMK uses it
-- **[Day 5: Ranking with ML](../week_01/day_5.html):** link prediction, from first principles
-    - 1 · The question: predicting friendships that do not exist yet
-    - 2 · The key idea: two time cuts, and a precise population
-    - 3 · Negatives, and their bias
-    - 4 · Features: four ways to score a mutual friend
-    - 5 · Why a mutual friend with many friends is weak evidence
-    - 6 · The other features, and one that hurts
-    - 7 · Logistic regression, derived
-    - 8 · Evaluation 1: AUC is the Mann–Whitney statistic
-    - 9 · Evaluation 2: what the user sees, recall@10, and error bars over users
-    - 10 · The measured comparison
-    - 11 · Calibration: is a 2% prediction really 2%?
-    - 12 · Feedback loops and exposure bias
-    - 13 · Privacy and fairness are constraints, not features
+- **[Day 1: Count it exactly](../week_01/day_1.html):** does a mutual friend predict a friendship?
+    - 1 · More mutual friends, more likely friends?
+    - 2 · Why it works: friendships close triangles
+    - 3 · Why sorting by mutual friends is the right first rule
+- **[Day 2: Popular people](../week_01/day_2.html):** most people have few friends, a few have very many
+    - The obvious estimate: 20 × 20
+    - Who has how many friends
+    - Where the popular people come from: the rich get richer
+    - Your friends have more friends than you
+    - So what does one request cost?
+- **[Day 2: Popular people](../week_01/day_2.html):** how slow is slow: percentiles and p99
+    - The situation: one number for "fast enough"
+    - Percentiles, in plain words
+    - How sure is a p99 from a sample?
+    - Practice: [295. Find Median from Data Stream](https://leetcode.com/problems/find-median-from-data-stream/)
+- **[Day 3: Read less](../week_01/day_3.html):** read some friends, and scale up
+    - Try the obvious thing: read the first lists that fit
+    - The idea: a random handful of friends, scaled up
+    - Use it
+    - When it is enough, and what to say in an interview
+- **[Day 3: Read less](../week_01/day_3.html):** the yardstick: recall@10 against the exact answer
+    - What "almost the same people" means
+    - Ties need a rule
+    - How much do we lose at each budget?
+    - Skipping popular friends: a trade
+- **[Day 4: Learn who connects](../week_01/day_4.html):** link prediction as a learning problem
+    - 1 · Learn from the past: freeze the graph, see who connects next
+    - 2 · Negatives, and why the choice biases you
+    - 3 · Features: what makes a friend of a friend likely
+    - 4 · Logistic regression: a weighted vote turned into a probability
+    - 5 · How to judge it: AUC
+    - 6 · Two ways to compute AUC: pooled, or within each user
+    - 7 · What the user sees: recall@10, with error bars over users
+    - 8 · Calibration: does a 2% prediction mean 2%?
+    - 9 · Feedback loops: the model changes the data it learns from
+- **[Day 5: A billion users](../week_01/day_5.html):** proving it helps: A/B tests
+    - The situation
+    - Try the obvious thing
+    - The idea: randomize by user
+    - How many users?
+    - Two ways the result can mislead
 
 ## Week 3: Tokenization
 

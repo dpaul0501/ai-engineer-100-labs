@@ -4,8 +4,17 @@ Every week is built around one design problem of the kind top companies ask. The
 
 ## Week 1: People You May Know
 
-**The problem:** [People You May Know: from two hops to a billion users](../week_01/index.html)
+**The problem:** [People You May Knowfrom two hops to a billion users](../week_01/index.html)
 
+- **[Week reading](../week_01/index.html):** checkpoint
+    - Explain why the raw count shows the same popular people to almost everyone (one user in 66% of all top-10 lists), and why learning from who actually connected can do better.
+- **[Day 4: Learn who connects](../week_01/day_4.html):** checkpoint
+    - Set up link prediction as a learning problem with two time cuts, say what counts as a positive and a miss, and explain why a random edge split inflated recall 2.7×.
+    - Explain how a live recommender's feedback loop creates exposure bias, using the measured hub exposure, and how exploration with inverse propensity weighting corrects it.
+- **[Day 5: A billion users](../week_01/day_5.html):** checkpoint
+    - Explain training–serving skew and point-in-time features, why the impression log is needed to learn from behaviour without a feedback loop, and how learned user embeddings would replace hand-made features.
+- **[Worksheet and learning checks](../week_01/worksheet.html):** checkpoint
+    - 10. Why must the ranker be tested on a time split rather than a random one, and how can its own suggestions mislead the next model you train?
 
 ## Week 3: Tokenization
 
