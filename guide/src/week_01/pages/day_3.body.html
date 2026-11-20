@@ -1,0 +1,809 @@
+
+<section class="s" id="day3" data-sec="day3">
+  <div class="shead"><span class="sno">DAY 3 · IT IS A GRAPH</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim sys">System Design</span></span></div>
+  <h2>Friend lists were dots and lines all along</h2>
+
+  <p><b>Where we are.</b> Day 1 counted mutual friends by intersecting two friend lists. Day 2 picked the best ten from those counts, from a fixed list and from a stream. Both days held the same thing in their hands: for every person, a list of other people. Today we step back and look at it. Draw each person as a dot and each friendship as a line, and the friend lists become a picture with a name, a <b>graph</b>. Once it has that name, a whole shelf of tools opens: walking it, measuring its shape, counting its triangles, scoring pairs by the routes between them, finding its islands, and splitting it across machines.</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="v">1% → 69%</div><div class="l">the 100 most popular users cause 69% of all friends-of-friends work</div></div>
+    <div class="metric"><div class="v">14% → 63%</div><div class="l">share of new friendships that closed a triangle, first tenth of the history against the last</div></div>
+    <div class="metric"><div class="v">0.0524 → 0.0638</div><div class="l">recall@10 on the time split: mutual-friend count against Adamic–Adar</div></div>
+    <div class="metric"><div class="v">87% → 27%</div><div class="l">two-step reads that leave the machine on 8 machines, before and after copying the top 1% of friend lists everywhere</div></div>
+  </div>
+
+  <!-- ============================================================ DSA: the graph -->
+  <div class="blk dsa alg">
+    <div class="bh"><span class="kind">DSA · the graph we have been holding</span></div>
+
+    <h4>1 · Dots and lines, and three ways to write them down</h4>
+    <p><b>The situation.</b> Here are the six people of the running example again, this time drawn instead of listed. Each person is a dot. Each friendship is a line between two dots.</p>
+    <div class="dg">
+      <svg viewBox="0 0 640 270" role="img" aria-labelledby="d3g6t d3g6d" style="width:100%;max-width:640px;display:block;margin:0 auto;font-family:inherit">
+        <title id="d3g6t">The six people as dots and lines</title>
+        <desc id="d3g6d">You are friends with Ben and Chloe, who are friends with each other. Ben is friends with Dev and Esha. Chloe is friends with Esha and Farid.</desc>
+        <g stroke-linecap="round">
+          <line x1="80" y1="130" x2="240" y2="65" stroke="var(--ink)" stroke-width="3"/>
+          <line x1="80" y1="130" x2="240" y2="195" stroke="var(--ink)" stroke-width="3"/>
+          <line x1="240" y1="65" x2="240" y2="195" stroke="var(--muted)" stroke-width="2"/>
+          <line x1="240" y1="65" x2="410" y2="40" stroke="var(--accent)" stroke-width="2"/>
+          <line x1="240" y1="65" x2="410" y2="130" stroke="var(--accent)" stroke-width="2"/>
+          <line x1="240" y1="195" x2="410" y2="130" stroke="var(--accent)" stroke-width="2"/>
+          <line x1="240" y1="195" x2="410" y2="220" stroke="var(--accent)" stroke-width="2"/>
+        </g>
+        <g font-size="13" font-weight="700" text-anchor="middle" fill="var(--ink)">
+          <circle cx="80" cy="130" r="28" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="3"/>
+          <text x="80" y="135">You</text>
+          <circle cx="240" cy="65" r="27" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="240" y="70">Ben</text>
+          <circle cx="240" cy="195" r="27" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="240" y="200">Chloe</text>
+          <circle cx="410" cy="40" r="27" fill="var(--panel)" stroke="var(--muted)" stroke-width="2"/>
+          <text x="410" y="45">Dev</text>
+          <circle cx="410" cy="130" r="27" fill="var(--panel)" stroke="var(--accent)" stroke-width="3.5"/>
+          <text x="410" y="135">Esha</text>
+          <circle cx="410" cy="220" r="27" fill="var(--panel)" stroke="var(--muted)" stroke-width="2"/>
+          <text x="410" y="225">Farid</text>
+        </g>
+        <g font-size="13" fill="var(--muted)">
+          <text x="448" y="45">2 steps, 1 route</text>
+          <text x="448" y="135" fill="var(--accent)" font-weight="700">2 steps, 2 routes</text>
+          <text x="448" y="225">2 steps, 1 route</text>
+          <text x="80" y="185" text-anchor="middle">you</text>
+          <text x="240" y="262" text-anchor="middle">1 step away</text>
+          <text x="410" y="262" text-anchor="middle">2 steps away</text>
+        </g>
+      </svg>
+      <div class="cap">The six people. Ids in code: You = 0, Ben = 1, Chloe = 2, Dev = 3, Esha = 4, Farid = 5. Esha can be reached in two steps by two routes (through Ben, through Chloe): those are her two mutual friends with you.</div>
+    </div>
+    <p>Now put your finger on Ben's dot and follow every line that leaves it. You reach You, Chloe, Dev and Esha. That is exactly Ben's friend list from Day 1. <b>A friend list is the list of lines leaving a dot.</b> And Day 1's "friends of friends" is a walk: from your dot, take one step along a line to a friend, then a second step to one of their friends. Each two-step route that ends at someone is one mutual friend. Esha has two routes, so two mutual friends; Dev and Farid one each.</p>
+    <p>The words that go with the picture, each something you can point at:</p>
+    <ul>
+      <li>A dot is a <b>node</b> or <b>vertex</b>; a line is an <b>edge</b>. Six nodes, seven edges here. Friendship goes both ways, so the lines have no arrows: the graph is <b>undirected</b>. A follow graph, where you can follow someone who does not follow you back, has arrows: it is <b>directed</b>.</li>
+      <li>The nodes one line away are the <b>neighbours</b>; \(N(u)\) is the set of neighbours of \(u\), its friend list.</li>
+      <li>The number of lines at a dot is its <b>degree</b>, the friend count: You 2, Ben 4, Chloe 4, Dev 1, Esha 2, Farid 1.</li>
+      <li>A sequence of steps along lines is a <b>path</b>; the fewest steps between two people is their <b>distance</b>. Esha is at distance 2 from you, Farid is at distance 3 from Dev (Dev → Ben → Chloe → Farid).</li>
+    </ul>
+
+    <p><b>The obvious way to store the picture: a table.</b> One row and one column per person, a 1 where two people are friends. That is the <b>adjacency matrix</b>. "Are Dev and Esha friends?" is one look at one cell. "Who are Farid's friends?" means reading his whole row to find one 1. On the week's graph a row has 10,000 cells and about 20 ones: you scan 500 cells for each friend you find, and only 0.2% of the table's cells are ones.</p>
+    <p><b>The idea: write down only the lines.</b> Two layouts do that.</p>
+    <ul>
+      <li>An <b>adjacency list</b>: for each person, the list of their neighbours. This is what Days 1 and 2 used. Each line appears twice, once in each person's list, so the six people need 14 entries.</li>
+      <li>An <b>edge list</b>: one row per line, (smaller id, larger id), seven rows here. It is how friendships arrive (the week's <code>edges.csv</code> is an edge list in the order they formed) and how batch jobs ship them around. But "who are Farid's friends?" means scanning every row, unless you sort it, and a sorted edge list is an adjacency list in disguise.</li>
+    </ul>
+    <div class="tablewrap"><table>
+      <tr><th>Adjacency list</th><th>Edge list</th><th>Adjacency matrix (You, Ben, Chloe, Dev, Esha, Farid)</th></tr>
+      <tr><td>You: Ben, Chloe<br>Ben: You, Chloe, Dev, Esha<br>Chloe: You, Ben, Esha, Farid<br>Dev: Ben<br>Esha: Ben, Chloe<br>Farid: Chloe</td>
+          <td>(0, 1) (0, 2) (1, 2)<br>(1, 3) (1, 4)<br>(2, 4) (2, 5)</td>
+          <td><code>0 1 1 0 0 0<br>1 0 1 1 1 0<br>1 1 0 0 1 1<br>0 1 0 0 0 0<br>0 1 1 0 0 0<br>0 0 1 0 0 0</code></td></tr>
+    </table></div>
+    <p>A compact way to keep adjacency lists is to glue them into one array, <code>indices</code>, and keep a second array, <code>indptr</code>, saying where each person's run starts (the compressed sparse row, or CSR, layout). Ben's friends are <code>indices[indptr[1]:indptr[2]]</code>.</p>
+    <div class="code"><div class="ch"><span>code/day_3/representations.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def csr(n, pairs):
+    """Adjacency lists packed into two arrays: u's friends are indices[indptr[u]:indptr[u+1]]."""
+    deg = np.zeros(n, dtype=np.int64)
+    for u, v in pairs:
+        deg[u] += 1; deg[v] += 1
+    indptr = np.zeros(n + 1, dtype=np.int64)
+    np.cumsum(deg, out=indptr[1:])                  # where each list starts
+    fill, indices = indptr[:-1].copy(), np.empty(indptr[-1], dtype=np.int32)
+    for u, v in pairs:                              # write each friendship into both lists
+        indices[fill[u]] = v; fill[u] += 1
+        indices[fill[v]] = u; fill[v] += 1
+    for u in range(n):
+        indices[indptr[u]:indptr[u + 1]].sort()
+    return indptr, indices</code></pre></div>
+    <p><b>Measured on the week's graph</b> (10,000 users, 100,000 friendships; <code>representations.py</code>):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Layout</th><th class="num">Bytes</th><th>Friends of u</th><th>Are u and v friends?</th></tr>
+      <tr><td>Adjacency matrix, 1 byte per cell</td><td class="num">100,000,000</td><td>scan 10,000 cells</td><td>1 look</td></tr>
+      <tr><td>Adjacency matrix, 1 bit per cell</td><td class="num">12,500,000</td><td>scan 10,000 cells</td><td>1 look</td></tr>
+      <tr><td>Edge list, two 4-byte ids per friendship</td><td class="num">800,000</td><td>scan 100,000 rows</td><td>scan</td></tr>
+      <tr class="hi"><td>Adjacency list as CSR: <code>indptr</code> 80,008 + <code>indices</code> 800,000</td><td class="num">880,008</td><td>read your run, about 20 ids</td><td>binary search in your run</td></tr>
+    </table></div>
+    <p><b>At a billion users.</b> Suppose a billion users with 300 friends each. That is \(10^9 \times 300 / 2 = 1.5 \times 10^{11}\) friendships and \(3 \times 10^{11}\) list entries. The bit matrix needs \(10^{18}/8\) bytes, 125 petabytes, almost all of it zeros. CSR with 4-byte ids (enough, since \(10^9 &lt; 2^{32} \approx 4.29 \times 10^9\)) needs \(3 \times 10^{11} \times 4 = 1.2 \times 10^{12}\) bytes for <code>indices</code> plus 8 GB for <code>indptr</code>: about 1.2 TB. An edge list with 8-byte ids needs \(1.5 \times 10^{11} \times 16 = 2.4\) TB. The matrix grows with the square of the users; the lists grow with the friendships.</p>
+    <p><b>Trade-off, and what to say.</b> Adjacency lists (hash sets while the graph changes, CSR for a read-mostly snapshot) for anything social: sparse, and "friends of u" costs only the friends. An edge list for logs, streams and batch shuffles. A matrix only when the graph is small and dense, or as a slow, obviously correct reference in tests. In an interview: "it is a sparse graph; I store adjacency lists; the matrix would be \(n^2\) bits, 125 PB at a billion users."</p>
+    <p class="idea"><b>In one line.</b> People are nodes, friendships are edges, a friend list is the list of edges leaving a node, and friends of friends are the nodes two steps away.</p>
+    <details class="deep"><summary>The math, step by step: how many entries, and how many bytes</summary><div>
+      <p><b>Step 1: count list entries.</b> The six degrees are 2, 4, 4, 1, 2, 1; they add up to 14, twice the 7 edges. Each edge puts one entry in each of its two people's lists, so for any undirected graph with \(m\) edges</p>
+      <div class="eq">\[ \sum_u \deg(u) = 2m . \]</div>
+      <p>This is the <b>handshake lemma</b>. Week's graph: \(2 \times 100{,}000 = 200{,}000\) entries, so the average degree is \(200{,}000 / 10{,}000 = 20\).</p>
+      <p><b>Step 2: the matrix.</b> It has one cell per ordered pair, \(n^2\) cells, whatever \(m\) is. Only \(2m\) of them are 1: \(200{,}000 / 10^8 = 0.2\%\). A row has \(n\) cells and \(\deg(u)\) ones, so listing a friend costs \(n / \bar d = 10{,}000 / 20 = 500\) cells on average.</p>
+      <p><b>Step 3: CSR.</b> \(n + 1\) offsets of 8 bytes and \(2m\) ids of \(b\) bytes: \(8(n+1) + 2mb\). Week's graph with \(b = 4\): \(80{,}008 + 800{,}000 = 880{,}008\) bytes. <code>indptr</code> is a running total of degrees, \(\texttt{indptr}[u+1] = \texttt{indptr}[u] + \deg(u)\): for the six people 0, 2, 6, 10, 11, 13, 14, which the code's asserts check.</p>
+      <p><b>Step 4: the ratio.</b> The bit matrix has \(n^2\) bits; CSR has \(2m\) ids of 32 bits each. At a billion users with 300 friends: \(10^{18}\) bits against \(3 \times 10^{11} \times 32 \approx 10^{13}\) bits, so the matrix is about 100,000 times larger, even though each of its cells is a single bit.</p>
+      <p><b>What this shows.</b> A list layout costs memory in proportion to friendships, a matrix in proportion to the square of the people, and social graphs have far fewer friendships than pairs.</p>
+    </div></details>
+
+    <h4>2 · Friends of friends is a two-step breadth-first search</h4>
+    <p><b>The situation.</b> Day 1's double loop, "for each friend, for each of their friends", is a walk of exactly two steps. Other questions the product asks are walks too: is this person reachable from you at all? How far away are they? Who is within three steps?</p>
+    <p><b>The obvious attempt: follow every route.</b> From You, step to Ben and Chloe, then to all their friends: 8 two-step routes, and You is reached twice, Esha twice. Keep going further and the walk never ends, because Ben → Chloe → Ben → Chloe goes round forever. To walk further than two steps, you must remember whom you have already seen.</p>
+    <p><b>The idea: visit in rings, mark on first sight.</b> Ring 0 is you. Ring 1 is everyone one step away. Ring 2 is everyone one step from ring 1 who has not been seen yet, and so on. A first-in, first-out queue keeps the rings in order. Each person gets their ring number when first seen and never enters the queue again. This is <b>breadth-first search</b> (BFS), and the ring number is the distance.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">start</span><span class="seq"><span class="nd hot">You</span></span><span class="why">queue [You]; distance 0</span></div>
+      <div class="step"><span class="k">take You</span><span class="seq"><span class="nd new">Ben</span><span class="nd new">Chloe</span></span><span class="why">first sight of Ben and Chloe: distance 1</span></div>
+      <div class="step"><span class="k">take Ben</span><span class="seq"><span class="nd">You</span><span class="nd">Chloe</span><span class="nd new">Dev</span><span class="nd new">Esha</span></span><span class="why">You and Chloe already seen; Dev and Esha: distance 2</span></div>
+      <div class="step"><span class="k">take Chloe</span><span class="seq"><span class="nd">You</span><span class="nd">Ben</span><span class="nd">Esha</span><span class="nd new">Farid</span></span><span class="why">Esha already seen, not added twice; Farid: distance 2</span></div>
+      <div class="step"><span class="k">the rest</span><span class="seq"><span class="lk">nothing new</span></span><span class="why">done: 6 people, 14 list entries read</span></div>
+    </div><div class="cap">Filled boxes: first sight. Stopping after ring 2 gives Day 1's candidates; Day 1's counting version keeps the repeats (Esha twice) because each repeat is a mutual friend.</div></div>
+    <div class="code"><div class="ch"><span>code/day_3/bfs.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def friends_of_friends(adj, u):
+    """Walk two steps from u. Count how many routes reach each person who is
+    not u and not already u's friend: that count is the number of mutual friends."""
+    count = Counter()
+    for f in adj[u]:                 # step 1: a friend
+        for v in adj[f]:             # step 2: a friend of that friend
+            if v != u and v not in adj[u]:
+                count[v] += 1
+    return count
+
+def bfs(adj, s, max_depth=None):
+    """dist[v] = fewest steps from s to v, for everyone reachable (within max_depth)."""
+    dist = {s: 0}
+    queue = deque([s])
+    while queue:
+        x = queue.popleft()
+        if max_depth is not None and dist[x] == max_depth:
+            continue                 # at the limit: do not look further out
+        for y in adj[x]:
+            if y not in dist:        # mark on first sight, so y enters the queue once
+                dist[y] = dist[x] + 1
+                queue.append(y)
+    return dist</code></pre></div>
+    <p><b>Measured on the week's graph</b> (<code>bfs.py</code>, BFS from 1,000 random users). Every start reaches all 10,000 users: the graph is in one piece. How many people are within a few steps?</p>
+    <div class="chart"><div class="t">Other users within L steps, mean over 1,000 random starts</div>
+      <div class="br"><span>1 step</span><span class="tr"><i style="width:0.2%"></i></span><span class="v">20 · 0.20%</span></div>
+      <div class="br"><span>2 steps</span><span class="tr"><i style="width:12.15%"></i></span><span class="v">1,215 · 12.15%</span></div>
+      <div class="br"><span>3 steps</span><span class="tr"><i style="width:85.82%"></i></span><span class="v">8,581 · 85.82%</span></div>
+      <div class="br"><span>4 steps</span><span class="tr"><i style="width:99.96%"></i></span><span class="v">9,995 · 99.96%</span></div>
+      <div class="cap">Mean distance between a start and everyone else: 3.02 steps; the largest distance seen from these starts: 6.</div>
+    </div>
+    <p>Two steps out is a pool of about 1,200 people, 12% of the network: specific to you. Three steps out is 86% of everyone: no longer about you at all. That is why friends-of-friends stops at two. For user 8604, a typical user with 15 friends (the median), the two-step walk covers 1,018 routes and finds 904 distinct people; the code checks they are exactly BFS's ring 2.</p>
+    <p><b>Trade-off and interview takeaway.</b> BFS gives distances in steps and costs time proportional to people plus friendships: a full walk of the week's graph reads all 200,000 list entries once. A depth-limited BFS (<code>max_depth</code>) reads only the rings it needs. Depth-first search reaches the same people but not their distances. Say out loud: "mark on discovery, not on removal, or a person enters the queue many times."</p>
+    <p class="idea"><b>In one line.</b> BFS visits people in rings of distance; friends-of-friends is its second ring, counted with repeats.</p>
+    <details class="deep"><summary>The math, step by step: why BFS ring numbers are true distances, and what two steps cost</summary><div>
+      <p>Write \(\ell(v)\) for the ring number BFS gives \(v\), and \(\mathrm{dist}(s, v)\) for the true fewest steps.</p>
+      <p><b>Step 1: the queue stays sorted.</b> At every moment the labels in the queue, front to back, never go down, and the back is at most the front plus 1. True at the start (only \(s\)). Each step removes the front, label \(\ell\), and appends people labelled \(\ell + 1\); the order and the "spread at most 1" survive. So people leave the queue in order of their labels. Check on the trace: after taking Ben the queue is Chloe (1), Dev (2), Esha (2).</p>
+      <p><b>Step 2: a label is never too small.</b> Each label is the length of a real path (follow who discovered whom back to \(s\)), and no path is shorter than the shortest one: \(\ell(v) \ge \mathrm{dist}(s, v)\).</p>
+      <p><b>Step 3: a label is never too large.</b> Suppose some labels are too large, and take such a \(v\) closest to \(s\), at true distance \(k\). The person \(x\) just before \(v\) on a shortest path is closer, so \(\ell(x) = k - 1\). When \(x\) left the queue, either \(v\) was new and got label \(k\), or \(v\) had been seen from some \(x'\) that left earlier, so \(\ell(x') \le k - 1\) by Step 1 and \(\ell(v) \le k\). Either way, not too large: a contradiction. With Step 2, \(\ell(v) = \mathrm{dist}(s, v)\).</p>
+      <p><b>Step 4: cost.</b> Each person enters and leaves the queue once, and their list is read once when they leave. The lists hold \(2m\) entries (the handshake lemma), so BFS is \(O(n + m)\).</p>
+      <p><b>Step 5: two steps.</b> Stopping after ring 2 reads your own list (\(\deg u\) entries) and each friend's list:</p>
+      <div class="eq">\[ \text{entries read} = \deg(u) + \sum_{f \in N(u)} \deg(f) . \]</div>
+      <p>For You: \(2 + (4 + 4) = 10\). The sum over friends is the quantity the next section is about.</p>
+    </div></details>
+    <div class="part"><b>Practice</b><ul>
+      <li>★ <a href="https://leetcode.com/problems/find-if-path-exists-in-graph/">1971. Find if Path Exists in Graph</a>: build adjacency lists from an edge list, then BFS from the source.</li>
+      <li><a href="https://leetcode.com/problems/keys-and-rooms/">841. Keys and Rooms</a>: a directed graph given as adjacency lists; can BFS from room 0 reach every room?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+      <div class="code"><div class="ch"><span>code/day_3/bfs.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># LeetCode 1971 · Find if Path Exists in Graph
+def validPath(n, edges, source, destination):
+    adj = [[] for _ in range(n)]
+    for a, b in edges:
+        adj[a].append(b); adj[b].append(a)
+    return destination in bfs(adj, source)
+
+# LeetCode 841 · Keys and Rooms: rooms[i] lists the rooms room i unlocks (arrows, not lines)
+def canVisitAllRooms(rooms):
+    return len(bfs(rooms, 0)) == len(rooms)</code></pre></div>
+      <p>Both reuse <code>bfs</code> unchanged: 1971 asks whether the destination gets a label, 841 whether everyone does. Each is \(O(n + m)\).</p>
+    </div></details>
+
+    <h4>3 · Degrees and hubs: who makes the walk expensive</h4>
+    <p><b>The situation.</b> The two-step walk reads the whole list of every friend. So its cost is not your friend count; it is the sum of your friends' friend counts. For You: Ben 4 + Chloe 4 = 8 entries. What does that sum look like across 10,000 people?</p>
+    <p><b>The obvious estimate.</b> The average degree is 20, so 20 friends with 20 friends each: 400 entries per request. Measured (<code>degrees.py</code>), the mean is <b>1,477</b>, 3.7 times as many.</p>
+    <p><b>The idea: look at the spread of degrees, not the average.</b></p>
+    <div class="tablewrap"><table>
+      <tr><th>On the week's graph</th><th class="num">mean</th><th class="num">median</th><th class="num">p90</th><th class="num">p99</th><th class="num">max</th></tr>
+      <tr><td>Degree (friends per user)</td><td class="num">20.0</td><td class="num">15</td><td class="num">31</td><td class="num">100</td><td class="num">1,480</td></tr>
+      <tr class="hi"><td>Two-step work (entries read per request)</td><td class="num">1,477</td><td class="num">1,023</td><td class="num">—</td><td class="num">7,284</td><td class="num">51,806</td></tr>
+    </table></div>
+    <p>Half of all users have 15 friends or fewer, 90% have 31 or fewer, and 69.3% are below the mean of 20. A few have enormous counts: the largest is 1,480, 74 times the mean. A spread like this, modest for most and huge for a few, is <b>heavy-tailed</b>. And the work is far more concentrated than the friendships:</p>
+    <div class="chart"><div class="t">Share of friend-list entries against share of all two-step work, for the most popular users</div>
+      <div class="sub">Top 0.1% (10 users, degree 377 or more)</div>
+      <div class="br"><span>entries</span><span class="tr"><i style="width:3.9%;--c:var(--muted)"></i></span><span class="v">3.9%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:51.6%"></i></span><span class="v">51.6%</span></div>
+      <div class="sub">Top 1% (100 users, degree 101 or more)</div>
+      <div class="br"><span>entries</span><span class="tr"><i style="width:11.1%;--c:var(--muted)"></i></span><span class="v">11.1%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:69.1%"></i></span><span class="v">69.1%</span></div>
+      <div class="sub">Top 10% (1,000 users, degree 31 or more)</div>
+      <div class="br"><span>entries</span><span class="tr"><i style="width:32.1%;--c:var(--muted)"></i></span><span class="v">32.1%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:83.9%"></i></span><span class="v">83.9%</span></div>
+      <div class="cap">A user's list is read once by each of their friends, so a user with degree d causes d × d reads. The single largest hub, 1,480 friends, causes 14.8% of all two-step work on its own.</div>
+    </div>
+    <p>Why squared: Ben's list has 4 entries and 4 people read it (each of his friends), so Ben causes 4 × 4 = 16 reads. A hub with 1,480 friends causes 1,480 × 1,480 = 2,190,400. Summed over everyone, the work is \(\sum_v \deg(v)^2 = 14{,}768{,}324\) entries, an average of 1,477 per request. It is also why your friends are, on average, more popular than you: a friend reached along a random line has 73.8 friends, not 20.</p>
+    <p><b>Capping hubs.</b> The cheapest fix: skip any friend with more than <var>cap</var> friends. A request then reads at most cap × (your degree) entries.</p>
+    <div class="code"><div class="ch"><span>code/day_3/degrees.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def work(adj, u):
+    """List entries a two-step walk from u reads: the sum of u's friends' degrees."""
+    return sum(len(adj[f]) for f in adj[u])
+
+def suggest_capped(adj, u, k=10, cap=None):
+    """Top k by mutual friends, but skip any friend with more than `cap` friends.
+    Returns (top k, entries read). Ties: smaller id first."""
+    count, read = Counter(), 0
+    for f in adj[u]:
+        if cap is not None and len(adj[f]) &gt; cap:
+            continue                          # a hub: the longest list, the weakest hint
+        read += len(adj[f])
+        for v in adj[f]:
+            if v != u and v not in adj[u]:
+                count[v] += 1
+    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), read</code></pre></div>
+    <p>Cost is measured on the week's graph; quality on the time split defined in section 5 (score with the first 80,000 friendships, check the next 20,000).</p>
+    <div class="tablewrap"><table>
+      <tr><th>Cap</th><th class="num">users skipped</th><th class="num">mean work</th><th class="num">p99 work</th><th class="num">max work</th><th class="num">recall@10</th></tr>
+      <tr><td>none</td><td class="num">0</td><td class="num">1,477</td><td class="num">7,284</td><td class="num">51,806</td><td class="num">0.0524</td></tr>
+      <tr><td>1,000</td><td class="num">4</td><td class="num">882</td><td class="num">4,366</td><td class="num">48,449</td><td class="num">0.0526</td></tr>
+      <tr><td>500</td><td class="num">7</td><td class="num">760</td><td class="num">3,718</td><td class="num">46,571</td><td class="num">0.0526</td></tr>
+      <tr class="hi"><td>200</td><td class="num">27</td><td class="num">597</td><td class="num">2,909</td><td class="num">41,558</td><td class="num">0.0533</td></tr>
+      <tr><td>100</td><td class="num">100</td><td class="num">456</td><td class="num">2,338</td><td class="num">34,236</td><td class="num">0.0532</td></tr>
+      <tr><td>50</td><td class="num">354</td><td class="num">334</td><td class="num">1,671</td><td class="num">26,317</td><td class="num">0.0526</td></tr>
+    </table></div>
+    <p>Skipping the 27 users with more than 200 friends (0.27% of users) cuts the mean work by 60% (1,477 to 597) and the p99 by 60% (7,284 to 2,909), and recall@10 does not drop: 0.0524 to 0.0533. A mutual friend who knows 1,000 people is weak evidence that two of them will meet, so dropping hubs removes cost and noise together. Section 5 turns "weak evidence" into a weight instead of a cut. Two limits: the max barely moves, because the most expensive request belongs to a hub whose friends are mostly ordinary; and the hub's friends lose a route to each other, which a weight handles more gently.</p>
+    <p class="idea"><b>In one line.</b> The two-step cost is the sum of your friends' degrees; summed over everyone it is the sum of squared degrees, so the top 1% of users cause 69% of the work, and capping them buys a 60% cut at no measured loss.</p>
+    <details class="deep"><summary>The math, step by step: total work is the sum of squared degrees</summary><div>
+      <p><b>Step 1: write the work.</b> \(W(u) = \sum_{f \in N(u)} \deg(f)\). Six people: You 8, Ben 9 (2 + 4 + 1 + 2), Chloe 9, Dev 4, Esha 8, Farid 4. Total 42.</p>
+      <p><b>Step 2: count the same pairs the other way.</b> \(\sum_u W(u)\) adds \(\deg(f)\) once for every (user, friend) pair \((u, f)\). Fix \(f\): it appears as the friend in \(\deg(f)\) pairs, each adding \(\deg(f)\). So</p>
+      <div class="eq">\[ \sum_u W(u) = \sum_f \deg(f)^2 . \]</div>
+      <p>Six people: \(4 + 16 + 16 + 1 + 4 + 1 = 42\). Week's graph: both sides are 14,768,324, which the script asserts. Counting one set of pairs in two orders like this is <b>double counting</b>.</p>
+      <p><b>Step 3: why it beats 400.</b> Divide by \(n\): the mean work is \(E[d^2]\), the average of squared degrees, and</p>
+      <div class="eq">\[ E[d^2] = E[d]^2 + \operatorname{Var}(d) = 400 + 1{,}076.8 = 1{,}476.8 . \]</div>
+      <p>The naive 400 squared the average; the true cost averages the squares, and the gap is the variance, which a heavy tail makes large.</p>
+      <p><b>Step 4: a friend's degree.</b> Pick a random line and a random end of it: you land on person \(f\) with probability \(\deg(f)/2m\), so the expected degree there is \(\sum_f \deg(f)^2 / 2m = 14{,}768{,}324 / 200{,}000 = 73.8\). Popular people sit at the end of many lines; this is the <b>friendship paradox</b>.</p>
+      <p><b>Step 5: the cap's bound.</b> With a cap \(c\), every list read has at most \(c\) entries and there are at most \(\deg(u)\) of them, so \(W_c(u) \le c \cdot \deg(u)\), whatever the graph.</p>
+    </div></details>
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/find-the-town-judge/">997. Find the Town Judge</a>: degrees in a directed graph. The judge has in-degree \(n - 1\) and out-degree 0.</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>code/day_3/degrees.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># LeetCode 997 · Find the Town Judge: in-degree n - 1, out-degree 0
+def findJudge(n, trust):
+    score = [0] * (n + 1)
+    for a, b in trust:
+        score[a] -= 1                         # an arrow out disqualifies a
+        score[b] += 1                         # an arrow in counts for b
+    return next((p for p in range(1, n + 1) if score[p] == n - 1), -1)</code></pre></div>
+      <p>In-degree minus out-degree reaches \(n - 1\) only for someone trusted by everyone else and trusting nobody, so one number per person suffices: \(O(n + |\text{trust}|)\).</p>
+    </div></details>
+
+    <h4>4 · Triadic closure: why mutual friends work at all</h4>
+    <p><b>The situation.</b> Days 1 and 2 ranked by mutual friends because it sounded right. Why should a shared friend predict a friendship? Because friends introduce friends. If Ben knows you and Esha, you two are likely to meet at Ben's party. When you and Esha become friends, the three of you form a <b>triangle</b>: three people, all friends. The tendency of an open "two lines with a shared corner" to close into a triangle is <b>triadic closure</b>.</p>
+    <p><b>The obvious attempt: count triangles.</b> The week's graph has 71,976. Is that many? On its own the number cannot say; it has to be compared with the chances to form one.</p>
+    <p><b>The idea: of all pairs of your friends, what share are friends with each other?</b> That share is your <b>clustering coefficient</b>. Ben has four friends (You, Chloe, Dev, Esha), so six pairs; two of them are friends (You–Chloe, Chloe–Esha): Ben's clustering is 2/6 = 1/3. Your two friends, Ben and Chloe, are friends: yours is 1.</p>
+    <div class="code"><div class="ch"><span>code/day_3/triangles.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def count_triangles(adj):
+    """Each triangle once, at its least popular corner (rank by degree, ties by id)."""
+    rank = {v: (len(adj[v]), v) for v in range(len(adj))}
+    up = [{w for w in adj[v] if rank[w] &gt; rank[v]} for v in range(len(adj))]
+    return sum(len(up[u] &amp; up[v]) for u in range(len(adj)) for v in up[u])
+
+def closed_at_birth(edges, n):
+    """For each friendship in formation order: how many mutual friends its two people
+    had just before it formed (each one is a triangle the new line closes)."""
+    adj, out = [set() for _ in range(n)], []
+    for u, v, _ in edges:
+        out.append(len(adj[u] &amp; adj[v]))
+        adj[u].add(v); adj[v].add(u)
+    return out</code></pre></div>
+    <p><b>Measured</b> (<code>triangles.py</code>): average clustering is <b>0.1104</b>. A random graph with the same number of friendships would give about 0.0020, so two of your friends are friends with each other 55 times more often than chance. The pooled share over all pairs of friends is lower, 0.0296, because hubs own most of the pairs and close few of them.</p>
+    <p><b>Watching it happen.</b> The week's friendships come in formation order, so we can replay them: for each new friendship, did its two people already share a friend at that moment, so that the new line closed a triangle? Overall, 47.1% did. And the later a friendship formed, the more often it closed a triangle:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Tenth of the history</th><th class="num">new friendships that closed a triangle</th><th class="num">random non-friend pairs with a mutual friend then</th><th class="num">ratio</th></tr>
+      <tr><td>1st (friendships 0–9,999)</td><td class="num">13.8%</td><td class="num">0.00%</td><td class="num">—</td></tr>
+      <tr><td>2nd</td><td class="num">31.3%</td><td class="num">0.13%</td><td class="num">235×</td></tr>
+      <tr><td>3rd</td><td class="num">40.7%</td><td class="num">0.60%</td><td class="num">68×</td></tr>
+      <tr><td>4th</td><td class="num">44.8%</td><td class="num">1.26%</td><td class="num">35×</td></tr>
+      <tr><td>5th</td><td class="num">49.1%</td><td class="num">2.18%</td><td class="num">23×</td></tr>
+      <tr><td>6th</td><td class="num">52.6%</td><td class="num">3.43%</td><td class="num">15×</td></tr>
+      <tr><td>7th</td><td class="num">55.9%</td><td class="num">4.78%</td><td class="num">12×</td></tr>
+      <tr><td>8th</td><td class="num">58.2%</td><td class="num">6.31%</td><td class="num">9×</td></tr>
+      <tr><td>9th</td><td class="num">61.0%</td><td class="num">7.99%</td><td class="num">8×</td></tr>
+      <tr class="hi"><td>10th (friendships 90,000–99,999)</td><td class="num">63.4%</td><td class="num">9.92%</td><td class="num">6×</td></tr>
+    </table></div>
+    <p class="small muted">Baseline: 100,000 random pairs of users who were not yet friends, drawn at the start of each tenth (seed 0), checked for a shared friend in the graph so far.</p>
+    <p>Read it in two directions. Down the first column: as the graph fills in, more people have friends in common, so more new friendships close triangles, 13.8% early and 63.4% late. Across the row: in every tenth, a new friendship is far more likely to join two people with a mutual friend than a random pair is, 6 to 235 times. Friendships do not land at random; they land on open triangles. That is the whole reason Days 1–2's mutual-friend count works, and it also says where it fails: in the last tenth 36.6% of new friendships still had no mutual friend. (The week's generator closes a triangle in 45% of its attempts, so here closure is built in; on real networks it is a finding, for example Kossinets and Watts on a university e-mail network, linked below.)</p>
+    <p class="idea"><b>In one line.</b> New friendships close open triangles far more often than chance, so friends of friends are where future friends are, and the share grows as the graph densifies.</p>
+    <details class="deep"><summary>The math, step by step: wedges, triangles, and what a random graph would give</summary><div>
+      <p><b>Step 1: wedges.</b> A pair of \(v\)'s friends \(\{x, y\}\) is a path \(x - v - y\), a <b>wedge</b> at \(v\). With \(\deg(v) = d\) there are \(\binom{d}{2} = d(d-1)/2\) wedges. A wedge is closed when \(x\) and \(y\) are friends. If \(T_v\) is the number of closed wedges at \(v\), then \(C_v = T_v / \binom{d}{2}\).</p>
+      <p><b>Step 2: each triangle is three closed wedges.</b> The six people have two triangles, {You, Ben, Chloe} and {Ben, Chloe, Esha}; closed wedges: You 1, Ben 2, Chloe 2, Esha 1, total 6 = 3 × 2. In general \(\sum_v T_v = 3 \times (\text{triangles})\).</p>
+      <p><b>Step 3: averaged against pooled.</b> The average of \(C_v\) gives each person one vote: (1 + 1/3 + 1/3 + 1)/4 = 0.67 for the six. The pooled share \(\sum T_v / \sum \binom{d_v}{2} = 6/14 = 0.43\) weights each person by \(\binom{d_v}{2}\), roughly degree squared, so hubs dominate it. That is why 0.0296 sits far below 0.1104 on the week's graph.</p>
+      <p><b>Step 4: a random graph.</b> If each pair is a friendship independently with probability \(p\), a wedge is closed with probability \(p\), so expected clustering is \(p\). Same number of friendships:</p>
+      <div class="eq">\[ p = \frac{m}{\binom{n}{2}} = \frac{100{,}000}{49{,}995{,}000} \approx 0.0020, \qquad \frac{0.1104}{0.0020} \approx 55 . \]</div>
+      <p><b>Step 5: every triangle is closed by its last line.</b> A triangle exists from the moment its third line appears, and at that moment its two other lines already exist, so its third corner is a mutual friend of the new line's ends. Each triangle is counted once this way, so the mutual counts at formation add up to the number of triangles: 71,976, which <code>triangles.py</code> asserts.</p>
+      <p><b>Step 6: why the upward count is fast.</b> <code>count_triangles</code> points each line from the less popular end to the more popular end and looks only upward, so each triangle is found once, at its least popular corner. A person with \(k\) friends above them has \(k\) people each with at least \(k\) friends, so \(k^2 \le 2m\) and \(k \le \sqrt{2m}\); the total work is at most \(m\sqrt{2m}\), however skewed the degrees (a result of Chiba and Nishizeki, 1985).</p>
+    </div></details>
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/">1761. Minimum Degree of a Connected Trio in a Graph</a>: list every triangle once with the upward order, and score each by the lines leaving it.</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>code/day_3/triangles.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># LeetCode 1761 · Minimum Degree of a Connected Trio
+def minTrioDegree(n, edges):
+    adj = [set() for _ in range(n + 1)]
+    for a, b in edges:
+        adj[a].add(b); adj[b].add(a)
+    deg = [len(s) for s in adj]
+    up = [[w for w in adj[v] if (deg[w], w) &gt; (deg[v], v)] for v in range(n + 1)]
+    best = math.inf
+    for u in range(1, n + 1):
+        for v in up[u]:
+            for w in up[v]:
+                if w in adj[u]:                           # u, v, w is a trio, found once
+                    best = min(best, deg[u] + deg[v] + deg[w] - 6)
+    return -1 if best == math.inf else best</code></pre></div>
+      <p>A trio's degree is the three degrees minus the 6 ends of its own three lines. The upward order finds each trio once in \(O(m^{1.5})\).</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ ML: scores -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · pair scores from the shape of the graph</span></div>
+
+    <h4>5 · Better pair scores: Jaccard, Adamic–Adar, resource allocation</h4>
+    <p><b>The situation.</b> Section 3 showed that a hub is an expensive mutual friend; the cap table hinted it is also a weak one. Can the score itself know that, instead of a hard cut?</p>
+    <p><b>The obvious score and where it breaks.</b> Mutual friends gives every shared friend one vote. Look at a small graph where that is clearly wrong. You have three friends: A, who has 2 friends; B, who has 3; and H, a hub with 6. X and Y both share two friends with you, so counting ties them.</p>
+    <div class="dg">
+      <svg viewBox="0 0 640 310" role="img" aria-labelledby="d3hubt d3hubd" style="width:100%;max-width:640px;height:auto;display:block;margin:0 auto">
+        <title id="d3hubt">A mutual friend who is a hub</title>
+        <desc id="d3hubd">You have friends A, B and H. A and B know X; B and the hub H know Y; H also knows Z, P, Q and R.</desc>
+        <g stroke="var(--muted)" stroke-width="1.6" opacity=".75">
+          <line x1="50" y1="150" x2="190" y2="60"/><line x1="50" y1="150" x2="190" y2="150"/><line x1="50" y1="150" x2="190" y2="240"/>
+          <line x1="190" y1="60" x2="330" y2="35"/><line x1="190" y1="150" x2="330" y2="35"/><line x1="190" y1="150" x2="330" y2="95"/>
+          <line x1="190" y1="240" x2="330" y2="95"/><line x1="190" y1="240" x2="330" y2="155"/><line x1="190" y1="240" x2="330" y2="200"/>
+          <line x1="190" y1="240" x2="330" y2="245"/><line x1="190" y1="240" x2="330" y2="290"/>
+        </g>
+        <g font-size="12" text-anchor="middle" font-weight="600">
+          <circle cx="50" cy="150" r="18" fill="var(--accent)"/><text x="50" y="154" fill="var(--panel)">You</text>
+          <circle cx="190" cy="60" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="64" fill="var(--ink)">A</text>
+          <circle cx="190" cy="150" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="154" fill="var(--ink)">B</text>
+          <circle cx="190" cy="240" r="15" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="190" y="244" fill="var(--ink)">H</text>
+          <circle cx="330" cy="35" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="39" fill="var(--ink)">X</text>
+          <circle cx="330" cy="95" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="99" fill="var(--ink)">Y</text>
+          <circle cx="330" cy="155" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="159" fill="var(--ink)">Z</text>
+          <circle cx="330" cy="200" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="204" fill="var(--ink)">P</text>
+          <circle cx="330" cy="245" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="249" fill="var(--ink)">Q</text>
+          <circle cx="330" cy="290" r="13" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.5"/><text x="330" y="294" fill="var(--ink)">R</text>
+        </g>
+        <g font-size="12" fill="var(--muted)">
+          <text x="190" y="32" text-anchor="middle">2 friends</text><text x="146" y="128" text-anchor="middle">3 friends</text><text x="146" y="272" text-anchor="middle">6 friends</text>
+          <text x="356" y="39" fill="var(--ink)">through A and B</text>
+          <text x="356" y="99" fill="var(--ink)">through B and H</text>
+          <text x="356" y="159">through H only</text>
+          <text x="356" y="204">(P, Q, R: same as Z)</text>
+        </g>
+      </svg>
+      <div class="cap">X and Y both have two mutual friends with you. X's come from small circles; one of Y's is H, who knows everyone.</div></div>
+    <p>Think about how an introduction happens. A has only one other friend, so if A introduces you to anyone, it is X. H has five others to choose from, so H vouching for Y is weaker news. <b>A mutual friend who knows everyone says little about any one pair.</b> Three classic scores act on that, each computed from the same two-step walk:</p>
+    <ul>
+      <li><b>Jaccard</b>: mutual friends divided by everyone either of you knows, \(|N(u) \cap N(v)| / |N(u) \cup N(v)|\). How similar are your two circles?</li>
+      <li><b>Adamic–Adar</b> (AA): each mutual friend \(z\) votes \(1/\ln \deg(z)\) instead of 1. A popular mutual friend votes a little less.</li>
+      <li><b>Resource allocation</b> (RA): each mutual friend votes \(1/\deg(z)\). A popular mutual friend votes much less.</li>
+    </ul>
+    <p><b>By hand</b> (your friends: A, B, H; \(\ln 2 = 0.693\), \(\ln 3 = 1.099\), \(\ln 6 = 1.792\)):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Candidate</th><th>mutual friends</th><th class="num">count</th><th class="num">Jaccard</th><th class="num">Adamic–Adar</th><th class="num">resource allocation</th></tr>
+      <tr class="hi"><td>X</td><td>A (2), B (3)</td><td class="num">2</td><td class="num">2/3 = 0.67</td><td class="num">1/0.693 + 1/1.099 = 2.35</td><td class="num">1/2 + 1/3 = 0.83</td></tr>
+      <tr><td>Y</td><td>B (3), H (6)</td><td class="num">2</td><td class="num">2/3 = 0.67</td><td class="num">1/1.099 + 1/1.792 = 1.47</td><td class="num">1/3 + 1/6 = 0.50</td></tr>
+      <tr><td>Z, P, Q, R</td><td>H (6)</td><td class="num">1</td><td class="num">1/3 = 0.33</td><td class="num">1/1.792 = 0.56</td><td class="num">1/6 = 0.17</td></tr>
+    </table></div>
+    <p>Counting and Jaccard both tie X and Y: Jaccard compares the sizes of the circles (\(N(X) = \{A, B\}\) and \(N(Y) = \{B, H\}\) are the same size) but never asks who is in them. AA and RA break the tie in X's favour, because they look at the mutual friends' own degrees. On the six people the three agree with counting: Ben and Chloe both have 4 friends, so AA gives Esha \(2/\ln 4 = 1.44\) and Dev and Farid 0.72 each; RA gives 0.50 and 0.25; Jaccard 1, 0.5 and 0.5. The scores only disagree when mutual friends differ in popularity, and on a heavy-tailed graph they nearly always do.</p>
+    <div class="code"><div class="ch"><span>code/day_3/scores.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def two_hop_scores(adj, u):
+    """One two-step walk from u fills all four scores for every candidate v.
+    z is a mutual friend of u and v; its degree d_z sets its weight."""
+    cn, aa, ra = Counter(), Counter(), Counter()
+    for z in adj[u]:
+        dz = len(adj[z])                   # dz &gt;= 2: z knows u and v
+        for v in adj[z]:
+            if v != u and v not in adj[u]:
+                cn[v] += 1                 # mutual friends: every z votes 1
+                aa[v] += 1 / math.log(dz)  # Adamic-Adar: a popular z votes less
+                ra[v] += 1 / dz            # resource allocation: much less
+    du = len(adj[u])
+    jac = {v: c / (du + len(adj[v]) - c) for v, c in cn.items()}   # |N(u) ∪ N(v)| = du + dv - cn
+    return {"mutual": cn, "jaccard": jac, "adamic_adar": aa, "resource": ra}
+
+def top_k(score, k=10):
+    """Highest score first; ties go to the smaller id."""
+    return sorted(score, key=lambda v: (-score[v], v))[:k]</code></pre></div>
+    <p>All four scores come from one walk, so they cost the same as the count: the sum of your friends' degrees.</p>
+
+    <p><b>Measuring "better": the time split.</b> A score is better if the people it puts first are the people who actually become friends next. We cannot ask the future, so we replay the past. This split is used for every recall number on this page, and Day 4 reuses it unchanged.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">past</span><span class="seq"><span class="nd">friendships 0–79,999</span></span><span class="why"><b>Training cut: the first 80,000 friendships</b> in formation order. Every score, degree and walk is computed from these only.</span></div>
+      <div class="step"><span class="k">future</span><span class="seq"><span class="nd hot">friendships 80,000–99,999</span></span><span class="why"><b>Test: the next 20,000.</b> Never seen by any score.</span></div>
+      <div class="step"><span class="k">who</span><span class="seq"><span class="nd new">9,357 users</span></span><span class="why"><b>Evaluated users: everyone who gains at least one test friend.</b> Each test friendship counts from both ends: 40,000 (user, future friend) pairs, 4.27 per user on average. 5 of these users have no past friend and always score 0.</span></div>
+      <div class="step"><span class="k">score</span><span class="seq"><span class="nd">recall@10</span></span><span class="why">For each user, rank everyone who is not the user and not a past friend; ties go to the smaller id. recall@10 = (test friends in the top 10) / (the user's test friends). Report the mean over the 9,357 users.</span></div>
+    </div><div class="cap">Splitting by time, not by hiding random friendships, keeps the check honest: a real app only knows the past.</div></div>
+    <div class="code"><div class="ch"><span>code/day_3/common.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def time_split(edges):
+    """Past = first TRAIN_EDGES friendships; future = the next TEST_EDGES.
+    Evaluated users = everyone who gains at least one future friend."""
+    past, future = edges[:TRAIN_EDGES], edges[TRAIN_EDGES:TRAIN_EDGES + TEST_EDGES]
+    truth = {}
+    for u, v, _ in future:
+        truth.setdefault(u, set()).add(v); truth.setdefault(v, set()).add(u)
+    return past, future, truth
+
+def recall_at_k(ranked, truth, k=10):
+    """Mean over evaluated users of |top k ∩ future friends| / |future friends|.
+    ranked[u] is u's list (best first); a user with no list scores 0."""
+    total = 0.0
+    for u, fut in truth.items():
+        top = ranked.get(u, [])[:k]
+        total += len(fut.intersection(top)) / len(fut)
+    return total / len(truth)</code></pre></div>
+    <p><b>Measured</b> (<code>scores.py</code>). Each evaluated user has 829 two-step candidates on average.</p>
+    <div class="chart"><div class="t">recall@10 on the time split, two-step candidates ranked by each score</div>
+      <div class="br"><span>Jaccard</span><span class="tr"><i style="width:45%;--c:var(--bad)"></i></span><span class="v">0.0287</span></div>
+      <div class="br"><span>mutual friends</span><span class="tr"><i style="width:82.1%;--c:var(--muted)"></i></span><span class="v">0.0524</span></div>
+      <div class="br"><span>resource allocation</span><span class="tr"><i style="width:96.6%"></i></span><span class="v">0.0616</span></div>
+      <div class="br"><span>Adamic–Adar</span><span class="tr"><i style="width:100%"></i></span><span class="v">0.0638</span></div>
+      <div class="cap">Bars to scale. Ceiling: only 48.4% of a user's future friends (mean per user) are two steps away at the cut, so no ranking of these candidates can reach more than 0.4783 recall@10.</div>
+    </div>
+    <ul>
+      <li><b>Discounting hubs helps.</b> Adamic–Adar beats the count by +0.0114 recall@10 (paired standard error over users 0.0012): it improves 579 users and hurts 289. Resource allocation: +0.0092 (standard error 0.0016).</li>
+      <li><b>Jaccard hurts</b>: −0.0238 against the count. Dividing by the union pushes sociable candidates down, and sociable people are the ones who make new friends. The median past degree of the people each score suggests says it plainly: count 86, Adamic–Adar 43, resource allocation 21, Jaccard 10.</li>
+      <li><b>Every number is small</b>, because a user gains about four friends among 829 candidates and the ten slots must find them. Day 4 asks what value of recall is worth having.</li>
+    </ul>
+    <p><b>Trade-off and interview takeaway.</b> Same cost, different weights. Say: "mutual friends, then Adamic–Adar to discount hubs, measured with a time split, not a random edge hold-out." And note that "similar circles" (Jaccard) is not "likely to connect" on a graph where sociable people make most new friendships.</p>
+    <p class="idea"><b>In one line.</b> Weight each mutual friend by how selective they are; on the time split, Adamic–Adar lifts recall@10 from 0.0524 to 0.0638, and Jaccard drops it to 0.0287.</p>
+    <details class="deep"><summary>The math, step by step: where the 1/degree weight comes from</summary><div>
+      <p><b>The story.</b> User \(u\) picks one of their \(\deg(u)\) friends \(z\) at random, and \(z\) introduces \(u\) to one of \(z\)'s other \(\deg(z) - 1\) friends at random.</p>
+      <p><b>Numbers first.</b> In the hub picture, You have 3 friends. Through A (1 other friend): X with probability \(\tfrac13 \cdot 1\). Through B (2 others): X with \(\tfrac13 \cdot \tfrac12\). The two routes are different first picks, so they add: X gets \(\tfrac13(1 + \tfrac12) = 0.50\). Y: through B or H (5 others), \(\tfrac13(\tfrac12 + \tfrac15) = 0.23\). Z, P, Q, R: \(\tfrac13 \cdot \tfrac15 = 0.067\) each. Check: \(0.50 + 0.23 + 4 \times 0.067 = 1\).</p>
+      <p><b>In symbols.</b> The introduction reaches \(v\) through \(z\) only when \(z\) is a mutual friend:</p>
+      <div class="eq">\[ P(u \text{ meets } v) = \frac{1}{\deg u} \sum_{z \in N(u) \cap N(v)} \frac{1}{\deg(z) - 1} . \]</div>
+      <p>For one user \(u\), the factor \(1/\deg u\) is the same for every candidate, so the ranking is by \(\sum_z 1/(\deg z - 1)\): resource allocation, up to the −1.</p>
+      <p><b>Where 1/log comes from.</b> Adamic and Adar built their score for web pages: two pages sharing a rare feature are more likely related than two sharing a common one, so each shared feature is weighted by one over the log of how common it is. On a graph the feature is a mutual friend and its commonness is its degree. \(1/\ln d\) falls much more slowly than \(1/d\): from \(d = 5\) to \(d = 500\), \(1/d\) shrinks 100 times, \(1/\ln d\) only \(\ln 500 / \ln 5 = 6.21/1.61 \approx 3.9\) times. Which discount fits best is an empirical question; here the gentler one won by a little.</p>
+      <p><b>Jaccard in symbols.</b> \(|N(u) \cup N(v)| = \deg u + \deg v - |N(u) \cap N(v)|\), so Jaccard is the count divided by something that grows with the candidate's degree: it is a penalty on popular candidates, not on popular mutual friends.</p>
+    </div></details>
+
+    <h4>6 · Random walks: a score that looks beyond two steps</h4>
+    <p><b>The situation.</b> Every score so far stops at two steps, and on the time split 51.6% of a user's future friends (mean per user) are further away. Can one score add up evidence along all routes from you, favour short ones, and still discount hubs?</p>
+    <p><b>The obvious attempt: count routes of every length.</b> Through a hub the counts explode: a hub with 1,480 friends creates 1,480 routes to each of its friends' friends. Raw route counts reward being near a hub, the opposite of what we want.</p>
+    <p><b>The idea: a walker who keeps going home.</b> Put a walker on your dot. At every step, with probability α the walker jumps back to you; otherwise it moves along a random line from where it stands. Let it walk for a long time and record the share of time it spends at each person. That share is the person's <b>personalised PageRank</b> from you, also called a <b>random walk with restart</b>. Short routes count most, because the walker keeps going home. A hub splits the walker over all its friends, so a route through a hub delivers only a sliver to each.</p>
+    <p><b>By hand, on the six people</b> (α = 0.3): You 0.380, Ben 0.230, Chloe 0.230, Esha 0.080, Dev 0.040, Farid 0.040. Among people you do not know: Esha, then Dev and Farid tied, the same order as counting. Now give Ben 20 more friends, so he has 24:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Candidate</th><th class="num">mutual friends</th><th>through</th><th class="num">share, Ben has 4 friends</th><th class="num">share, Ben has 24</th></tr>
+      <tr><td>Esha</td><td class="num">2</td><td>Ben and Chloe</td><td class="num">0.080</td><td class="num">0.036</td></tr>
+      <tr class="hi"><td>Farid</td><td class="num">1</td><td>Chloe (4 friends)</td><td class="num">0.040</td><td class="num">0.028</td></tr>
+      <tr><td>Dev</td><td class="num">1</td><td>Ben (24 friends)</td><td class="num">0.040</td><td class="num">0.008</td></tr>
+    </table></div>
+    <p>The count still ties Dev and Farid; the walk puts Farid ahead, because his one mutual friend is not spread over 24 people. The code computes the shares by <b>power iteration</b>: start with all the weight on you, and each round keep α of it at home and spread the rest evenly along every line.</p>
+    <div class="code"><div class="ch"><span>code/day_3/ppr.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def ppr(src, dst, deg, u, alpha=0.3, rounds=30):
+    """Share of time a walker spends at each person when, at every step, it goes
+    home to u with probability alpha and otherwise moves to a random friend."""
+    n = len(deg)
+    home = np.zeros(n); home[u] = 1.0
+    share = np.divide(1.0, deg, out=np.zeros(n), where=deg &gt; 0)   # 1 / degree
+    x = home.copy()
+    for _ in range(rounds):
+        moved = np.bincount(dst, weights=x[src] * share[src], minlength=n)  # one step for everyone
+        x = alpha * home + (1 - alpha) * moved
+    return x
+
+def ppr_top_k(adj, x, u, k=10):
+    """Best k non-friends by walk share; ties go to the smaller id."""
+    x = x.copy()
+    x[u] = -1.0
+    x[list(adj[u])] = -1.0                       # yourself and your friends are not candidates
+    order = np.lexsort((np.arange(len(x)), -x))  # by -share, then by id
+    return [int(v) for v in order[:k] if x[v] &gt; 0]</code></pre></div>
+    <p><b>Measured on the time split</b> (<code>ppr.py</code>, 30 rounds per user on the past graph).</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">rounds t</th><th class="num">total error (against 300 rounds)</th><th class="num">guaranteed at most 2(0.7)<sup>t</sup></th></tr>
+      <tr><td class="num">1</td><td class="num">0.935</td><td class="num">1.40</td></tr>
+      <tr><td class="num">5</td><td class="num">0.0295</td><td class="num">0.336</td></tr>
+      <tr><td class="num">10</td><td class="num">1.8 × 10<sup>−4</sup></td><td class="num">0.0565</td></tr>
+      <tr><td class="num">20</td><td class="num">9.5 × 10<sup>−9</sup></td><td class="num">1.6 × 10<sup>−3</sup></td></tr>
+      <tr class="hi"><td class="num">30</td><td class="num">1.0 × 10<sup>−12</sup></td><td class="num">4.5 × 10<sup>−5</sup></td></tr>
+    </table></div>
+    <p>The error shrinks every round, faster than the guarantee (the deep block proves the guarantee). Now the quality, on the same time split as section 5:</p>
+    <div class="chart"><div class="t">recall@10 on the time split, 9,357 evaluated users</div>
+      <div class="br"><span>mutual friends</span><span class="tr"><i style="width:77.7%;--c:var(--muted)"></i></span><span class="v">0.0524</span></div>
+      <div class="br"><span>Adamic–Adar</span><span class="tr"><i style="width:94.7%"></i></span><span class="v">0.0638</span></div>
+      <div class="br"><span>PageRank, α = 0.15</span><span class="tr"><i style="width:96.4%;--c:var(--ai)"></i></span><span class="v">0.0650</span></div>
+      <div class="br"><span>PageRank, α = 0.5</span><span class="tr"><i style="width:98.1%;--c:var(--ai)"></i></span><span class="v">0.0661</span></div>
+      <div class="br"><span>PageRank, α = 0.3</span><span class="tr"><i style="width:100%;--c:var(--ai)"></i></span><span class="v">0.0674</span></div>
+      <div class="cap">Bars to scale. PageRank at α = 0.3 finds 2,292 of the 40,000 (user, future friend) pairs in its top 10s.</div>
+    </div>
+    <ul>
+      <li><b>The walk is the best single score on this page</b>: 0.0674 against 0.0524 for the count, +0.0150 (paired standard error 0.0015), and above Adamic–Adar's 0.0638.</li>
+      <li><b>It wins mostly by ranking, not by reaching.</b> Of its 2,292 hits at α = 0.3, only 13 are people more than two steps away; at α = 0.15, which lets the walker wander further, 70; at α = 0.5, none. In a top 10, three-step people rarely beat two-step people. The gain comes from scoring the two-step candidates better: hubs diluted, plus credit for many short routes.</li>
+      <li><b>It costs much more.</b> Each round touches all 160,000 list entries of the past graph, so 30 rounds are 4,800,000 updates per user, against about a thousand reads for the two-step walk. So walk scores are computed offline in batch, for everyone, and stored as each user's top list; section 9 shows how that runs across machines.</li>
+    </ul>
+    <p><b>Trade-off and interview takeaway.</b> Say: "random walk with restart; it sums all short routes with hubs diluted, its two-step part is resource allocation, it converges geometrically at rate 1 − α, and it runs offline." In an interview, also mention the cheaper estimate: run a few thousand actual walks and count where they stop.</p>
+    <p class="idea"><b>In one line.</b> Personalised PageRank scores everyone by a walker that keeps going home; it lifts recall@10 to 0.0674 here, mostly by ranking two-step candidates better, at a cost that makes it a batch job.</p>
+
+    <details class="deep"><summary>The math, step by step: restart, the settled shares, and why 30 rounds are enough</summary><div>
+      <p><b>Step 1: one step as a table.</b> Let \(P_{fv} = 1/\deg(f)\) when \(f\) and \(v\) are friends, 0 otherwise; each row adds to 1. If the row vector \(x_t\) holds the walker's chances after \(t\) steps, one more step gives \(x_t P\). Ben's row on the six people has 1/4 at You, Chloe, Dev and Esha.</p>
+      <p><b>Step 2: add the restart.</b> With \(e_u\) the vector with 1 at you, one round is</p>
+      <div class="eq">\[ x_{t+1} = \alpha\, e_u + (1-\alpha)\, x_t P . \]</div>
+      <p>The settled shares \(\pi_u\) are the vector that this round leaves unchanged, \(\pi_u = \alpha e_u + (1-\alpha)\pi_u P\): the <b>stationary distribution</b> of the walk with restart. Without restart (α = 0) the walker would wander off and the shares would forget where it started; the restart is what makes the score about you.</p>
+      <p><b>Step 3: unroll it.</b> Substitute the equation into itself again and again:</p>
+      <div class="eq">\[ \pi_u = \alpha \sum_{t=0}^{\infty} (1-\alpha)^t\, e_u P^t . \]</div>
+      <p>In words: the score of \(v\) adds the chance of reaching \(v\) in exactly \(t\) steps, for every \(t\), with longer routes discounted by \((1-\alpha)^t\).</p>
+      <p><b>Step 4: the two-step term is resource allocation.</b> Reaching \(v\) in two steps means going to a friend \(f\) (chance \(1/\deg u\)) and then to \(v\) (chance \(1/\deg f\)), with \(f\) a mutual friend:</p>
+      <div class="eq">\[ (e_u P^2)_v = \frac{1}{\deg u} \sum_{f \in N(u) \cap N(v)} \frac{1}{\deg f} . \]</div>
+      <p>Six people: Esha \(\tfrac12(\tfrac14 + \tfrac14) = \tfrac14\), Dev and Farid \(\tfrac18\). With Ben at 24 friends Dev falls to \(\tfrac12 \cdot \tfrac1{24} = \tfrac1{48}\). So the walk contains section 5's resource allocation as its two-step part, plus longer routes.</p>
+      <p><b>Step 5: the error shrinks every round.</b> Measure a vector by \(\|y\|_1 = \sum_v |y_v|\). Because each row of \(P\) adds to 1, \(\|yP\|_1 \le \|y\|_1\). Subtracting the settled equation from a round gives \(x_{t+1} - \pi_u = (1-\alpha)(x_t - \pi_u)P\), so the error shrinks by at least \(1 - \alpha\) per round. Two probability vectors are at most 2 apart, so</p>
+      <div class="eq">\[ \|x_t - \pi_u\|_1 \le 2(1-\alpha)^t . \]</div>
+      <p>For α = 0.3 and an error of \(10^{-4}\): \(t \ge \ln(2/10^{-4}) / \ln(1/0.7) = 9.90 / 0.357 \approx 28\) rounds, whatever the size of the graph. The same shrinking argument shows the settled shares exist and are unique.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ DSA: components -->
+  <div class="blk dsa alg">
+    <div class="bh"><span class="kind">DSA · islands: connected components and union-find</span></div>
+
+    <h4>7 · Are there islands? Union-find</h4>
+    <p><b>The situation.</b> A person in an island of their own, with no route to anyone else, can never be reached by friends of friends or by a walk. How many islands does the graph have, and how do you keep that answer up to date as friendships stream in?</p>
+    <p><b>The obvious attempt.</b> Run BFS from every unlabelled person; each run labels one island. That is exact, \(O(n + m)\), and fine for one snapshot. But a new friendship arrives every moment, and re-running BFS over the whole graph for each one is far too much.</p>
+    <p><b>The idea: give every island a representative.</b> Each person points to someone in their island; follow the pointers and you reach the island's <b>root</b>. Two people are in the same island exactly when they reach the same root. A new friendship \((a, b)\) joins two islands by pointing one root at the other. Two tricks keep the pointer chains short: <b>union by rank</b> (hang the shorter tree under the taller one) and <b>path compression</b> (after finding a root, point everyone you passed straight at it). This is <b>union-find</b>, also called disjoint-set union.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">start</span><span class="seq"><span class="nd">You</span><span class="nd">Ben</span><span class="nd">Chloe</span><span class="nd">Dev</span><span class="nd">Esha</span><span class="nd">Farid</span></span><span class="why">six islands, everyone their own root</span></div>
+      <div class="step"><span class="k">You–Ben</span><span class="seq"><span class="nd hot">You ← Ben</span></span><span class="why">roots differ: join, five islands</span></div>
+      <div class="step"><span class="k">You–Chloe</span><span class="seq"><span class="nd hot">You ← Chloe</span></span><span class="why">join, four islands</span></div>
+      <div class="step"><span class="k">Ben–Chloe</span><span class="seq"><span class="nd">same root</span></span><span class="why">both reach You: already one island, this line closes a cycle</span></div>
+      <div class="step"><span class="k">the rest</span><span class="seq"><span class="nd new">one island</span></span><span class="why">Dev, Esha and Farid join; Chloe–Esha closes a cycle. 5 joins, 2 lines inside an island</span></div>
+    </div></div>
+    <div class="code"><div class="ch"><span>code/day_3/components.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class UnionFind:
+    def __init__(self, n):
+        self.parent = list(range(n))       # everyone starts as their own island
+        self.rank = [0] * n                # an upper bound on each tree's height
+        self.count = n                     # number of islands
+
+    def find(self, x):
+        root = x
+        while self.parent[root] != root:
+            root = self.parent[root]
+        while self.parent[x] != root:      # path compression: point everyone on the way at the root
+            self.parent[x], x = root, self.parent[x]
+        return root
+
+    def union(self, a, b):
+        """Join a's island and b's island. False if they were already one."""
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return False
+        if self.rank[ra] &lt; self.rank[rb]:
+            ra, rb = rb, ra                # union by rank: hang the shorter tree under the taller
+        self.parent[rb] = ra
+        if self.rank[ra] == self.rank[rb]:
+            self.rank[ra] += 1
+        self.count -= 1
+        return True</code></pre></div>
+    <p><b>Measured</b> (<code>components.py</code>), feeding the week's friendships in formation order:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">friendships so far</th><th class="num">islands</th><th class="num">of which users with no friend yet</th><th class="num">largest island</th></tr>
+      <tr><td class="num">1,000</td><td class="num">9,006</td><td class="num">8,283</td><td class="num">61</td></tr>
+      <tr><td class="num">5,000</td><td class="num">5,410</td><td class="num">4,188</td><td class="num">2,159</td></tr>
+      <tr><td class="num">10,000</td><td class="num">2,577</td><td class="num">2,034</td><td class="num">6,583</td></tr>
+      <tr><td class="num">20,000</td><td class="num">703</td><td class="num">610</td><td class="num">9,190</td></tr>
+      <tr><td class="num">50,000</td><td class="num">40</td><td class="num">37</td><td class="num">9,959</td></tr>
+      <tr class="hi"><td class="num">80,000 (the training cut)</td><td class="num">6</td><td class="num">5</td><td class="num">9,995</td></tr>
+      <tr><td class="num">100,000</td><td class="num">1</td><td class="num">0</td><td class="num">10,000</td></tr>
+    </table></div>
+    <p>One giant island swallows almost everyone early; what is left outside it is mostly people with no friend at all. At the training cut, the only islands besides the giant are 5 users with no friends yet, the same 5 evaluated users who always score 0 in section 5: for them, no graph score can help, and something outside the graph has to (Day 4 and Day 5). Of the 100,000 friendships, exactly 9,999 joined two islands (one fewer than the number of users, as any tree that connects everyone needs), and 90,001 landed inside an island already, closing a cycle.</p>
+    <p><b>Where it shows up.</b> Union-find is the tool whenever "same group" is transitive and arrives as pairs.</p>
+    <ul>
+      <li><b>Merging duplicate accounts.</b> Two accounts that share a verified email or phone number belong to the same person; so do two accounts linked through a third. Union every pair that shares a contact, and each root is one person. Suggesting someone their own second account is a classic bug this prevents.</li>
+      <li><b>Contact-import clusters.</b> When users upload address books (with consent), entries that share a phone or email are joined into clusters, so one real person is not suggested three times under three spellings.</li>
+    </ul>
+    <div class="code"><div class="ch"><span>code/day_3/components.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># Merging duplicate accounts: two accounts are the same person if they share an email or phone.
+def merge_accounts(accounts):
+    """accounts[i] = set of contact strings. Returns groups of account ids that belong together."""
+    uf, owner = UnionFind(len(accounts)), {}
+    for i, contacts in enumerate(accounts):
+        for c in contacts:
+            if c in owner:
+                uf.union(i, owner[c])      # shared contact: same person
+            else:
+                owner[c] = i
+    groups = {}
+    for i in range(len(accounts)):
+        groups.setdefault(uf.find(i), []).append(i)
+    return sorted(groups.values())</code></pre></div>
+    <p><b>Trade-off and interview takeaway.</b> BFS for a one-off snapshot, union-find when pairs stream in and you only need "same island or not". Union-find cannot delete a friendship: once two islands are joined, there is no cheap way to split them, so unfriending needs a periodic rebuild. Say: "union by rank plus path compression, near-constant time per operation."</p>
+    <p class="idea"><b>In one line.</b> Union-find keeps islands as pointer trees with a root each; joining and asking cost almost nothing, so it handles a stream of friendships or contact matches.</p>
+    <details class="deep"><summary>The math, step by step: why the trees stay short</summary><div>
+      <p><b>Step 1: rank bounds size.</b> A root's rank only grows when two trees of equal rank \(r\) join, and then the new tree has at least twice the nodes of each. By induction, a tree whose root has rank \(r\) has at least \(2^r\) nodes. Start: rank 0, one node, \(2^0 = 1\). Join two rank-\(r\) trees: at least \(2^r + 2^r = 2^{r+1}\) nodes, rank \(r + 1\).</p>
+      <p><b>Step 2: height is at most log n.</b> Height never exceeds rank, and \(2^r \le n\), so \(r \le \log_2 n\). With 10,000 users, no chain is longer than \(\log_2 10{,}000 \approx 13.3\), so 13 steps, even without path compression.</p>
+      <p><b>Step 3: with path compression too.</b> Each find flattens the path it walked, so later finds are shorter. Tarjan proved that \(m\) operations on \(n\) items take \(O(m\,\alpha(n))\) time, where \(\alpha\) is the inverse Ackermann function, at most 4 for any \(n\) that fits in the universe. In practice: constant.</p>
+      <p><b>Step 4: why 9,999 joins.</b> Each successful join reduces the number of islands by one. Starting from 10,000 islands and ending with 1 takes exactly 9,999 joins, whatever the order.</p>
+    </div></details>
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/number-of-provinces/">547. Number of Provinces</a>: islands from an adjacency matrix (the layout section 1 rejected for big graphs; fine for \(n \le 200\)).</li>
+      <li><a href="https://leetcode.com/problems/redundant-connection/">684. Redundant Connection</a>: the first edge whose two ends already share a root is the one that closes a cycle.</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+      <div class="code"><div class="ch"><span>code/day_3/components.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># LeetCode 547 · Number of Provinces (adjacency matrix in)
+def findCircleNum(isConnected):
+    n = len(isConnected)
+    uf = UnionFind(n)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if isConnected[i][j]:
+                uf.union(i, j)
+    return uf.count
+
+# LeetCode 684 · Redundant Connection: the first edge whose ends are already joined
+def findRedundantConnection(edges):
+    uf = UnionFind(len(edges) + 1)
+    for a, b in edges:
+        if not uf.union(a, b):
+            return [a, b]</code></pre></div>
+      <p>547 is \(O(n^2)\) because the input is a matrix; 684 is near-linear in the number of edges. 684 is exactly the "inside an island already" count above, stopped at the first one.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ SYS: at scale -->
+  <div class="blk sys des">
+    <div class="bh"><span class="kind">System Design · advanced · at scale</span></div>
+    <p><b>At scale.</b> This block is advanced: it assumes the graph no longer fits on one machine. Day 5 builds the full system; here we measure the two graph-specific questions it rests on.</p>
+
+    <h4>8 · Partitioning the graph across machines</h4>
+    <p><b>The situation.</b> At a billion users the adjacency lists are about 1.2 TB (section 1), so they are split across \(p\) machines. A friends-of-friends request runs on the machine that holds your list and must read each friend's list. Every friend who lives elsewhere is a network round trip.</p>
+    <p><b>The obvious attempt: hash partitioning.</b> Put user \(u\) on machine \(\text{hash}(u) \bmod p\). Load is even and lookups need no directory. But a hash knows nothing about who is friends with whom, so a friend is on your machine with probability only \(1/p\). The share of friendships that cross machines is the <b>edge cut</b>.</p>
+    <div class="code"><div class="ch"><span>code/day_3/partition.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def hash_partition(n, p):
+    """Machine of user u: a hash of the id, so users spread evenly and at random."""
+    return [(u * 2654435761 % 2**32) * p &gt;&gt; 32 for u in range(n)]   # multiplicative hash, top bits
+
+def remote_read_share(adj, part, replicated=frozenset()):
+    """A two-step walk for u runs on u's machine and reads each friend f's list (deg f entries).
+    Share of those entries that live on another machine. Lists in `replicated` are on every machine."""
+    remote = total = 0
+    for u in range(len(adj)):
+        for f in adj[u]:
+            total += len(adj[f])
+            if part[f] != part[u] and f not in replicated:
+                remote += len(adj[f])
+    return remote / total</code></pre></div>
+    <p><b>Two ideas to do better.</b> <b>Locality</b>: place friends together. A simple version (balanced label propagation) starts from the hash and repeatedly moves each user to the machine where most of their friends live, as long as that machine stays within 3% of an even share. <b>Copy the hubs</b>: section 3 showed the top 1% of lists cause 69% of the reads, so keep a copy of those 100 lists on every machine.</p>
+    <p><b>Measured</b> (<code>partition.py</code>), share of two-step reads (weighted by list length) that leave the machine:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">machines p</th><th class="num">(p − 1)/p</th><th class="num">hash: edge cut</th><th class="num">hash: remote reads</th><th class="num">hash + top-1% lists copied</th><th class="num">locality: edge cut</th><th class="num">locality: remote reads</th></tr>
+      <tr><td class="num">2</td><td class="num">0.500</td><td class="num">0.499</td><td class="num">0.495</td><td class="num">0.154</td><td class="num">0.373</td><td class="num">0.409</td></tr>
+      <tr><td class="num">4</td><td class="num">0.750</td><td class="num">0.750</td><td class="num">0.745</td><td class="num">0.232</td><td class="num">0.613</td><td class="num">0.642</td></tr>
+      <tr class="hi"><td class="num">8</td><td class="num">0.875</td><td class="num">0.876</td><td class="num">0.872</td><td class="num">0.271</td><td class="num">0.723</td><td class="num">0.767</td></tr>
+      <tr><td class="num">16</td><td class="num">0.938</td><td class="num">0.937</td><td class="num">0.937</td><td class="num">0.289</td><td class="num">0.796</td><td class="num">0.847</td></tr>
+      <tr><td class="num">32</td><td class="num">0.969</td><td class="num">0.969</td><td class="num">0.969</td><td class="num">0.299</td><td class="num">0.849</td><td class="num">0.898</td></tr>
+    </table></div>
+    <p>Three readings. <b>Hash partitioning makes almost every read remote</b>, exactly \((p-1)/p\): 87.2% at 8 machines. <b>Locality helps, but only so much</b> on this graph: 76.7% at 8 machines. Real social graphs have stronger local structure (schools, towns, workplaces) and gain more; the week's generator makes 20% of its attempts at a new friendship with a random popular user, which no placement can make local. <b>Copying the hubs is the big lever</b>: 27.1% at 8 machines, because it removes the reads that dominate the bill. The price is storage: those 100 lists are 22,269 of the 200,000 entries (11.1%), and seven extra copies add 78% to the total at \(p = 8\). Under hash partitioning each of the 8 machines holds 1,249 to 1,252 users and 23,817 to 27,171 list entries, so load stays even.</p>
+    <p class="idea"><b>In one line.</b> A hash partition puts a friend on another machine with probability (p − 1)/p; placing friends together trims that, and copying the few hub lists everywhere cuts it the most, because hubs cause most of the reads.</p>
+    <details class="deep"><summary>The math, step by step: why hashing gives (p − 1)/p, and what copying hubs leaves</summary><div>
+      <p><b>Step 1.</b> With a hash that spreads ids evenly and ignores friendships, the machine of a friend \(f\) is independent of yours, so \(P(\text{different}) = 1 - 1/p\). That holds for every friend, popular or not, so both the edge cut and the work-weighted remote share are \((p-1)/p\) in expectation.</p>
+      <p><b>Step 2.</b> Copying the hub lists makes their reads local. What remains is the non-hub part of the work, still remote with probability \((p-1)/p\):</p>
+      <div class="eq">\[ \text{remote share} \approx \frac{p-1}{p}\,(1 - 0.691) = 0.875 \times 0.309 = 0.270 \quad (p = 8), \]</div>
+      <p>matching the measured 0.271.</p>
+      <p><b>Step 3: storage.</b> Each extra copy of the hub lists adds their 11.1% share; \(p - 1 = 7\) copies add \(7 \times 11.1\% \approx 78\%\).</p>
+    </div></details>
+
+    <h4>9 · Think like a vertex: BFS and PageRank in rounds</h4>
+    <p><b>The situation.</b> BFS and PageRank were written above as loops over one big in-memory graph. On a partitioned graph, no machine can see it all. How do you run them?</p>
+    <p><b>The idea: every vertex runs the same tiny program, in rounds.</b> In each round (a <b>superstep</b>), a vertex reads the messages sent to it in the previous round, updates its own value, and sends messages along its own lines. Then everyone waits at a barrier and the next round begins. This is the vertex-centric model, often called Pregel-style after the paper that named it. BFS becomes: in round \(r\), vertices first reached in round \(r - 1\) message their friends, and a vertex hearing for the first time sets its distance to \(r\). PageRank becomes: every vertex sends value / degree to each friend, then sets value = α·[it is the start] + (1 − α)·(sum received).</p>
+    <div class="code"><div class="ch"><span>code/day_3/partition.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># --- Pregel-style rounds: every vertex runs the same small program, talking only to neighbours.
+def pregel_bfs(adj, s, part=None):
+    """Round r: vertices reached in round r - 1 message their friends; a vertex that hears
+    for the first time sets dist = r. Returns dist, rounds, messages, cross-machine messages."""
+    dist, frontier, r, msgs, cross = {s: 0}, [s], 0, 0, 0
+    while frontier:
+        r += 1
+        inbox = set()
+        for x in frontier:                          # each active vertex sends to all its friends
+            for y in adj[x]:
+                msgs += 1
+                cross += part is not None and part[x] != part[y]
+                inbox.add(y)
+        frontier = [y for y in inbox if y not in dist]
+        for y in frontier:
+            dist[y] = r
+    return dist, r - 1, msgs, cross</code></pre></div>
+    <p><b>Measured</b> (<code>partition.py</code>): BFS from user 8604 on the week's graph finishes in 4 rounds (its farthest user is 4 steps away) and sends 200,000 messages, one per list entry, the same count the in-memory BFS reads. With hash partitioning on 8 machines, 175,130 of them (87.6%) cross machines. Personalised PageRank sends 200,000 messages every round, 6,000,000 for 30 rounds, and the vertex-centric version gives the same shares as <code>ppr</code> on the six people (asserted).</p>
+    <p><b>Trade-off and interview takeaway.</b> Rounds are simple to reason about and fault-tolerant (checkpoint at the barrier), but each round waits for the slowest machine, and the machine holding a hub sends a hub-sized burst every round: the same skew as section 3, now in network traffic. Combine messages per destination machine, copy or split hubs, and prefer few rounds: friends-of-friends is 2 rounds, BFS is as many rounds as the farthest distance, PageRank about 30. Say: "vertex-centric supersteps; cost per round is messages, and messages are list entries."</p>
+    <p class="idea"><b>In one line.</b> On a partitioned graph, BFS and PageRank run as rounds of messages along edges; each round costs one message per list entry, and hubs set the slowest machine.</p>
+  </div>
+
+  <!-- ============================================================ bridge -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · the bridge to Day 4</span></div>
+    <h4>10 · Several scores, and no way yet to weigh them</h4>
+    <p>We now have a shelf of signals for a pair (you, candidate), all measured on the same time split:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Score</th><th>What it rewards</th><th class="num">recall@10</th><th>Cost per user</th></tr>
+      <tr><td>Mutual friends</td><td>many shared friends</td><td class="num">0.0524</td><td>sum of friends' degrees</td></tr>
+      <tr><td>Mutual friends, hubs over 200 skipped</td><td>shared non-hub friends</td><td class="num">0.0533</td><td>60% less on average</td></tr>
+      <tr><td>Jaccard</td><td>similar circles; penalises popular candidates</td><td class="num">0.0287</td><td>same walk</td></tr>
+      <tr><td>Resource allocation</td><td>shared friends with small circles</td><td class="num">0.0616</td><td>same walk</td></tr>
+      <tr><td>Adamic–Adar</td><td>shared friends, gently discounted</td><td class="num">0.0638</td><td>same walk</td></tr>
+      <tr class="hi"><td>Personalised PageRank, α = 0.3</td><td>all short routes, hubs diluted</td><td class="num">0.0674</td><td>4.8 million updates, offline</td></tr>
+    </table></div>
+
+    <p>And the graph is not the only source. <code>users.csv</code> gives each user a city and a few groups (<code>scores.py</code>):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Pairs</th><th class="num">share a group</th><th class="num">same city</th><th class="num">no mutual friend at the cut</th></tr>
+      <tr class="hi"><td>The 20,000 future friendships</td><td class="num">49.1%</td><td class="num">12.7%</td><td class="num">46.8%</td></tr>
+      <tr><td>100,000 random non-friend pairs</td><td class="num">15.5%</td><td class="num">12.4%</td><td class="num">92.0%</td></tr>
+    </table></div>
+    <p>Shared groups are a strong hint: about half of future friendships share a group, against 15.5% of random pairs, and groups reach some of the 46.8% of future friendships that no two-step score can see. Same city is no hint at all on this graph (12.7% against 12.4%). Each signal helps a little on its own. Two questions are left open, and they are the right questions for a learning system:</p>
+    <ul>
+      <li><b>How should the signals be weighed?</b> Adamic–Adar against PageRank against groups against the candidate's own popularity: every hand-picked weighting is a guess, and the guesses interact.</li>
+      <li><b>What does "good" mean for the business?</b> Recall@10 counts future friendships, but the product cares about accepted requests, conversations, people who stay; and it must not flood a few popular users with requests.</li>
+    </ul>
+    <p>Day 4 answers both: it learns the weights from the past with the same time split, and it asks what engagement really means.</p>
+  </div>
+
+  <!-- ============================================================ practice -->
+  <div class="blk dsa alg">
+    <div class="bh"><span class="kind">DSA · practice for Day 3</span></div>
+    <div class="part"><b>LeetCode, grouped by technique</b><ul>
+      <li><b>Reachability and BFS:</b> ★ <a href="https://leetcode.com/problems/find-if-path-exists-in-graph/">1971. Find if Path Exists in Graph</a> · <a href="https://leetcode.com/problems/keys-and-rooms/">841. Keys and Rooms</a></li>
+      <li><b>Degrees:</b> <a href="https://leetcode.com/problems/find-the-town-judge/">997. Find the Town Judge</a></li>
+      <li><b>Triangles:</b> <a href="https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/">1761. Minimum Degree of a Connected Trio in a Graph</a></li>
+      <li><b>Components and union-find:</b> <a href="https://leetcode.com/problems/number-of-provinces/">547. Number of Provinces</a> · <a href="https://leetcode.com/problems/redundant-connection/">684. Redundant Connection</a></li>
+      <li><b>Traversal drills:</b> <a href="https://leetcode.com/problems/is-graph-bipartite/">785. Is Graph Bipartite?</a> (colour BFS layers; a triangle makes it impossible, so the six people are not bipartite) · <a href="https://leetcode.com/problems/clone-graph/">133. Clone Graph</a> (BFS where the "seen" map holds the copies)</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions: 785 and 133</summary><div>
+      <div class="code"><div class="ch"><span>code/day_3/drills.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># LeetCode 785 · Is Graph Bipartite? Colour by BFS layer; an edge inside a layer breaks it.
+def isBipartite(graph):
+    colour = [-1] * len(graph)
+    for s in range(len(graph)):              # the graph may have several islands
+        if colour[s] != -1:
+            continue
+        colour[s] = 0
+        queue = deque([s])
+        while queue:
+            x = queue.popleft()
+            for y in graph[x]:
+                if colour[y] == -1:
+                    colour[y] = 1 - colour[x]
+                    queue.append(y)
+                elif colour[y] == colour[x]:
+                    return False             # an odd cycle, for example a triangle
+    return True
+
+# LeetCode 133 · Clone Graph: BFS with a map from old node to its copy (the "seen" set).
+class Node:
+    def __init__(self, val=0, neighbors=None):
+        self.val = val
+        self.neighbors = neighbors if neighbors is not None else []
+
+def cloneGraph(node):
+    if node is None:
+        return None
+    copy = {node: Node(node.val)}
+    queue = deque([node])
+    while queue:
+        x = queue.popleft()
+        for y in x.neighbors:
+            if y not in copy:                # first sight: make the copy, visit later
+                copy[y] = Node(y.val)
+                queue.append(y)
+            copy[x].neighbors.append(copy[y])
+    return copy[node]</code></pre></div>
+      <p>Both are BFS with one extra job per first sight: give a colour (785) or make a copy (133). Both are \(O(n + m)\).</p>
+    </div></details>
+    <div class="part"><b>On the week's graph</b><ul>
+      <li>Run <code>bfs.py</code> from the hub with 1,480 friends. Predict how many people are within two steps before you run it.</li>
+      <li>In <code>degrees.py</code>, replace the cap (skip hubs) with a weight of \(1/\deg(f)\) per friend. Which section's score have you rebuilt?</li>
+      <li>In <code>triangles.py</code>, split the "closed a triangle" share by the degree of the busier person in the new friendship. Do hubs' new friendships close triangles more or less often?</li>
+      <li>In <code>ppr.py</code>, change α to 0.05. Predict how recall@10 and the number of rounds needed change, then measure.</li>
+      <li>In <code>partition.py</code>, copy the top 0.1% of lists instead of the top 1%. Predict the remote share at \(p = 8\) from section 3's numbers before running it.</li>
+    </ul></div>
+    <div class="part"><b>Further reading</b><ul>
+      <li>D. Liben-Nowell and J. Kleinberg, <a href="https://doi.org/10.1002/asi.20591">"The link-prediction problem for social networks"</a>, <em>JASIST</em>, 2007: Jaccard, Adamic–Adar, random walks and more, compared with a time split.</li>
+      <li>L. Adamic and E. Adar, <a href="https://doi.org/10.1016/S0378-8733(03)00009-1">"Friends and neighbors on the Web"</a>, <em>Social Networks</em>, 2003: the origin of the 1/log weight.</li>
+      <li>T. Zhou, L. Lü and Y.-C. Zhang, <a href="https://arxiv.org/abs/0901.0553">"Predicting missing links via local information"</a>, 2009: resource allocation.</li>
+      <li>G. Kossinets and D. Watts, <a href="https://doi.org/10.1126/science.1116869">"Empirical analysis of an evolving social network"</a>, <em>Science</em>, 2006: triadic closure measured over time.</li>
+      <li>R. E. Tarjan, <a href="https://doi.org/10.1145/321879.321884">"Efficiency of a good but not linear set union algorithm"</a>, <em>JACM</em>, 1975: the union-find bound.</li>
+      <li>G. Malewicz and others, <a href="https://doi.org/10.1145/1807167.1807184">"Pregel: a system for large-scale graph processing"</a>, SIGMOD 2010: the vertex-centric model.</li>
+      <li>J. Ugander and L. Backstrom, <a href="https://doi.org/10.1145/2433396.2433461">"Balanced label propagation for partitioning massive graphs"</a>, WSDM 2013.</li>
+      <li>A.-L. Barabási, <a href="http://networksciencebook.com/"><em>Network Science</em></a>, free online: degree distributions, clustering, components.</li>
+    </ul></div>
+  </div>
+
+  <div class="check" data-check="day3">
+    <div class="ch"><b>Checkpoint · Day 3</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d3a" data-dim="dsa"><span class="tx">Draw the six people as a graph, write it as an adjacency list, an edge list and a matrix, and compute the memory of each for the week's graph (880,008 bytes as CSR, 12.5 MB as a bit matrix) and for a billion users with 300 friends.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3b" data-dim="dsa"><span class="tx">Write BFS from memory, explain why a person is marked on first sight, show that friends of friends is its second ring, and solve 1971 and 841.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3c" data-dim="dsa"><span class="tx">Show that a two-step walk costs the sum of your friends' degrees, that the total is the sum of squared degrees (1,477 per request, not 400), and why capping hubs cut the work by 60%; solve 997.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3d" data-dim="dsa"><span class="tx">Count triangles once each with the upward order, compute clustering against a random graph (0.1104 against 0.0020), replay formation order to show triadic closure, and solve 1761.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3e" data-dim="ml"><span class="tx">Compute mutual friends, Jaccard, Adamic–Adar and resource allocation by hand on the hub example, state the time split exactly, and reproduce recall@10 for all four (0.0524, 0.0287, 0.0638, 0.0616).</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3f" data-dim="ml"><span class="tx">Explain personalised PageRank as a walk with restart, implement power iteration, derive the 2(1 − α)<sup>t</sup> error bound, and measure its recall@10 on the time split.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3g" data-dim="dsa"><span class="tx">Implement union-find with path compression and union by rank, explain why trees stay within log₂ n, use it to merge duplicate accounts, and solve 547 and 684.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3h" data-dim="sys"><span class="tx">Explain why hash partitioning makes (p − 1)/p of two-step reads remote, why copying the top 1% of lists cuts that to about 27% at 8 machines, and how BFS and PageRank run as vertex-centric rounds.</span><span class="dim sys">System Design</span></label>
+  </div>
+</section>

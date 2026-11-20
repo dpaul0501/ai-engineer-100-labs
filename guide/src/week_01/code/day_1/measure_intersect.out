@@ -1,0 +1,18 @@
+hubs (500+ friends): 7; ten largest lists: [1480, 1132, 1117, 1108, 793, 553, 532, 396, 392, 377]
+typical two-step pairs
+  pairs 2000, shorter list 14.4, longer list 50.6, mutual friends 1.12
+  operations per pair: nested 719.7 · hash 14.4 · merge 59.2 · binary 88.7 · gallop 57.9 · bits 157
+  microseconds per pair: nested 23.16 · hash 1.04 · merge 7.07 · binary 8.10 · gallop 6.68 · bits 0.80 · set&set (C) 0.82
+skewed: small list vs hub
+  pairs 2000, shorter list 12.7, longer list 982.2, mutual friends 2.50
+  operations per pair: nested 11021.1 · hash 12.7 · merge 910.4 · binary 138.9 · gallop 157.8 · bits 157
+  microseconds per pair: nested 312.74 · hash 1.27 · merge 97.38 · binary 13.62 · gallop 15.47 · bits 0.64 · set&set (C) 1.04
+hub vs hub (10 largest)
+  pairs 45, shorter list 558.2, longer list 1017.8, mutual friends 97.89
+  operations per pair: nested 546247.7 · hash 558.2 · merge 1474.9 · binary 6175.1 · gallop 2050.6 · bits 157
+  microseconds per pair: nested 18483.16 · hash 31.49 · merge 254.19 · binary 730.59 · gallop 480.00 · bits 0.75 · set&set (C) 31.03
+largest list 1480 ids
+  as a Python set (bytes, table only) 131288
+  as a sorted int32 array (bytes) 5920
+  as a bitset over 10000 ids (bytes) 1250
+all lists: int32 arrays 800000 bytes; bitsets 12500000 bytes

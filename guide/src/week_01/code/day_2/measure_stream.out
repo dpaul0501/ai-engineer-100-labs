@@ -1,0 +1,42 @@
+A) mutual friends at the moment a friendship forms, per hour (two heaps, reset each hour):
+   hour  1: median 0, p90 1, share with at least one 14%
+   hour  2: median 0, p90 1, share with at least one 31%
+   hour  3: median 0, p90 1, share with at least one 41%
+   hour  4: median 0, p90 1, share with at least one 45%
+   hour  5: median 0, p90 1, share with at least one 49%
+   hour  6: median 1, p90 2, share with at least one 53%
+   hour  7: median 1, p90 2, share with at least one 56%
+   hour  8: median 1, p90 2, share with at least one 58%
+   hour  9: median 1, p90 2, share with at least one 61%
+   hour 10: median 1, p90 3, share with at least one 63%
+B) keeping every top 10 fresh as friendships arrive:
+   count changes: 14,280,420 in all, 143 per new friendship on average, max 3,308
+   changes that altered some top 10: 738,616 (5.2%)
+   removals that forced a top-10 recompute: 16,795 (16.8 per 100 friendships)
+   final state checked against a fresh recount for every user
+
+C) last hour = the last 10,000 friendships: 20,000 arrivals, 7,819 distinct users
+   exact top 10 gains: [142, 109, 102, 99, 70, 52, 52, 45, 40, 39]
+   Misra-Gries   memory    20: recall@10 0.0, mean |error| on the true top 10 75.00
+   Space-Saving  memory    20: recall@10 0.1, mean |error| on the true top 10 154.60
+                 bounds: N/(m+1) = 952, N/m = 1000
+   Misra-Gries   memory    50: recall@10 0.0, mean |error| on the true top 10 75.00
+   Space-Saving  memory    50: recall@10 0.1, mean |error| on the true top 10 114.80
+                 bounds: N/(m+1) = 392, N/m = 400
+   Misra-Gries   memory   100: recall@10 0.0, mean |error| on the true top 10 75.00
+   Space-Saving  memory   100: recall@10 0.1, mean |error| on the true top 10 84.60
+                 bounds: N/(m+1) = 198, N/m = 200
+   Misra-Gries   memory   200: recall@10 0.5, mean |error| on the true top 10 67.30
+   Space-Saving  memory   200: recall@10 0.6, mean |error| on the true top 10 30.40
+                 bounds: N/(m+1) = 100, N/m = 100
+   Misra-Gries   memory   500: recall@10 1.0, mean |error| on the true top 10 37.40
+   Space-Saving  memory   500: recall@10 1.0, mean |error| on the true top 10  1.60
+                 bounds: N/(m+1) = 40, N/m = 40
+   Count-Min     memory   210: recall@10 0.6, mean |error| on the true top 10 351.60
+                 w=50, d=4: largest overcount over all users 461; e/w*N = 1087
+   Count-Min     memory   410: recall@10 0.7, mean |error| on the true top 10 163.10
+                 w=100, d=4: largest overcount over all users 225; e/w*N = 544
+   Count-Min     memory   810: recall@10 0.7, mean |error| on the true top 10 79.60
+                 w=200, d=4: largest overcount over all users 121; e/w*N = 272
+   Count-Min     memory 2,010: recall@10 0.7, mean |error| on the true top 10 25.60
+                 w=500, d=4: largest overcount over all users 51; e/w*N = 109

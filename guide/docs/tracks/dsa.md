@@ -4,55 +4,17 @@ Algorithms and data structures taught as subjects: each one posed as a question,
 
 ## Week 1: People You May Know
 
-- **[Day 1: Count it exactly](../week_01/day_1.html):** storing, walking, counting, intersecting, top-k
-    - 1 · Storing the friendships
-    - 2 · Walking the graph: breadth-first search
-    - 3 · Counting with a hash map
-    - 4 · Comparing two friend lists: set intersection, three ways
-    - 5 · Picking the best ten: top-k, three ways
-    - Practice: [133 Clone Graph](https://leetcode.com/problems/clone-graph/) · [200 Number of Islands](https://leetcode.com/problems/number-of-islands/) · [547 Number of Provinces](https://leetcode.com/problems/number-of-provinces/) · [841 Keys and Rooms](https://leetcode.com/problems/keys-and-rooms/) · [1971 Find if Path Exists in Graph](https://leetcode.com/problems/find-if-path-exists-in-graph/) · [349 Intersection of Two Arrays](https://leetcode.com/problems/intersection-of-two-arrays/) · [350 Intersection of Two Arrays II](https://leetcode.com/problems/intersection-of-two-arrays-ii/) · [347 Top K Frequent Elements](https://leetcode.com/problems/top-k-frequent-elements/) · [215 Kth Largest Element in an Array](https://leetcode.com/problems/kth-largest-element-in-an-array/)
-- **[Day 2: Popular people](../week_01/day_2.html):** suggestions for everyone at once, and who pays for them
-    - The situation: compute everyone's ten in one batch
-    - Count through the middle friend
-    - The bill: the sum of squared friend counts, and who pays it
-    - Triangles, and starting from the least popular corner
-    - Capping hubs, and what it costs in quality
-    - Practice: [997. Find the Town Judge](https://leetcode.com/problems/find-the-town-judge/) · [1615. Maximal Network Rank](https://leetcode.com/problems/maximal-network-rank/) · [1761. Minimum Degree of a Connected Trio in a Graph](https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/) · [1791. Find Center of Star Graph](https://leetcode.com/problems/find-center-of-star-graph/)
-- **[Day 3: Read less](../week_01/day_3.html):** people with similar friend sets: Jaccard, MinHash, LSH
-    - A different route
-    - MinHash: a short signature that remembers similarity
-    - LSH: find the similar pairs without comparing every pair
-    - Practice: [49 Group Anagrams](https://leetcode.com/problems/group-anagrams/)
-- **[Day 3: Read less](../week_01/day_3.html):** Bloom filters: who must not be shown
+- **[Day 5: A billion users](../week_01/day_5.html):** 3 · sharding by user id: mod N, consistent hashing, hot keys
     - The situation
-    - The idea: a few bits per key, and an error that only goes one way
-    - Why the one-way error fits, and two cautions
-    - Practice: [705 Design HashSet](https://leetcode.com/problems/design-hashset/)
-- **[Day 3: Read less](../week_01/day_3.html):** random walks: personalized PageRank
+    - The obvious attempt: hash mod N
+    - The idea: consistent hashing
+    - Hot keys: hub users
+- **[Day 5: A billion users](../week_01/day_5.html):** 4 · an LRU cache for hot users' suggestions
     - The situation
-    - The idea: a walker who keeps going home
-    - How fast it settles, and what it finds
-    - Practice: [688 Knight Probability in Chessboard](https://leetcode.com/problems/knight-probability-in-chessboard/)
-- **[Day 3: Read less](../week_01/day_3.html):** three small structures behind sampling and filtering
-    - 380 Insert Delete GetRandom O(1)
-    - 528 Random Pick with Weight
-    - 705 Design HashSet
-    - Practice: [380 Insert Delete GetRandom O(1)](https://leetcode.com/problems/insert-delete-getrandom-o1/) · [528 Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) · [705 Design HashSet](https://leetcode.com/problems/design-hashset/) · [381 Insert Delete GetRandom O(1) - Duplicates allowed](https://leetcode.com/problems/insert-delete-getrandom-o1-duplicates-allowed/) · [706 Design HashMap](https://leetcode.com/problems/design-hashmap/) · [382 Linked List Random Node](https://leetcode.com/problems/linked-list-random-node/)
-- **[Day 4: Learn who connects](../week_01/day_4.html):** merging ranked lists with a heap
-    - 1 · Several ranked lists, ten slots
-    - 2 · The idea: keep only the heads in a heap
-    - 3 · Measured: when the merge is exact, and when it hurts
-    - 4 · Top-k relatives
-    - Practice: [23](https://leetcode.com/problems/merge-k-sorted-lists/) · [973](https://leetcode.com/problems/k-closest-points-to-origin/) · [373](https://leetcode.com/problems/find-k-pairs-with-smallest-sums/) · [632](https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/) · [378](https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/)
-- **[Day 5: A billion users](../week_01/day_5.html):** split the graph across machines
-    - 1 · The situation
-    - 2 · Try the obvious thing: hash mod N
-    - 3 · Consistent hashing
-    - 4 · Rendezvous hashing
-    - 5 · Scatter-gather: how many machines one request touches
-    - 6 · Hash or locality: placing friends together
-    - 7 · Caching the hot lists
-    - Practice: [146 · LRU Cache](https://leetcode.com/problems/lru-cache/) · [706 · Design HashMap](https://leetcode.com/problems/design-hashmap/) · [981 · Time Based Key-Value Store](https://leetcode.com/problems/time-based-key-value-store/) · [460 · LFU Cache](https://leetcode.com/problems/lfu-cache/)
+    - The idea: least recently used
+    - Measured: hit rate on a skewed request stream
+- **[Day 5: A billion users](../week_01/day_5.html):** 11 · practice
+    - Practice: [146. LRU Cache](https://leetcode.com/problems/lru-cache/) · [460. LFU Cache](https://leetcode.com/problems/lfu-cache/) · [981. Time Based Key-Value Store](https://leetcode.com/problems/time-based-key-value-store/) · [1146. Snapshot Array](https://leetcode.com/problems/snapshot-array/) · [380. Insert Delete GetRandom O(1)](https://leetcode.com/problems/insert-delete-getrandom-o1/) · [355. Design Twitter](https://leetcode.com/problems/design-twitter/)
 
 ## Week 3: Tokenization
 

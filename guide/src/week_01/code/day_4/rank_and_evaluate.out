@@ -1,0 +1,64 @@
+train window: 4,541,304 candidate pairs, 18,322 positives, base rate 0.4035%
+test window: 9,357 users, 7,757,153 candidate pairs, 21,290 positives, base rate 0.2745% (1 in 364)
+future (user, friend) pairs: 40,000; among candidates: 21,290 = 53.2%
+accuracy of 'nobody connects' on test candidates: 99.7255%
+training rows after sampling: 244,542, 7.5% positive
+LR trained in 35.9 s on one laptop core
+LR weights (standardised features):
+  bias           -2.999
+  log_cn         -0.813
+  jaccard        +0.200
+  log_aa         +1.573
+  log_ra         -0.257
+  shared_groups  +0.260
+  same_city      -0.005
+  log_du         +0.349
+  log_dv         +0.366
+GBDT (200 trees, depth 3) trained in 14.5 s on one laptop core
+
+ranker | ROC-AUC | PR-AUC | recall@10 [95% CI] | precision@10
+mutual friends       0.620 0.0125 0.0524 [0.0496, 0.0554] 0.0197
+Adamic-Adar          0.805 0.0190 0.0638 [0.0609, 0.0670] 0.0230
+logistic regression  0.832 0.0214 0.0718 [0.0686, 0.0753] 0.0258
+LR, graph features only 0.821 0.0205 0.0661 [0.0630, 0.0693] 0.0243
+LR + 8 crosses       0.835 0.0193 0.0714 [0.0682, 0.0751] 0.0254
+boosted trees        0.837 0.0192 0.0729 [0.0695, 0.0763] 0.0256
+random order PR-AUC baseline = prevalence = 0.0027
+ceiling (every candidate who connected is found): 0.484 [0.478, 0.491]
+
+paired differences in recall@10 (same resampled users):
+  Adamic-Adar - mutual friends: +0.0114 [+0.0092, +0.0137]  (+21.7%)
+  logistic regression - Adamic-Adar: +0.0080 [+0.0053, +0.0108]  (+12.6%)
+  logistic regression - mutual friends: +0.0194 [+0.0166, +0.0227]  (+37.0%)
+  logistic regression - LR, graph features only: +0.0058 [+0.0037, +0.0079]  (+8.7%)
+  LR, graph features only - Adamic-Adar: +0.0023 [-0.0002, +0.0047]  (+3.5%)
+  LR + 8 crosses - logistic regression: -0.0004 [-0.0019, +0.0013]  (-0.5%)
+  boosted trees - logistic regression: +0.0011 [-0.0013, +0.0033]  (+1.6%)
+slice deg 0-0: 5 users; recall@10 MF 0.0000, LR 0.0000, GBDT 0.0000
+slice deg 1-5: 641 users; recall@10 MF 0.0526, LR 0.0955, GBDT 0.1023
+slice deg 6-20: 7,061 users; recall@10 MF 0.0551, LR 0.0752, GBDT 0.0761
+slice deg 21-inf: 1,650 users; recall@10 MF 0.0410, LR 0.0482, GBDT 0.0483
+
+log loss on all test pairs:
+  logistic regression: raw 0.0743, + log r 0.0173
+  boosted trees: raw 0.0697, + log r 0.0166
+  constant base rate 0.00274: 0.0189
+calibration, LR, ten equal-count bins: predicted raw | predicted + log r | observed
+  bin 1: 1.617% 0.082% 0.018%  (n=775,716)
+  bin 2: 1.889% 0.096% 0.022%  (n=775,716)
+  bin 3: 2.182% 0.111% 0.029%  (n=775,716)
+  bin 4: 2.600% 0.133% 0.048%  (n=775,715)
+  bin 5: 3.113% 0.160% 0.086%  (n=775,715)
+  bin 6: 3.768% 0.195% 0.114%  (n=775,715)
+  bin 7: 4.852% 0.254% 0.198%  (n=775,715)
+  bin 8: 6.856% 0.367% 0.322%  (n=775,715)
+  bin 9: 10.637% 0.593% 0.565%  (n=775,715)
+  bin 10: 24.315% 2.121% 1.344%  (n=775,715)
+  ECE raw 0.05908, corrected 0.00137, ratio 43x
+  mean predicted (corrected) 0.411% vs observed 0.274%; train-window base rate 0.403%
+slice deg 1-5, boosted trees - LR: +0.0068 [-0.0034, +0.0167]
+slice deg 1-5, LR - mutual friends: +0.0429 [+0.0272, +0.0600]
+pooled precision in the top 100 pairs: 0.280
+pooled precision in the top 1,000 pairs: 0.169
+pooled precision in the top 10,000 pairs: 0.077
+figure written: ../../img/roc-vs-pr.png

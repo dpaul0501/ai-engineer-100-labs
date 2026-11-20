@@ -1,0 +1,9 @@
+one call: p50 2.01 ms, p95 3.38, p99 6.29, p99.9 52.94
+shards  p50 ms  p99 ms  slow (>20 ms)  predicted 1-(1-p)^s  | hedged at p95: p99 ms  slow  extra calls
+     1    2.00   50.99          0.010                0.010  |                  4.84  0.0001  0.050
+    10    3.21   52.91          0.094                0.096  |                  6.34  0.0010  0.050
+   100   51.72   54.00          0.633                0.634  |                  8.93  0.0098  0.050
+   181   52.19   54.28          0.837                0.838  |                 51.92  0.0183  0.050
+Little's law, simulated queue: arrival rate 0.8010, mean time inside 5.040, lambda*W 4.037, measured L 4.030
+peak example: 34,722 req/s x 0.050 s = 1,736 requests in flight
+asserts passed

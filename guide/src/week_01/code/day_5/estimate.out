@@ -1,0 +1,12 @@
+week's graph: E[d] = 20.0, E[d^2] = 1476.8, skew = 3.692
+           friendships: 1.000e+11
+              graph_TB: 1.6
+               qps_avg: 11,574.1
+              qps_peak: 34,722.2
+     reads_per_request: 147,600.0
+         peak_GB_per_s: 41.0
+        shards_touched: 181.4
+  online_reads_per_day: 1.476e+14
+       batch_join_rows: 1.476e+14
+              store_TB: 1.2
+asserts passed

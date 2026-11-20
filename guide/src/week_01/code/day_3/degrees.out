@@ -1,0 +1,16 @@
+degree: mean 20.0 median 15 p90 31 p99 100 max 1480 min 1
+share of users below the mean: 69.3%
+work per request: mean 1477 median 1023 p99 7284 max 51806; sum of deg^2 14768324; 20*20 = 400
+friend-of-a-random-friend degree (sum d^2 / sum d): 73.8
+top 0.1% (10 users, degree >= 377): 3.9% of friend ends, 51.6% of all two-step work
+top 1.0% (100 users, degree >= 101): 11.1% of friend ends, 69.1% of all two-step work
+top 10.0% (1000 users, degree >= 31): 32.1% of friend ends, 83.9% of all two-step work
+largest hub alone: degree 1480, 14.8% of the work
+evaluated users 9357
+cap | users skipped | mean work | p99 work | max work | recall@10 (time split)
+None | 0 | 1477 | 7284 | 51806 | 0.0524
+1000 | 4 | 882 | 4366 | 48449 | 0.0526
+500 | 7 | 760 | 3718 | 46571 | 0.0526
+200 | 27 | 597 | 2909 | 41558 | 0.0533
+100 | 100 | 456 | 2338 | 34236 | 0.0532
+50 | 354 | 334 | 1671 | 26317 | 0.0526

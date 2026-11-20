@@ -6,20 +6,20 @@ Every build goes spec → contract → test → code, with your failing tests co
 
 | Week | Days | The problem | Build |
 |---|---|---|---|
-| 1 | 1–7 | **[Design People You May Know](week_01/index.html)** | Friends-of-friends recommendations on a 10,000-user graph: exact counting, scale and skew, sharding, approximate candidates, an ML ranker, serving |
-| 2 | 8–14 | **Representation learning** (next) | From word embeddings to user embeddings: learned representations that replace hand-made features |
+| 1 | 1–7 | **[Design People You May Know](week_01/index.html)** | Friends-of-friends recommendations on a 10,000-user graph: intersect friend lists, pick the top k, read it as a graph, learn a ranker, then serve it at scale |
+| 2 | 8–14 | **Representation learning** (next) | Support-ticket triage: route a new ticket and find the past ticket that solved it, from ids and text with no hand features: learned embeddings, word embeddings, then attention |
 | 3 | 15–21 | **[Tokenization](week_03/index.html)** | Byte-level BPE from first principles, with a tested tokenizer of your own |
 
 The weeks after Week 3 are being reordered; their topics are listed below.
 
 ## Week 1 · People You May Know
 
-Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html). The problem grows each day: count mutual friends exactly, see why popular people make it slow, read less with sampling, MinHash and LSH, learn who connects with a model, then take it to a billion users as a system and a product. The [talk](week_01/talk.html) presents the whole design as slides.
+Start at the [week reading](week_01/index.html), then work through [Day 1](week_01/day_1.html) to [Day 5](week_01/day_5.html) and finish with the [worksheet and learning checks](week_01/worksheet.html). The problem grows each day: define it; count common friends by intersecting two lists, then across machines and with MinHash; pick the top k from a list and from a stream, then on many shards; see that it is a graph; learn what engagement means with a model, data science and A/B tests, ending with learned representations; then take it to a billion users as a distributed system and a product. The [talk](week_01/talk.html) presents the design as slides.
 
-- **DSA:** graph representations, traversal, hash counting, set intersection, top-k, triangle counting, consistent hashing, MinHash and LSH, Bloom filters, personalized PageRank, k-way merge
-- **ML:** triadic closure, heavy-tailed degrees and the friendship paradox, percentiles with error bars, sampling estimators and recall@K, link prediction with logistic regression, AUC
-- **System Design:** back-of-envelope estimation, tail latency at scale, sharding and graph stores, precompute vs online, incremental updates, the serving architecture, A/B tests
-- **Software Delivery:** the function contract, golden, property and differential tests against a brute-force baseline
+- **DSA:** set intersection (hashing, merging, galloping, bitsets), top k from a list and a stream (heaps, quickselect, bucket counting, Misra–Gries, Space-Saving, Count-Min), k-way merge, graph representations, BFS, triangles, union-find, personalised PageRank, consistent hashing, LRU cache
+- **ML:** triadic closure, heavy-tailed degrees, MinHash and LSH, link prediction on a time split, log loss, logistic regression and boosted trees, ROC-AUC, PR-AUC and calibration, exposure bias, the bootstrap, A/B tests as hypothesis tests, embeddings learned from behaviour
+- **System Design:** MapReduce mutual-friend counts, distributed top k, graph partitioning, back-of-envelope estimation, precompute vs online, sharding, caching, incremental updates, tail latency, the serving architecture, product rules
+- **Software Delivery:** the function contract, golden, property and differential tests against a brute-force baseline, rollouts behind an A/B test
 
 ## Week 3 · Tokenization
 

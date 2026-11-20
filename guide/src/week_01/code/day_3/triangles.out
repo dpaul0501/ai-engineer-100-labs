@@ -1,0 +1,14 @@
+triangles 71976 average clustering 0.1104 pooled 0.0296; random graph same density 0.0020
+average clustering / random: 55x
+friendships that closed >= 1 triangle when they formed: 47.1%
+tenth | new friendships closing a triangle | random non-friend pairs with a mutual friend | ratio
+1 | 13.8% | 0.00% | -
+2 | 31.3% | 0.13% | 235x
+3 | 40.7% | 0.60% | 68x
+4 | 44.8% | 1.26% | 35x
+5 | 49.1% | 2.18% | 23x
+6 | 52.6% | 3.43% | 15x
+7 | 55.9% | 4.78% | 12x
+8 | 58.2% | 6.31% | 9x
+9 | 61.0% | 7.99% | 8x
+10 | 63.4% | 9.92% | 6x

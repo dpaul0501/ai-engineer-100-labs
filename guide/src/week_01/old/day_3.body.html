@@ -1,0 +1,766 @@
+
+<section class="s" id="day3" data-sec="day3">
+  <div class="shead"><span class="sno">DAY 3 · READ LESS</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span><span class="dim sys">System Design</span><span class="dim del">Delivery</span></span></div>
+  <h2>Read less, and still find almost the same people</h2>
+
+  <p><b>Where we are.</b> Day 2 ended with a bill. To suggest people for one user, the exact count reads the friend list of every one of their friends. On the week's graph that is 1,477 entries for an average request, 7,284 for the slowest request in a hundred, and 51,806 for the user whose friends are the most popular. A request that has to answer quickly cannot promise to read all of that. Today each request gets a fixed <em>read budget</em>, and we measure how much of the exact answer survives. Then we look for good candidates by other routes, check cheaply who must never be shown, and put the routes together under one budget.</p>
+  <p>The route through the day: read a random handful of friends and scale up (is the guess fair, and how noisy is it?); a yardstick for "almost the same people"; a different way to find candidates, through people whose friend sets look like yours; a tiny structure that answers "already friends, already shown, blocked?"; random walks as a third source; and finally the design that combines them.</p>
+
+  <!-- ============================================================ ML 1: sampling -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · read some friends, and scale up</span></div>
+
+    <h4>Try the obvious thing: read the first lists that fit</h4>
+    <p>Take the six-person example. You have two friends, Ben and Chloe, and each has four friends, so the exact count reads 8 entries. Give the request a budget of 4: it can read one list. The obvious rule is to read friends in the order they are stored, say by id, until the budget runs out. That reads Ben's list every time. You learn about Dev and Esha, and Farid, who is only reachable through Chloe, never shows up.</p>
+    <p>Two things are wrong with this, and both get worse on a real graph.</p>
+    <ul>
+      <li><b>The mistake repeats.</b> Storage order is the same on every request, so the same friends are skipped every time. Someone known only through the skipped friends is never seen, and asking again does not help.</li>
+      <li><b>One popular friend eats the budget.</b> User 570 has only 9 friends, but two of them have 1,480 and 1,108 friends. If one of those comes first, a budget of 700 reads stops before it has read anything, and the user gets an empty list.</li>
+    </ul>
+
+    <h4>The idea: a random handful of friends, scaled up</h4>
+    <p>Pick the friends to read <em>at random</em>, so that no friend is favoured. Count, for each candidate, how many of the friends you read know them. Then scale up: if you read 1 friend out of 2, multiply the count by 2. If you read 10 out of 100, multiply by 10. With the user's number of friends written <var>d</var> (their degree, from Day 1), the number of friends read <var>s</var>, and the count among them <var>c</var>, the guess for the mutual-friend count is</p>
+    <div class="eq">\[ \hat m \;=\; \frac{d}{s}\, c . \]</div>
+    <p><b>By hand.</b> You have <var>d</var> = 2 friends and the budget lets you read <var>s</var> = 1, chosen at random, so the scale is 2.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">Esha</span><span class="seq"><span class="nd hot">Ben</span><span class="lk">or</span><span class="nd hot">Chloe</span></span><span class="why">both of your friends know her, so whichever you read counts 1 · <b>guess 2 either way</b> (true count 2)</span></div>
+      <div class="step"><span class="k">Dev</span><span class="seq"><span class="nd hot">Ben</span><span class="lk">or</span><span class="nd">Chloe</span></span><span class="why">read Ben: count 1, guess 2 · read Chloe: count 0, guess 0 · <b>average 1</b> (true count 1)</span></div>
+      <div class="step"><span class="k">Farid</span><span class="seq"><span class="nd">Ben</span><span class="lk">or</span><span class="nd hot">Chloe</span></span><span class="why">the mirror image of Dev: guess 0 or 2 · <b>average 1</b> (true count 1)</span></div>
+    </div><div class="cap">Averaged over the two equally likely choices, every guess equals the true count. For Esha the guess is exact every time; for Dev and Farid it is off by 1 every time.</div></div>
+    <p>The example shows the two questions to ask of any estimate. <b>Is it fair?</b> Yes: averaged over the random choice, the guess is the true count. A statistician calls such a guess <em>unbiased</em>. <b>How noisy is it?</b> That depends: no noise for Esha, who is known through all your friends, and the most noise for the weak candidates, known through few. The noise is measured by the <em>variance</em>, the average squared distance of the guess from its mean: 0 for Esha, 1 for Dev and Farid.</p>
+
+    <h4>Use it</h4>
+    <p>A budget counts entries read, not friends: reading friend <var>f</var>'s list costs as many reads as <var>f</var> has friends. The function shuffles the friends, reads lists until the next one would not fit, and optionally skips very popular friends first (Day 2's hub cap; it gets its own section below).</p>
+    <div class="code"><div class="ch"><span>sampled.py · two-hop counts under a read budget, with an optional hub cap</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def sampled_suggest(adj, u, k=10, budget=500, cap=None, rng=random):
+    """Approximate top-k by mutual friends, reading at most `budget` adjacency entries.
+
+    Friends are read in a uniformly random order; a friend whose degree exceeds `cap`
+    (a hub) is skipped before sampling. Returns (top, estimate, reads)."""
+    friends = sorted(f for f in adj[u] if cap is None or len(adj[f]) &lt;= cap)
+    rng.shuffle(friends)                          # uniform random order
+    count, reads, s = Counter(), 0, 0
+    for f in friends:
+        if reads + len(adj[f]) &gt; budget:          # the next list does not fit: stop
+            break
+        reads += len(adj[f]); s += 1
+        for v in adj[f]:
+            if v != u and v not in adj[u]:
+                count[v] += 1
+    scale = len(friends) / s if s else 0.0        # d / s: scale the sample count up
+    estimate = {v: scale * c for v, c in count.items()}
+    top = heapq.nsmallest(k, count, key=lambda v: (-count[v], v))
+    return top, estimate, reads</code></pre></div>
+    <p>For checking the noise, a simpler version reads exactly <var>s</var> friends, fixed in advance, and comes with the variance formula derived in the math section below.</p>
+    <div class="code"><div class="ch"><span>estimator.py · the fixed-s estimate and its variance</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def estimate_mutual(adj, u, v, s, rng=random):
+    """Unbiased estimate of m(u, v) from s friends of u drawn without replacement."""
+    sample = rng.sample(sorted(adj[u]), s)
+    c = sum(1 for f in sample if v in adj[f])     # c ~ Hypergeometric(d, m, s)
+    return len(adj[u]) / s * c
+
+def estimator_variance(d, m, s):
+    """Var(m_hat) = m (d - m) (d - s) / (s (d - 1)), derived on the page."""
+    return m * (d - m) * (d - s) / (s * (d - 1)) if d &gt; 1 else 0.0</code></pre></div>
+    <p><b>On a real user.</b> User 62 has 65 friends, and their best candidate (user 1781) shares 15 of them. Draw the sample 20,000 times for each sample size and compare the spread of the guesses with the formula:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">friends read, s</th><th class="num">average guess</th><th class="num">variance, measured</th><th class="num">variance, formula</th><th class="num">typical error / 15</th></tr>
+      <tr><td class="num">5</td><td class="num">15.04</td><td class="num">138.3</td><td class="num">140.6</td><td class="num">0.79</td></tr>
+      <tr><td class="num">10</td><td class="num">14.99</td><td class="num">64.8</td><td class="num">64.5</td><td class="num">0.54</td></tr>
+      <tr><td class="num">20</td><td class="num">14.99</td><td class="num">26.3</td><td class="num">26.4</td><td class="num">0.34</td></tr>
+      <tr><td class="num">40</td><td class="num">15.01</td><td class="num">7.28</td><td class="num">7.32</td><td class="num">0.18</td></tr>
+      <tr><td class="num">65 (all)</td><td class="num">15.00</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+    </table></div>
+    <p>The average sits on 15 at every sample size: the guess is fair. The noise is large. Reading 10 of the 65 friends, the guess is typically off by about half of 15. A rough rule explains it: the relative error is about one over the square root of the number of mutual friends the sample actually <em>sees</em>. Reading 10 of 65 friends, you expect to see 15 × 10 / 65 ≈ 2.3 of the 15 mutual friends, and \(1/\sqrt{2.3} \approx 0.66\).</p>
+    <p class="idea"><b>In one line.</b> A random sample of friends, scaled up, is right on average; its error shrinks like one over the square root of the number of mutual friends it sees, so strong candidates are estimated well and weak ones badly.</p>
+
+    <h4>When it is enough, and what to say in an interview</h4>
+    <ul>
+      <li><b>Ranking needs less than fairness.</b> Within one request the scale <var>d</var>/<var>s</var> is the same for every candidate, so ranking by the guess is ranking by the raw count <var>c</var>. Fairness matters when the number leaves the request: as an input to Day 4's model, against a threshold ("show only with at least 3 mutual friends"), or as the "12 mutual friends" text on a profile. Then send <var>s</var> along with the guess, so whoever uses it knows how noisy it is.</li>
+      <li><b>The hard part is near tenth place.</b> Top candidates have many mutual friends and are estimated well. The ones that decide the bottom of the top 10 have 2 or 3 (that is the exact tenth-best count for 72.7% of a sample of 1,000 users), and those are the noisiest.</li>
+      <li><b>Use a seeded random order.</b> Seeding the shuffle with the user and the day makes a refresh give the same list, while different users still get independent errors.</li>
+      <li><b>The budgeted version is a little different.</b> In <code>sampled_suggest</code> the number of friends read depends on which friends came first, so the scaled count is no longer exactly fair. For ranking that does not matter. When the count is exported, use <code>estimate_mutual</code> with an <var>s</var> fixed before sampling, for example the budget divided by the average friend list length.</li>
+    </ul>
+
+    <details class="deep"><summary>The math, step by step: the scaled count is fair, and how noisy it is</summary><div>
+      <p><b>A slightly bigger example first.</b> Say you have <var>d</var> = 6 friends, f1 to f6, and a candidate knows f1 and f2, so the true count is <var>m</var> = 2. Read <var>s</var> = 3 friends at random; the scale is 6/3 = 2. There are \(\binom63 = 20\) equally likely sets of 3 friends. Sort them by how many of f1, f2 they contain:</p>
+      <div class="dg"><div class="steps">
+        <div class="step"><span class="k">c = 0</span><span class="seq"><span class="nd">f3</span><span class="nd">f4</span><span class="nd">f5</span><span class="lk">…</span></span><span class="why">three of the other four: \(\binom43 = 4\) sets · guess 0</span></div>
+        <div class="step"><span class="k">c = 1</span><span class="seq"><span class="nd hot">f1</span><span class="nd">f3</span><span class="nd">f4</span><span class="lk">…</span></span><span class="why">one of f1, f2 and two of the other four: \(2 \cdot \binom42 = 12\) sets · guess 2</span></div>
+        <div class="step"><span class="k">c = 2</span><span class="seq"><span class="nd hot">f1</span><span class="nd hot">f2</span><span class="nd">f3</span><span class="lk">…</span></span><span class="why">both, plus one of four: \(\binom41 = 4\) sets · guess 4</span></div>
+      </div><div class="cap">Average guess \((0 \cdot 4 + 2 \cdot 12 + 4 \cdot 4)/20 = 2\). Average squared guess \((0 + 4 \cdot 12 + 16 \cdot 4)/20 = 5.6\), so the variance is \(5.6 - 2^2 = 1.6\).</div></div>
+      <p>We now prove that the average is always <var>m</var>, and find a formula that gives 1.6 here.</p>
+      <p><b>Step 1: name the pieces.</b> For each friend <var>f</var> of the user, let \(X_f = 1\) if <var>f</var> is in the sample and 0 if not; this is the random part. Let \(Y_f = 1\) if <var>f</var> also knows the candidate and 0 if not; this is fixed, and \(\sum_f Y_f = m\). The count in the sample is \(c = \sum_f X_f Y_f\): it adds 1 for every sampled friend who knows the candidate.</p>
+      <p><b>Step 2: the chance that one friend is sampled.</b> Of the \(\binom ds\) possible samples, those that contain a given friend <var>f</var> are made by choosing the other \(s-1\) members from the remaining \(d-1\) friends. So</p>
+      <div class="eq">\[ P(X_f = 1) = \frac{\binom{d-1}{s-1}}{\binom{d}{s}} = \frac{s}{d} . \]</div>
+      <p>In the example, \(\binom52/\binom63 = 10/20 = 1/2 = 3/6\). Similarly, a given pair of friends <var>f</var> and <var>g</var> are both in the sample with probability \(\binom{d-2}{s-2}/\binom ds = \frac{s(s-1)}{d(d-1)}\) (in the example \(4/20 = (3 \cdot 2)/(6 \cdot 5)\)).</p>
+      <p><b>Step 3: the average of the guess.</b> The average of a sum is the sum of the averages, whether or not the terms depend on each other (linearity of expectation). Each \(X_f\) averages \(s/d\), so</p>
+      <div class="eq">\[ \mathbb E[c] = \sum_f Y_f\, \mathbb E[X_f] = m \cdot \frac{s}{d}, \qquad \mathbb E[\hat m] = \frac{d}{s}\cdot m \cdot \frac{s}{d} = m . \]</div>
+      <p>That is fairness: the scale <var>d</var>/<var>s</var> exactly undoes the fraction of friends read.</p>
+      <p><b>Step 4: why the variance needs care.</b> The \(X_f\) are not independent: if <var>f</var> took one of the <var>s</var> places, there is one place fewer for <var>g</var>. So we need each term's variance and the <em>covariance</em> of each pair (how much two terms move together). For a 0/1 variable with probability <var>p</var>, the variance is \(p(1-p)\):</p>
+      <div class="eq">\[ \operatorname{Var}(X_f) = \frac{s}{d}\Big(1 - \frac{s}{d}\Big) = \frac{s(d-s)}{d^2}, \qquad \operatorname{Cov}(X_f, X_g) = \frac{s(s-1)}{d(d-1)} - \frac{s^2}{d^2} = -\frac{s(d-s)}{d^2(d-1)} . \]</div>
+      <p>The covariance is the chance both are in, minus the product of the separate chances; it comes out negative, as expected.</p>
+      <p><b>Step 5: add them up.</b> The variance of a sum is the sum of the variances plus the covariances of all ordered pairs. Only the <var>m</var> friends with \(Y_f = 1\) appear in <var>c</var>, so there are <var>m</var> variance terms and \(m(m-1)\) covariance terms:</p>
+      <div class="eq">\[ \operatorname{Var}(c) = m\,\frac{s(d-s)}{d^2} - m(m-1)\,\frac{s(d-s)}{d^2(d-1)} = \frac{m\,s(d-s)}{d^2}\Big(1 - \frac{m-1}{d-1}\Big) = \frac{m\,s\,(d-s)(d-m)}{d^2(d-1)} . \]</div>
+      <p>This is the variance of the <em>hypergeometric</em> distribution: the number of marked items in a sample of <var>s</var> drawn without replacement from <var>d</var>, of which <var>m</var> are marked.</p>
+      <p><b>Step 6: scale up.</b> Multiplying a random number by <var>d</var>/<var>s</var> multiplies its variance by \((d/s)^2\):</p>
+      <div class="eq">\[ \operatorname{Var}(\hat m) = \frac{d^2}{s^2}\cdot\frac{m\,s\,(d-s)(d-m)}{d^2(d-1)} = \frac{m\,(d-m)\,(d-s)}{s\,(d-1)} . \]</div>
+      <p><b>Check.</b> The example: \(2 \cdot 4 \cdot 3/(3 \cdot 5) = 1.6\), as counted. The six-person graph: Dev has \(m = 1\), \(d = 2\), \(s = 1\): \(1 \cdot 1 \cdot 1/(1 \cdot 1) = 1\); Esha has \(m = d = 2\): the factor \(d - m\) is 0, so no noise.</p>
+      <p><b>Step 7: read the formula.</b></p>
+      <ul>
+        <li>The factor \((d-s)/(d-1)\) is 0 when \(s = d\): reading every friend is exact. It is called the <em>finite population correction</em>. Drawing with replacement would replace it by 1 (the count becomes binomial, with variance \(m(d-m)/s\)), which is worse by the ratio \((d-1)/(d-s)\).</li>
+        <li>When <var>m</var> and <var>s</var> are much smaller than <var>d</var>, the variance is about \(m d/s\), so the typical error divided by <var>m</var> is about \(\sqrt{md/s}/m = \sqrt{d/(ms)} = 1/\sqrt{ms/d}\). And \(ms/d = \mathbb E[c]\) is the number of mutual friends you expect to see. That is the rule used above.</li>
+      </ul>
+      <p><b>What was proved.</b> Reading <var>s</var> friends chosen uniformly without replacement and scaling the count by <var>d</var>/<var>s</var> gives the right answer on average, with variance \(m(d-m)(d-s)/(s(d-1))\); the noise relative to the true count falls as one over the square root of the expected number of mutual friends seen.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ ML 2: recall@10 -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · the yardstick: recall@10 against the exact answer</span></div>
+
+    <h4>What "almost the same people" means</h4>
+    <p>We need one number that says how close the budgeted top 10 came. Compare it with the thing it approximates: the exact top 10 from Day 1. <b>Recall@10</b> is the share of the exact top 10 that the budgeted top 10 recovers. (Both lists have 10 entries, so the share of the budgeted list that is right is the same number.)</p>
+    <p>Why not compare with the friendships that actually formed later? Because that mixes two errors: "the budget lost candidates" and "mutual-friend count is an imperfect predictor". Day 4 deals with the second. Comparing with the exact answer isolates the first, which is the one a budget changes.</p>
+
+    <h4>Ties need a rule</h4>
+    <p>Back to the six-person example, top 2 this time. The exact top 2 is Esha (2) and Dev (1); Farid also has 1 and loses to Dev only because Day 1 breaks ties by smaller id. With a budget of 4 reads, suppose the random order reads Chloe's list: the budgeted top 2 is Esha and Farid. Counted strictly, it got 1 of 2 right. But Farid is exactly as good as Dev; the budget did nothing wrong. So a pick counts as a hit when its exact count is at least the exact tenth-best (here, second-best) count. By that rule the answer is 2 of 2.</p>
+    <p>On the real graph this matters a lot, because the tenth-best count is usually small and shared by many candidates. At a budget of 400 reads, strict overlap is 0.470 and tie-aware recall is 0.585. The rest of the day reports tie-aware recall.</p>
+    <div class="code"><div class="ch"><span>recall.py · tie-aware recall@k</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def recall_at_k(approx_top, exact_count, k=10):
+    """Tie-aware recall@k: an approximate pick counts if its exact mutual count is at
+    least the exact k-th best count. Denominator: min(k, number of candidates)."""
+    if not exact_count:
+        return 1.0
+    best = sorted(exact_count.values(), reverse=True)
+    need = min(k, len(best))
+    threshold = best[need - 1]
+    hits = sum(1 for v in approx_top[:k] if exact_count.get(v, 0) &gt;= threshold)
+    return hits / need</code></pre></div>
+
+    <h4>How much do we lose at each budget?</h4>
+    <p>1,000 random users of the week's graph, whose exact scans read 1,518 entries on average (median 1,045), one random order per user:</p>
+    <div class="chart"><div class="t">Tie-aware recall@10 against the exact top 10, by read budget, no hub cap</div>
+      <div class="br"><span>100 reads</span><span class="tr"><i style="width:23.3%"></i></span><span class="v">0.233</span></div>
+      <div class="br"><span>200 reads</span><span class="tr"><i style="width:35.9%"></i></span><span class="v">0.359</span></div>
+      <div class="br"><span>400 reads</span><span class="tr"><i style="width:58.5%"></i></span><span class="v">0.585</span></div>
+      <div class="br"><span>800 reads</span><span class="tr"><i style="width:71.2%"></i></span><span class="v">0.712</span></div>
+      <div class="br"><span>1,600 reads</span><span class="tr"><i style="width:86.6%"></i></span><span class="v">0.866</span></div>
+      <div class="br"><span>3,200 reads</span><span class="tr"><i style="width:98.2%"></i></span><span class="v">0.982</span></div>
+      <div class="br"><span>unlimited (exact)</span><span class="tr"><i style="width:100%"></i></span><span class="v">1.000</span></div>
+      <div class="cap">Recall climbs slowly. At 100 reads, 12.2% of users got an empty list, because the first friend drawn had more friends than the whole budget.</div>
+    </div>
+    <p>So a plain random sample needs about the full average scan to get most of the top 10 right. The popular friends are the reason: by the friendship paradox (Day 2), your friends have 73.8 friends on average against 20 for a typical user, and a few huge lists swallow most of the budget.</p>
+
+    <h4>Skipping popular friends: a trade</h4>
+    <p>Day 2 capped hubs: skip any friend with more than <var>C</var> friends. Here that does two things at once.</p>
+    <ul>
+      <li><b>It changes the question.</b> The capped count only counts mutual friends who are not hubs. However many reads you allow, it cannot recover the hub's votes. A fixed error that more data does not remove is called <em>bias</em>.</li>
+      <li><b>It buys many more votes per read.</b> A hub with 1,480 friends costs as many reads as 74 friends with 20 each. The hub is one vote in the mutual count; the 74 friends are 74 votes. At a fixed budget, skipping hubs lowers the noise (the <em>variance</em>).</li>
+    </ul>
+    <p>Which effect wins depends on the budget, so measure it:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Hub cap C</th><th class="num">100</th><th class="num">200</th><th class="num">400</th><th class="num">800</th><th class="num">1,600</th><th class="num">3,200</th><th class="num">unlimited</th></tr>
+      <tr><td>none</td><td class="num">0.233</td><td class="num">0.359</td><td class="num">0.585</td><td class="num">0.712</td><td class="num">0.866</td><td class="num">0.982</td><td class="num">1.000</td></tr>
+      <tr class="hi"><td>200</td><td class="num">0.257</td><td class="num">0.433</td><td class="num">0.735</td><td class="num">0.827</td><td class="num">0.851</td><td class="num">0.855</td><td class="num">0.858</td></tr>
+      <tr><td>100</td><td class="num">0.271</td><td class="num">0.481</td><td class="num">0.718</td><td class="num">0.766</td><td class="num">0.775</td><td class="num">0.779</td><td class="num">0.781</td></tr>
+      <tr><td>50</td><td class="num">0.295</td><td class="num">0.516</td><td class="num">0.655</td><td class="num">0.679</td><td class="num">0.684</td><td class="num">0.686</td><td class="num">0.687</td></tr>
+      <tr><td colspan="8" class="small muted">Columns are read budgets; cells are tie-aware recall@10 over the same 1,000 users. Mean reads actually used (no cap / cap 200): 60 / 71 at budget 100; 254 / 322 at 400; 847 / 542 at 1,600; 1,518 / 620 unlimited. Empty lists at budget 100: 12.2% with no cap, 5.0% with cap 200, none from 200 reads up with the cap.</td></tr>
+    </table></div>
+    <p>What the table says:</p>
+    <ul>
+      <li><b>At small budgets, capping wins.</b> At 400 reads, cap 200 recovers 0.735 of the exact top 10 against 0.585 without it. Skipping the lists of just 27 users (0.27% of all users) cuts the full scan from 1,518 reads to 620 on average, so the same budget covers far more friends.</li>
+      <li><b>At large budgets, the bias shows.</b> With cap 200, recall can never pass 0.858; with 100, never 0.781; with 50, never 0.687. A harder cap rises faster and stops lower.</li>
+      <li><b>A practical rule.</b> Cap hubs when the budget is below the typical full scan, and lift the cap when it is not. On this graph, cap 200 with 800 reads gives 0.83 of the exact top 10 at about a third of the exact work.</li>
+    </ul>
+    <p class="idea"><b>In one line.</b> Measure an approximation against the exact answer it replaces, with ties counted fairly; skipping hubs trades a fixed loss (bias) for less noise (variance), and wins whenever the budget is tight.</p>
+
+    <details class="deep"><summary>The math, step by step: what capping does to the estimate</summary><div>
+      <p><b>Step 1: what the capped sample sees.</b> With a cap, the random friends are drawn only from the user's non-hub friends; call their number \(d_C\). Of the <var>m</var> mutual friends, say \(m_C\) are non-hubs and \(m - m_C\) are hubs.</p>
+      <p><b>Step 2: rerun the fairness proof.</b> The proof above never used anything about the friends except that the sample is uniform among them. So, with \(d_C\) in place of <var>d</var> and \(m_C\) in place of <var>m</var>, the scaled count \((d_C/s)\,c\) averages \(m_C\).</p>
+      <p><b>Step 3: the bias.</b> Its average misses the true count by \(m_C - m = -(\text{number of hubs among the mutual friends})\). No budget fixes that.</p>
+      <p><b>Step 4: why the variance drops.</b> At a budget of <var>B</var> reads, the number of friends read is about <var>B</var> divided by the average list length among the friends eligible to be read. The hubs dominate that average (it is 73.8 against a typical 20, Day 2), so removing them raises <var>s</var>, and by the variance formula a larger <var>s</var> lowers the noise.</p>
+      <p><b>What was shown.</b> Capping turns a fair, noisy estimate of <var>m</var> into a fair, less noisy estimate of a slightly different number, \(m_C\). The recall table measures which error matters more at each budget.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Redo the six-friend example by hand with <var>s</var> = 2 and check that the variance formula gives the same number.</li>
+      <li>Reproduce the variance table for a user of your choice, then the recall curve with and without the cap.</li>
+      <li>Plot recall@10 against <em>mean reads actually used</em>, rather than budget, for every cap on one chart. Which policy is best at each cost?</li>
+      <li>Write the bias of the capped estimate for a user one of whose mutual friends with a candidate is a hub.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li><b>With replacement.</b> Derive the variance when the <var>s</var> friends are drawn with replacement. How much worse is it, as a ratio?</li>
+      <li><b>Unequal chances.</b> Sample friend <var>f</var> with probability \(\pi_f\) (smaller for hubs) and weight each sampled vote by \(1/\pi_f\) (the Horvitz–Thompson estimator). Show it is fair for any \(\pi_f > 0\).</li>
+      <li><b>Adaptive cap.</b> Choose <var>C</var> from the budget, for example \(C = B/4\), and measure the curve.</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <p><b><var>s</var> = 2.</b> 15 samples: 6 contain neither f1 nor f2, 8 contain one, 1 contains both. The scale is 3: average \((3 \cdot 8 + 6 \cdot 1)/15 = 2\); average square \((9 \cdot 8 + 36)/15 = 7.2\); variance \(7.2 - 4 = 3.2\). Formula: \(2 \cdot 4 \cdot 4/(2 \cdot 5) = 3.2\).</p>
+    <p><b>Capped bias.</b> \(-1\) for each hub among the mutual friends, as in step 3 of the capping math.</p>
+    <p><b>With replacement.</b> The count is binomial with <var>s</var> trials and success chance \(m/d\): \(\operatorname{Var}(c) = s\,(m/d)(1 - m/d)\), so \(\operatorname{Var}(\hat m) = m(d-m)/s\). The ratio to the without-replacement variance is \((d-1)/(d-s) \ge 1\), equal to 1 only at \(s = 1\).</p>
+    <p><b>Horvitz–Thompson.</b> \(\hat m = \sum_f X_f Y_f / \pi_f\) with \(\mathbb E[X_f] = \pi_f\), so \(\mathbb E[\hat m] = \sum_f Y_f = m\), by linearity again. The uniform case is \(\pi_f = s/d\).</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Sharon Lohr, <em>Sampling: Design and Analysis</em>: simple random sampling and the finite population correction; unequal-probability sampling and Horvitz–Thompson</li>
+      <li><a href="https://en.wikipedia.org/wiki/Hypergeometric_distribution">Hypergeometric distribution</a> (Wikipedia)</li>
+      <li>Horvitz and Thompson, "A generalization of sampling without replacement from a finite universe", <em>Journal of the American Statistical Association</em>, 1952</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ DSA: Jaccard, MinHash, LSH -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">DSA · people with similar friend sets: Jaccard, MinHash, LSH</span></div>
+
+    <h4>A different route</h4>
+    <p>The two-hop scan finds candidates by walking through your friends, so its cost is set by how popular they are. Here is another way to think about a good suggestion: someone whose circle of friends looks like yours. If we could find, for every user, the people with the most similar friend sets, without walking through hubs, we would have a second source of candidates whose cost does not depend on the hubs.</p>
+    <p><b>Measuring "looks like yours".</b> Take the friends two people share and divide by everyone either of them knows. This share is the <b>Jaccard similarity</b>, a number from 0 (nothing shared) to 1 (identical friend sets). In the six-person example your friends are Ben and Chloe. Esha's friends are also Ben and Chloe: Jaccard 1. Dev knows only Ben: 1 shared out of 2 people in all, Jaccard 0.5. Dividing by everyone either knows is what makes this different from the mutual count: a hub shares a few friends with nearly everyone, but they know so many people that their Jaccard with you stays small.</p>
+    <p><b>Try the obvious thing.</b> Compare every pair of users: about 50 million pairs at 10,000 users, and the number grows with the square of the user count. Or compare only pairs two hops apart, which costs the sum of squared degrees, 14,768,324 counter updates on the week's graph, dominated by hubs (Day 2). Both are the costs we want to escape.</p>
+
+    <h4>MinHash: a short signature that remembers similarity</h4>
+    <p><b>The idea.</b> Shuffle all users into one random order. For each person, note which of their friends comes first in that order. Two people get the same "first friend" exactly when the first person in the order, among everyone either of them knows, is someone they both know.</p>
+    <p><b>By hand.</b> You (Ben, Chloe) and Dev (Ben). Among the people either of you knows, Ben and Chloe, one comes first in the random order, each with chance one half. If Ben comes first, both your first friend and Dev's are Ben: they agree. If Chloe comes first, yours is Chloe and Dev's is still Ben: they differ. They agree half the time, and the Jaccard similarity is one half. That is not a coincidence: <b>the chance that the first friends agree is exactly the Jaccard similarity</b>.</p>
+    <p>Repeat with <var>k</var> independent orders. Each person's <var>k</var> first friends form their <b>signature</b>: <var>k</var> numbers, however many friends they have. The share of positions where two signatures agree estimates their Jaccard similarity, and the estimate gets better as <var>k</var> grows, with the same one-over-square-root law as the friend sample.</p>
+    <p><b>Hash functions play the shuffles.</b> Storing random orders of every user is impossible at scale, so a hash function stands in for each order: friend <var>x</var>'s position is <code>mix64(x ^ seed)</code>, a 64-bit function that sends nearby ids to unrelated values. The proof needs every element to be equally likely to come first, and cheap hashes can fail that badly. The textbook hash \((a x + b) \bmod p\), fine for hash tables, sends consecutive ids to evenly spaced values, so the minimum lands near the ends of a run of ids rather than at a random member. On two sets of ids {0…59} and {30…89} (Jaccard 1/3), with 400 hashes and five seeds, it estimated 0.282, 0.237, 0.270, 0.285 and 0.268, all low. The mixing hash gave 0.347, 0.320, 0.335, 0.310 and 0.340.</p>
+    <div class="code"><div class="ch"><span>minhash.py · signatures and the Jaccard estimate</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">MASK = (1 &lt;&lt; 64) - 1
+
+def mix64(x):
+    """A 64-bit mixing function (the splitmix64 finalizer): nearby inputs give unrelated outputs."""
+    x = (x + 0x9E3779B97F4A7C15) &amp; MASK
+    x = ((x ^ (x &gt;&gt; 30)) * 0xBF58476D1CE4E5B9) &amp; MASK
+    x = ((x ^ (x &gt;&gt; 27)) * 0x94D049BB133111EB) &amp; MASK
+    return x ^ (x &gt;&gt; 31)
+
+def make_hashes(k, seed=0):
+    """k random seeds; h_i(x) = mix64(x XOR seed_i) stands in for k random permutations."""
+    rng = random.Random(seed)
+    return [rng.getrandbits(64) for _ in range(k)]
+
+def minhash(items, hashes):
+    """Signature: for each hash function, the smallest hash value over the set."""
+    return [min(mix64(x ^ h) for x in items) for h in hashes]
+
+def jaccard(a, b):
+    return len(a &amp; b) / len(a | b) if a or b else 1.0
+
+def estimate_jaccard(sig_a, sig_b):
+    """Fraction of positions where the two signatures agree."""
+    return sum(x == y for x, y in zip(sig_a, sig_b)) / len(sig_a)</code></pre></div>
+    <p><b>On the week's graph.</b> On 1,000 two-hop pairs (average Jaccard 0.029) with 8 independent sets of hashes, the mean squared error was 0.001585 at <var>k</var> = 16 against 0.001741 predicted by the formula in the math section, and 0.000409 at <var>k</var> = 64 against 0.000435. Four times the hashes, a quarter of the squared error.</p>
+    <p><b>Cost.</b> One signature costs <var>k</var> hashes per friend, so all signatures cost <var>k</var> times the number of friend-list entries: linear in the friendships, with no sum-of-squares term. Each user stores <var>k</var> numbers; comparing two users costs <var>k</var> steps. A new friendship updates a signature in <var>k</var> steps (keep the smaller of the old value and the new friend's hash). An ended friendship cannot be removed that way; the signature is recomputed from the list.</p>
+    <p class="idea"><b>In one line.</b> The first friend of two people under a random order agrees with probability equal to their Jaccard similarity, so <var>k</var> random orders give a fixed-size signature whose agreements estimate it.</p>
+
+    <details class="deep"><summary>The math, step by step: why the first friends agree with probability J, and how noisy the estimate is</summary><div>
+      <p><b>Step 1: list it out once.</b> Take two small sets, <var>A</var> = {1, 2, 3} and <var>B</var> = {2, 3, 4}. They share 2 and 3, and together contain 1, 2, 3, 4, so \(J = 2/4\). Order 1, 2, 3, 4 at random. If 2 or 3 comes first among them, it is the first member of both sets: agree. If 1 comes first, <var>A</var>'s first is 1 and <var>B</var>'s is not: differ. If 4 comes first, the same the other way. Each of the four is first with chance 1/4, so they agree with chance 2/4 = <var>J</var>.</p>
+      <p><b>Step 2: the general argument.</b> Write the min-hash of a set as \(h_\pi(A) = \min_{x \in A} \pi(x)\), the position of its earliest member under the order π. Let \(x^{*}\) be the earliest element of \(A \cup B\) (everyone either set contains). By symmetry, each element of \(A \cup B\) is equally likely to be \(x^{*}\), with chance \(1/|A \cup B|\).</p>
+      <ul>
+        <li>If \(x^{*}\) is in both sets, it comes before every other member of each set, so both min-hashes equal \(\pi(x^{*})\): they agree.</li>
+        <li>If \(x^{*}\) is only in <var>A</var>, then \(h_\pi(A) = \pi(x^{*})\), which is smaller than the position of every member of <var>B</var>, so \(h_\pi(A) &lt; h_\pi(B)\): they differ. The case "only in <var>B</var>" is the same.</li>
+      </ul>
+      <p>So they agree exactly when \(x^{*} \in A \cap B\), which has probability \(|A \cap B|/|A \cup B| = J(A, B)\).</p>
+      <p><b>Step 3: the estimate and its noise.</b> With <var>k</var> independent orders, let \(Z_i = 1\) if the <var>i</var>-th min-hashes agree. Each \(Z_i\) is 1 with probability <var>J</var>, independently, so its variance is \(J(1-J)\). The estimate is the average of the \(Z_i\):</p>
+      <div class="eq">\[ \hat J = \frac1k \sum_{i=1}^k Z_i, \qquad \mathbb E[\hat J] = J, \qquad \operatorname{Var}(\hat J) = \frac{1}{k^2}\cdot k \cdot J(1-J) = \frac{J(1-J)}{k} . \]</div>
+      <p>At <var>J</var> = 0.1 and <var>k</var> = 100 the typical error is \(\sqrt{0.09/100} = 0.03\). Halving it costs four times the hashes.</p>
+      <p><b>Step 4: what a hash must do.</b> Step 2 used only one property of the order: every element of any set is equally likely to come first. A hash family with that property is called <em>min-wise independent</em>. A well-mixed 64-bit hash behaves like one in practice; \((ax+b) \bmod p\) does not, as the measurement above shows.</p>
+      <p><b>What was proved.</b> One random order makes two min-hashes agree with probability exactly <var>J</var>; averaging over <var>k</var> independent orders gives a fair estimate of <var>J</var> with variance \(J(1-J)/k\).</p>
+    </div></details>
+
+    <h4>LSH: find the similar pairs without comparing every pair</h4>
+    <p><b>The situation.</b> Signatures make one comparison cheap, but there are still 50 million pairs. We want only the similar ones, and we want to find them by sorting people into buckets, not by comparing.</p>
+    <p><b>The idea.</b> Cut each signature of <var>k</var> numbers into <var>b</var> <em>bands</em> of <var>r</var> numbers each. For each band, put every user into a bucket labelled by that band's <var>r</var> numbers. Two users become a <b>candidate pair</b> if they land in the same bucket in at least one band. Matching a whole band is unlikely unless two people are similar (a narrow door), and <var>b</var> bands give them many chances (many doors). This is <b>locality-sensitive hashing</b>, LSH for short.</p>
+    <p><b>By hand.</b> <var>r</var> = 2, <var>b</var> = 3, three users' signatures:</p>
+    <div class="tablewrap"><table>
+      <tr><th>User</th><th>band 1</th><th>band 2</th><th>band 3</th></tr>
+      <tr><td>u</td><td class="mono">(17, 4)</td><td class="mono">(9, 30)</td><td class="mono">(2, 11)</td></tr>
+      <tr class="hi"><td>v</td><td class="mono">(17, 8)</td><td class="mono">(9, 30)</td><td class="mono">(5, 11)</td></tr>
+      <tr><td>w</td><td class="mono">(3, 4)</td><td class="mono">(6, 30)</td><td class="mono">(2, 7)</td></tr>
+    </table></div>
+    <p>u and v match on all of band 2, so (u, v) is a candidate pair. u and w match one number in every band but no whole band, so they are not, even though they agree on 3 of 6 numbers against 4 of 6 for u and v. Banding rewards agreement that is concentrated, which is likely only when the similarity is high.</p>
+    <p><b>The S-curve.</b> A pair agrees on one band with probability \(J^r\), so the chance of becoming a candidate rises with <var>J</var> in an S shape: near 0 for dissimilar pairs, near 1 for similar ones, with the step at about \((1/b)^{1/r}\). More rows per band make the step sharper and move it right; more bands move it left.</p>
+    <div class="chart"><div class="t">Chance of becoming a candidate pair, r = 2, b = 50 (step near (1/50)<sup>1/2</sup> = 0.141)</div>
+      <div class="br"><span>J = 0.02</span><span class="tr"><i style="width:2.0%"></i></span><span class="v">0.020</span></div>
+      <div class="br"><span>J = 0.05</span><span class="tr"><i style="width:11.8%"></i></span><span class="v">0.118</span></div>
+      <div class="br"><span>J = 0.10</span><span class="tr"><i style="width:39.5%"></i></span><span class="v">0.395</span></div>
+      <div class="br"><span>J = 0.15</span><span class="tr"><i style="width:67.9%"></i></span><span class="v">0.679</span></div>
+      <div class="br"><span>J = 0.20</span><span class="tr"><i style="width:87.0%"></i></span><span class="v">0.870</span></div>
+      <div class="br"><span>J = 0.30</span><span class="tr"><i style="width:99.1%"></i></span><span class="v">0.991</span></div>
+      <div class="cap">Computed from the formula 1 − (1 − J²)<sup>50</sup> (math section below).</div>
+    </div>
+    <div class="code"><div class="ch"><span>lsh.py · banding and the S-curve</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def lsh_pairs(sigs, r, b):
+    """Banding: split each signature into b bands of r values; two users become a
+    candidate pair if they agree on every value of at least one band.
+    Returns (set of pairs u &lt; v, work = pairs emitted before deduplication)."""
+    pairs, work = set(), 0
+    for j in range(b):
+        buckets = defaultdict(list)
+        for u, sig in sigs.items():
+            buckets[tuple(sig[j * r:(j + 1) * r])].append(u)
+        for members in buckets.values():
+            work += len(members) * (len(members) - 1) // 2
+            for i, x in enumerate(members):
+                for y in members[i + 1:]:
+                    pairs.add((min(x, y), max(x, y)))
+    return pairs, work
+
+def s_curve(s, r, b):
+    """P(a pair with Jaccard s becomes a candidate) = 1 - (1 - s^r)^b."""
+    return 1 - (1 - s ** r) ** b</code></pre></div>
+    <p><b>On the week's graph.</b> Of the 5,954,305 non-friend pairs two hops apart, most are barely similar: 5,622,771 have Jaccard below 0.05 and only 9,267 reach 0.1. Take those 9,267 as the pairs we want. For each setting, five independent sets of hashes; "work" is the pairs the buckets emit, against 14,768,324 for the two-hop scan of all users:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">r</th><th class="num">b</th><th class="num">step (1/b)<sup>1/r</sup></th><th class="num">recall, predicted</th><th class="num">recall, measured</th><th class="num">work (pairs emitted)</th><th class="num">share with J ≥ 0.1</th></tr>
+      <tr><td class="num">1</td><td class="num">10</td><td class="num">0.100</td><td class="num">0.700</td><td class="num">0.691 [0.638, 0.736]</td><td class="num">1,484,840</td><td class="num">0.5%</td></tr>
+      <tr class="hi"><td class="num">2</td><td class="num">100</td><td class="num">0.100</td><td class="num">0.720</td><td class="num">0.693 [0.662, 0.721]</td><td class="num">462,704</td><td class="num">1.7%</td></tr>
+      <tr><td class="num">2</td><td class="num">50</td><td class="num">0.141</td><td class="num">0.481</td><td class="num">0.448 [0.431, 0.487]</td><td class="num">206,815</td><td class="num">2.3%</td></tr>
+      <tr><td class="num">2</td><td class="num">25</td><td class="num">0.200</td><td class="num">0.284</td><td class="num">0.248 [0.232, 0.272]</td><td class="num">95,430</td><td class="num">2.7%</td></tr>
+      <tr><td class="num">3</td><td class="num">50</td><td class="num">0.271</td><td class="num">0.078</td><td class="num">0.073 [0.064, 0.078]</td><td class="num">9,365</td><td class="num">8.6%</td></tr>
+      <tr><td class="num">4</td><td class="num">50</td><td class="num">0.376</td><td class="num">0.011</td><td class="num">0.009 [0.007, 0.012]</td><td class="num">431</td><td class="num">25.6%</td></tr>
+    </table></div>
+    <p>"Predicted" averages the S-curve over the true Jaccard of the wanted pairs; brackets are the lowest and highest of the five runs. Three lessons:</p>
+    <ul>
+      <li><b>The S-curve predicts the recall</b> to within a few points. The runs scatter because the wanted pairs are not independent: many are two low-degree users who share one hub friend, and whether that hub gets a small hash value decides all their bands at once. The same effect makes the work swing (for <var>r</var> = 2, <var>b</var> = 100, from 316,908 to 629,293 pairs).</li>
+      <li><b>At the same step, more rows cost less.</b> (1, 10) and (2, 100) both put the step at 0.1 and find 69% of the wanted pairs, but (2, 100) emits 3.2 times fewer pairs: its steeper curve lets through fewer of the millions of barely-similar pairs.</li>
+      <li><b>It beats the scan by 32 times</b> in pairs emitted, at 0.69 recall, but most emitted pairs are still not similar (1.7% have Jaccard ≥ 0.1). Checking each candidate pair exactly is part of the method, not an option.</li>
+    </ul>
+    <p><b>When to use it.</b> MinHash and LSH make an <em>offline</em> source: compute signatures in a batch job (linear in friendships), band them, check the candidate pairs, store each user's best matches. It is cheapest exactly where the two-hop scan is most expensive, the friends of hubs. On this graph it turns out to be a weak predictor of who actually connects (the random-walk section measures it); its natural home is denser similarity, such as shared groups or interests. In an interview, say: MinHash to make similarity cheap to compare, banding to avoid comparing all pairs, an exact check on what comes out, and the (<var>r</var>, <var>b</var>) choice as a trade between missed pairs and wasted work.</p>
+    <p class="idea"><b>In one line.</b> Banding turns "find similar pairs" into "find people in the same bucket", with an S-shaped chance of catching a pair whose step you place by choosing rows and bands.</p>
+
+    <details class="deep"><summary>The math, step by step: the S-curve and where its step is</summary><div>
+      <p><b>Step 1: one position.</b> By the MinHash result, one signature position agrees with probability <var>J</var>, and positions use independent hashes, so they agree independently.</p>
+      <p><b>Step 2: one band.</b> A band agrees only if all <var>r</var> of its positions agree: probability \(J^r\). With <var>r</var> = 2 and <var>J</var> = 0.1, that is 0.01.</p>
+      <p><b>Step 3: all bands.</b> The pair is missed only if every one of the <var>b</var> bands fails, each with probability \(1 - J^r\), independently. So</p>
+      <div class="eq">\[ P(\text{candidate}) = 1 - (1 - J^r)^b . \]</div>
+      <p>With <var>r</var> = 2, <var>b</var> = 50, <var>J</var> = 0.1: \(1 - 0.99^{50} = 1 - 0.605 = 0.395\), the value in the chart.</p>
+      <p><b>Step 4: where the step is.</b> Try \(J^r = 1/b\): the probability is \(1 - (1 - 1/b)^b\), and since \((1 - 1/b)^b\) is close to \(e^{-1}\) for large <var>b</var>, that is about \(1 - 1/e \approx 0.63\). So at \(J = (1/b)^{1/r}\) the curve is already most of the way up. To find the steepest point, differentiate \(f(J) = 1 - (1 - J^r)^b\):</p>
+      <div class="eq">\[ f'(J) = b\,r\,J^{r-1}(1 - J^r)^{b-1} . \]</div>
+      <p>The steepest point is where \(f'\) is largest, so set the derivative of \(\ln f'\) to zero:</p>
+      <div class="eq">\[ \frac{r-1}{J} - \frac{(b-1)\,r\,J^{r-1}}{1 - J^r} = 0 \;\Rightarrow\; (r-1)(1 - J^r) = (b-1)\,r\,J^r \;\Rightarrow\; J^r = \frac{r-1}{rb-1} . \]</div>
+      <p>For large <var>b</var>, \((r-1)/(rb-1) \approx (1 - 1/r)/b\), the same size as \(1/b\). Hence the rule of thumb: the step is near \((1/b)^{1/r}\).</p>
+      <p><b>Step 5: the two errors.</b> A pair well below the step becomes a candidate with probability about \(b\,J^r\) (a false positive; for small \(J^r\), \(1 - (1-x)^b \approx bx\)). A pair above it is missed with probability \((1 - J^r)^b\) (a false negative). With <var>r</var> = 2, <var>b</var> = 50: a pair at <var>J</var> = 0.02 slips through with chance about \(50 \cdot 0.0004 = 0.02\), and a pair at <var>J</var> = 0.3 is missed with chance \(0.91^{50} \approx 0.009\).</p>
+      <p><b>What was proved.</b> Banding catches a pair of similarity <var>J</var> with probability \(1 - (1 - J^r)^b\), an S-curve whose step sits near \((1/b)^{1/r}\); rows sharpen it, bands shift it left.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Prove the MinHash result for {1, 2, 3} and {2, 3, 4} by listing all 24 orders of {1, 2, 3, 4}.</li>
+      <li>For <var>k</var> = 100, find the (<var>r</var>, <var>b</var>) with <var>rb</var> = 100 whose step is closest to 0.15, and compute its chance of missing a pair at <var>J</var> = 0.3.</li>
+      <li>Reproduce the MinHash error at <var>k</var> = 16 and 64 on two-hop pairs, then the LSH table for one setting.</li>
+      <li>Related LeetCode practice on hashing groups of things into buckets: <a class="lc" href="https://leetcode.com/problems/group-anagrams/">49 Group Anagrams</a> (a bucket key built from content, as each band is).</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li><b>Bucket explosions.</b> When a hub gets a small hash value, all its friends land in one bucket. Skip buckets above a size in <code>lsh_pairs</code> and measure recall and work again. Which pairs do you lose?</li>
+      <li><b>Weighted similarity.</b> Some friendships matter more (frequent contact). How would you change MinHash to estimate a weighted Jaccard? Look up "weighted MinHash".</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <p><b>MinHash by listing.</b> The min-hashes agree exactly when 2 or 3 is first of {1, 2, 3, 4}. Of the 24 orders, 6 start with each element, so 12 agree: 12/24 = ½ = <var>J</var>.</p>
+    <p><b>(r, b) for 0.15.</b> With \(rb = 100\): (1, 100) gives 0.01, (2, 50) gives 0.141, (4, 25) gives 0.447, (5, 20) gives 0.549. The closest is (2, 50). At <var>J</var> = 0.3: \((1 - 0.09)^{50} = 0.91^{50} \approx 0.0090\), so it misses such a pair 0.9% of the time.</p>
+    <p><b>Bucket cap.</b> The pairs lost are the low-degree friends of hubs, which are exactly the pairs that make the runs scatter.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ DSA: Bloom -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">DSA · Bloom filters: who must not be shown</span></div>
+
+    <h4>The situation</h4>
+    <p>Before a list goes back to the app, every candidate is checked: not already a friend, not blocked in either direction, not already shown many times. Candidates now come from several sources, in the hundreds per request, and each check must be fast and small enough to keep next to the candidate lists.</p>
+    <p><b>Try the obvious thing.</b> Keep an exact hash set of all such pairs (LeetCode 705 at the end of the day builds one). It stores the keys themselves. The week's 100,000 friendships, stored in both directions as 8-byte numbers, are 1.6 MB before any table overhead, and the size grows with every key.</p>
+
+    <h4>The idea: a few bits per key, and an error that only goes one way</h4>
+    <p>A <b>Bloom filter</b> is a row of <var>m</var> bits, all 0, and <var>k</var> hash functions that each pick a position. To add a key, set its <var>k</var> bits to 1. To ask about a key, look at its <var>k</var> bits: if any is 0, the key was never added, for certain. If all are 1, the answer is "probably yes". Bits only ever go from 0 to 1, so a key that was added always finds its bits set: <b>a Bloom filter never says "no" to a key it holds</b>. It can say "yes" wrongly, when other keys happen to have set all of a key's bits between them.</p>
+    <p><b>By hand.</b> <var>m</var> = 10 bits, <var>k</var> = 2. Add "You–Ben", whose hashes land, say, on bits 1 and 4, and "You–Chloe" on bits 4 and 8. Ask about "You–Esha", whose hashes land on 1 and 8: both bits are 1, set by two different keys, so the filter says "yes": a false positive. Ask about "You–Dev" on 2 and 4: bit 2 is 0, so a certain "no".</p>
+    <div class="code"><div class="ch"><span>bloom.py · a Bloom filter and its false-positive rate</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class Bloom:
+    """m bits; k positions per integer key from two base hashes (Kirsch-Mitzenmacher).
+    A pair (u, v) is stored as the integer u * N + v. Uses mix64 from the MinHash block."""
+    def __init__(self, m, k):
+        self.m, self.k, self.bits = m, k, bytearray((m + 7) // 8)
+
+    def _positions(self, key):
+        h = mix64(key)
+        h1, h2 = h &amp; 0xFFFFFFFF, (h &gt;&gt; 32) | 1    # h2 odd, so the k positions differ
+        return [(h1 + i * h2) % self.m for i in range(self.k)]
+
+    def add(self, key):
+        for p in self._positions(key):
+            self.bits[p &gt;&gt; 3] |= 1 &lt;&lt; (p &amp; 7)
+
+    def __contains__(self, key):                  # False is certain; True may be wrong
+        return all(self.bits[p &gt;&gt; 3] &gt;&gt; (p &amp; 7) &amp; 1 for p in self._positions(key))
+
+def bloom_fpr(n, m, k):
+    """False-positive rate after n insertions: (1 - e^{-kn/m})^k."""
+    return (1 - math.exp(-k * n / m)) ** k
+
+def bloom_best_k(n, m):
+    return max(1, round(m / n * math.log(2)))</code></pre></div>
+    <p>The code gets its <var>k</var> positions from two base hashes as \(h_1 + i\,h_2\), a trick (Kirsch and Mitzenmacher, 2006) that keeps the same false-positive rate as <var>k</var> independent hashes.</p>
+    <p><b>On the week's graph.</b> All 100,000 friendships in both directions (200,000 keys), probed with 1,000,000 random pairs who are not friends. The formula column is derived in the math section below.</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">bits per key</th><th class="num">k</th><th class="num">false "yes", measured</th><th class="num">formula</th><th class="num">memory</th></tr>
+      <tr><td class="num">4</td><td class="num">3</td><td class="num">14.83%</td><td class="num">14.69%</td><td class="num">100 KB</td></tr>
+      <tr><td class="num">8</td><td class="num">6</td><td class="num">2.13%</td><td class="num">2.16%</td><td class="num">200 KB</td></tr>
+      <tr><td class="num">10</td><td class="num">3</td><td class="num">1.75%</td><td class="num">1.74%</td><td class="num">250 KB</td></tr>
+      <tr><td class="num">10</td><td class="num">5</td><td class="num">0.94%</td><td class="num">0.94%</td><td class="num">250 KB</td></tr>
+      <tr class="hi"><td class="num">10</td><td class="num">7</td><td class="num">0.83%</td><td class="num">0.82%</td><td class="num">250 KB</td></tr>
+      <tr><td class="num">10</td><td class="num">9</td><td class="num">0.92%</td><td class="num">0.91%</td><td class="num">250 KB</td></tr>
+      <tr><td class="num">16</td><td class="num">11</td><td class="num">0.044%</td><td class="num">0.046%</td><td class="num">400 KB</td></tr>
+    </table></div>
+    <p>The formula matches to the second digit. At 10 bits per key the best number of hashes is 7, and every one of the 200,000 added keys tested positive. The filter with about 1% false positives takes 250 KB, against 1.6 MB for the exact keys: 6.4 times smaller. Its size depends on the error rate you accept, not on how long the keys are: about 9.6 bits per key for 1%, whatever the keys.</p>
+
+    <h4>Why the one-way error fits, and two cautions</h4>
+    <p>These checks guard <em>exclusions</em>. A false "yes" drops a good candidate: a small loss of relevance, at a rate we choose. A false "no" would show someone the user blocked, a trust failure, and the filter never gives one for a key it holds. Two cautions follow:</p>
+    <ul>
+      <li><b>A filter is a snapshot.</b> A block made after it was built is not in it. So the final, exact check against the stored data still runs on every response (Day 5 covers where that data lives).</li>
+      <li><b>A Bloom filter cannot delete.</b> Clearing an unblocked pair's bits could clear bits other keys share. Rebuild periodically, or use a counting filter (small counters instead of bits).</li>
+    </ul>
+    <p><b>Why a Bloom filter cannot count mutual friends.</b> Counting needs the candidates, and a filter cannot list what it holds; it stores bits, not keys. Given a candidate from elsewhere, you could ask "is <var>f</var>–<var>v</var> a friendship?" for each of the user's friends, but each friend who does not know <var>v</var> adds a false "yes" at the false-positive rate. Measured with the 8-bits-per-key filter on 200 users and up to 20 candidates each, the count came out too high by 0.381 on average (predicted 0.396) and was never too low. The error grows with the user's number of friends and hits hardest the weak candidates that a threshold has to separate.</p>
+    <p><b>Where it goes.</b> Small per-user filters kept next to the candidate lists: "already shown" (a user who has seen 2,000 suggestions needs 2,000 × 9.6 bits ≈ 2.4 KB at 1%), "blocked by or blocking", and a global "recently dismissed". They run when sources are merged, before ranking, to cut the list cheaply. The exact checks run after ranking, on the 10 that are shown.</p>
+    <p class="idea"><b>In one line.</b> A Bloom filter answers "have I seen this?" in about 10 bits per key with a false "yes" now and then and never a false "no", which is the right error for "do not show" lists, as long as an exact check runs last.</p>
+
+    <details class="deep"><summary>The math, step by step: the false-positive rate, and the best number of hashes</summary><div>
+      <p><b>Step 1: one bit stays 0.</b> Assume each hash position is uniform and independent. One position of one key misses a given bit with probability \(1 - 1/m\). Adding <var>n</var> keys sets <var>kn</var> positions, so</p>
+      <div class="eq">\[ P(\text{a given bit is still } 0) = \Big(1 - \frac1m\Big)^{kn} \approx e^{-kn/m} . \]</div>
+      <p>The approximation uses \((1 - 1/m)^m \approx e^{-1}\) for large <var>m</var>. With 10 bits per key (\(m/n = 10\)) and \(k = 7\): \(e^{-0.7} = 0.497\), so about half the bits are still 0.</p>
+      <p><b>Step 2: a false positive.</b> A key that was never added is a false positive when all its <var>k</var> bits are 1. Treating the bits as independent (very nearly true for large <var>m</var>), the rate is</p>
+      <div class="eq">\[ f = \big(1 - e^{-kn/m}\big)^{k} . \]</div>
+      <p>With the numbers above: \((1 - 0.497)^7 = 0.503^7 \approx 0.0082\), the 0.82% in the table.</p>
+      <p><b>Step 3: the tug of war in <var>k</var>.</b> More hashes check more bits (fewer false positives) but set more bits (more false positives). Let \(p = e^{-kn/m}\), the share of bits still 0. Then \(k = -(m/n)\ln p\), and taking logs of <var>f</var>,</p>
+      <div class="eq">\[ \ln f = k \ln(1 - p) = -\frac{m}{n}\,\ln p\,\ln(1-p) . \]</div>
+      <p>For a fixed number of bits per key \(m/n\), making <var>f</var> small means making \(g(p) = \ln p \cdot \ln(1-p)\) large. Both logs are negative, so \(g > 0\); and \(g \to 0\) as <var>p</var> goes to 0 or 1.</p>
+      <p><b>Step 4: find the top of <var>g</var>.</b> Differentiate and put it over one denominator:</p>
+      <div class="eq">\[ g'(p) = \frac{\ln(1-p)}{p} - \frac{\ln p}{1-p} = \frac{(1-p)\ln(1-p) - p \ln p}{p(1-p)} . \]</div>
+      <p>Call the numerator \(-D(p)\), so \(D(p) = p\ln p - (1-p)\ln(1-p)\). <var>D</var> is 0 at \(p = 0\), \(\tfrac12\) and 1. Its derivative is \(D'(p) = \ln p + 1 + \ln(1-p) + 1 = \ln\big(p(1-p)\big) + 2\), negative for small <var>p</var> (below about 0.161) and positive from there to ½. So on \((0, \tfrac12)\), <var>D</var> dips below 0 and climbs back to 0 at ½: \(D &lt; 0\), hence \(g' > 0\) and <var>g</var> increases. Since \(D(1-p) = -D(p)\), <var>g</var> decreases on \((\tfrac12, 1)\). The maximum is at \(p = \tfrac12\): <b>the best filter is half full</b>.</p>
+      <p><b>Step 5: translate back.</b> \(p = e^{-kn/m} = \tfrac12\) gives</p>
+      <div class="eq">\[ k^{*} = \frac{m}{n}\ln 2, \qquad f^{*} = \Big(\frac12\Big)^{k^{*}} \approx 0.6185^{\,m/n}, \qquad \frac{m}{n} = \frac{\log_2(1/f)}{\ln 2} \approx 1.44 \log_2\frac1f . \]</div>
+      <p>For 1%: \(\log_2 100 = 6.64\), times 1.44 is 9.6 bits per key, and \(k^{*} = 9.6 \times 0.693 \approx 7\).</p>
+      <p><b>What was proved.</b> A Bloom filter with <var>m</var> bits, <var>n</var> keys and <var>k</var> hashes has false-positive rate about \((1 - e^{-kn/m})^k\); it is smallest when half the bits are set, at \(k = (m/n)\ln 2\), and then 1.44 log<sub>2</sub>(1/<var>f</var>) bits per key buy a false-positive rate <var>f</var>.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Size a Bloom filter for 1 million blocked pairs at a 0.1% false-positive rate: <var>m</var> and <var>k</var>.</li>
+      <li>Reproduce the table above, then add a row for 12 bits per key.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/design-hashset/">705 Design HashSet</a> (end of the day): the exact structure the filter approximates.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li><b>Bloom intersection.</b> Two filters with the same <var>m</var> and hashes, for two users' friend sets: estimate how many friends they share from the bits set in each and in their OR. Why does this still not name the mutual friends?</li>
+      <li><b>Deletions.</b> Replace each bit with a 4-bit counter. What is the chance a counter overflows at the best <var>k</var>?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <p><b>Sizing.</b> \(m/n = 1.44 \log_2 1000 = 1.44 \times 9.97 \approx 14.4\) bits per key, so <var>m</var> ≈ 14.4 million bits ≈ 1.8 MB, and \(k = 14.4 \ln 2 \approx 10\).</p>
+    <p><b>Intersection.</b> With <var>t</var> bits set, estimate a filter's key count by inverting step 1: \(\hat n = -(m/k)\ln(1 - t/m)\). Apply it to each filter and to their OR (the filter of the union), and use \(|A \cap B| = |A| + |B| - |A \cup B|\). It estimates only the size; the filter holds no keys, so it cannot name anyone, and the estimate is noisy when the overlap is small, which is the usual case.</p>
+    <p><b>Overflow.</b> A counter's value is roughly Poisson with mean \(kn/m = \ln 2\); the chance it exceeds 15 is about \(e^{-\ln 2}(\ln 2)^{16}/16! \approx 7 \times 10^{-17}\) per counter, negligible.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ DSA: PPR -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">DSA · random walks: personalized PageRank</span></div>
+
+    <h4>The situation</h4>
+    <p>Counting mutual friends gives every mutual friend the same vote, popular or not, and it cannot see anyone three steps away. The reading found that 53% of new friendships had a mutual friend; the other 47% are invisible to the count. Can one score add up evidence over all routes from you to someone, favour short routes, and discount routes that pass through hubs?</p>
+    <p><b>Try the obvious thing.</b> Count routes of length 2, 3, 4 and so on from you to each person. Through a hub the counts explode: a hub with 1,480 friends creates 1,480 routes to each of its friends' friends. Raw route counts reward being near a hub, the opposite of what we want.</p>
+
+    <h4>The idea: a walker who keeps going home</h4>
+    <p>Put a walker on you. At each step, with probability α (say 0.3) the walker jumps back to you; otherwise they move to a friend of where they stand, chosen at random. Run this for a long time and note the share of time the walker spends at each person. That share is the person's <b>personalized PageRank</b> from you. Short routes count most, because the walker keeps going home. A hub splits the walker's next step among all its friends, so a route through a hub delivers only a sliver to each of them.</p>
+    <p><b>By hand, on the six-person graph.</b> With α = 0.3 the shares come out: You 0.380, Ben 0.230, Chloe 0.230, Esha 0.080, Dev 0.040, Farid 0.040. Among the people you do not know, the order is Esha, then Dev and Farid tied, the same as the mutual counts.</p>
+    <p>Now give Ben 20 more friends, so he has 24 and Chloe still has 4. Dev and Farid each still have exactly one mutual friend with you. But the walker reaches Dev only through Ben, who now sends each step to one of 24 people:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Candidate</th><th class="num">mutual friends</th><th>through</th><th class="num">PageRank, Ben has 4 friends</th><th class="num">PageRank, Ben has 24 friends</th></tr>
+      <tr><td>Esha</td><td class="num">2</td><td>Ben and Chloe</td><td class="num">0.080</td><td class="num">0.036</td></tr>
+      <tr class="hi"><td>Farid</td><td class="num">1</td><td>Chloe (4 friends)</td><td class="num">0.040</td><td class="num">0.028</td></tr>
+      <tr><td>Dev</td><td class="num">1</td><td>Ben (24 friends)</td><td class="num">0.040</td><td class="num">0.008</td></tr>
+    </table></div>
+    <p>The mutual count still ties Dev and Farid; the walk ranks Farid 3.4 times higher, because his one mutual friend is not spread over 24 people. That is the discount Day 2 argued a hub's vote deserves.</p>
+    <div class="code"><div class="ch"><span>ppr.py · personalized PageRank by repeated spreading, and by random walks</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def to_arrays(adj):
+    """Edge arrays for vectorized walks: an edge f -&gt; v for every friendship, both ways."""
+    src = np.array([f for f in range(len(adj)) for _ in adj[f]], dtype=np.int64)
+    dst = np.array([v for f in range(len(adj)) for v in adj[f]], dtype=np.int64)
+    deg = np.array([len(a) for a in adj], dtype=np.float64)
+    return src, dst, deg
+
+def ppr(src, dst, deg, u, alpha=0.3, iters=30):
+    """Personalized PageRank of every user for walks that restart at u with prob. alpha.
+    Power iteration on x = alpha e_u + (1 - alpha) x P, P[f, v] = 1/deg(f) per edge."""
+    n = len(deg)
+    e = np.zeros(n); e[u] = 1.0
+    inv = np.divide(1.0, deg, out=np.zeros(n), where=deg &gt; 0)
+    x = e.copy()
+    for _ in range(iters):
+        spread = np.bincount(dst, weights=x[src] * inv[src], minlength=n)   # x P
+        x = alpha * e + (1 - alpha) * spread
+    return x
+
+def ppr_suggest(adj, src, dst, deg, u, k=10, alpha=0.3, iters=30):
+    x = ppr(src, dst, deg, u, alpha, iters)
+    x[u] = -1.0
+    for f in adj[u]:
+        x[f] = -1.0                               # self and friends are not candidates
+    top = np.argsort(-x, kind="stable")[:k]
+    return [int(v) for v in top if x[v] &gt; 0]
+
+def ppr_walks(adj_lists, u, walks=1000, alpha=0.3, rng=random):
+    """Monte Carlo PPR: a walk stops with probability alpha before each step; the share of
+    walks that stop at v estimates ppr(u)[v] without bias. Returns (stop counts, steps)."""
+    stops, steps = Counter(), 0
+    for _ in range(walks):
+        x = u
+        while rng.random() &gt;= alpha and adj_lists[x]:
+            x = rng.choice(adj_lists[x]); steps += 1   # one random read: O(1), as in LC 380
+        stops[x] += 1
+    return stops, steps</code></pre></div>
+    <p><code>ppr</code> computes the shares exactly by spreading: start with all the walker's weight on you, and on each round keep a share α at home and spread the rest evenly over each person's friends. This is called <em>power iteration</em>. <code>ppr_walks</code> estimates the same shares by actually running walks and counting where they stop, with no matrix at all.</p>
+
+    <h4>How fast it settles, and what it finds</h4>
+    <p><b>Settling.</b> Each round shrinks the remaining error by at least a factor 1 − α, whatever the graph (proof below). On one user of the past graph (the first 80,000 friendships), the total error after <var>t</var> rounds, against 300 rounds as the reference:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">rounds t</th><th class="num">error, α = 0.3</th><th class="num">guaranteed at most 2(0.7)<sup>t</sup></th><th class="num">error, α = 0.15</th><th class="num">guaranteed at most 2(0.85)<sup>t</sup></th></tr>
+      <tr><td class="num">1</td><td class="num">0.924</td><td class="num">1.40</td><td class="num">1.39</td><td class="num">1.70</td></tr>
+      <tr><td class="num">5</td><td class="num">0.0372</td><td class="num">0.336</td><td class="num">0.132</td><td class="num">0.887</td></tr>
+      <tr><td class="num">10</td><td class="num">3.0 × 10<sup>−4</sup></td><td class="num">0.0565</td><td class="num">2.9 × 10<sup>−3</sup></td><td class="num">0.394</td></tr>
+      <tr><td class="num">20</td><td class="num">2.0 × 10<sup>−8</sup></td><td class="num">1.6 × 10<sup>−3</sup></td><td class="num">1.4 × 10<sup>−6</sup></td><td class="num">0.0775</td></tr>
+      <tr><td class="num">30</td><td class="num">1.6 × 10<sup>−12</sup></td><td class="num">4.5 × 10<sup>−5</sup></td><td class="num">7.9 × 10<sup>−10</sup></td><td class="num">0.0153</td></tr>
+    </table></div>
+    <p>The guarantee holds and is loose, as worst-case guarantees are. The top 10 stopped changing after 4 rounds at α = 0.3 and after 9 at α = 0.15. After 4 rounds, 9,954 of the 10,000 users already had a non-zero share: the graph is a small world, so a real system keeps only the top of the list.</p>
+    <p><b>What it finds.</b> Now measure against the future. Take the past graph, and 1,000 random users with at least one past friend and at least one friendship formed later (4,395 such friendships in all). Each source ranks non-friends; recall is the share of those 4,395 future friends that appear in the users' lists. Only 53.4% of them are two hops away at all.</p>
+    <div class="chart"><div class="t">Share of future friendships found in each user's top 100</div>
+      <div class="br"><span>two-hop, by mutual count</span><span class="tr"><i style="width:16.1%"></i></span><span class="v">0.161</span></div>
+      <div class="br"><span>PageRank, α = 0.15</span><span class="tr"><i style="width:23.3%;--c:var(--ai)"></i></span><span class="v">0.233</span></div>
+      <div class="br"><span>PageRank, α = 0.3</span><span class="tr"><i style="width:24.5%;--c:var(--ai)"></i></span><span class="v">0.245</span></div>
+      <div class="br"><span>PageRank, α = 0.5</span><span class="tr"><i style="width:24.4%;--c:var(--ai)"></i></span><span class="v">0.244</span></div>
+      <div class="br"><span>PageRank α = 0.3, 1,000 walks</span><span class="tr"><i style="width:13.2%;--c:var(--ai)"></i></span><span class="v">0.132</span></div>
+      <div class="br"><span>PageRank α = 0.3, 3,000 walks</span><span class="tr"><i style="width:19.3%;--c:var(--ai)"></i></span><span class="v">0.193</span></div>
+      <div class="br"><span>LSH r = 2, b = 50, by estimated Jaccard</span><span class="tr"><i style="width:2.4%;--c:var(--muted)"></i></span><span class="v">0.024</span></div>
+      <div class="cap">In the top 10: two-hop 0.047, PageRank α = 0.3 0.061, 1,000 walks 0.038, LSH 0.014. 1,000 walks cost 2,330 random reads on average, 3,000 walks 6,997.</div>
+    </div>
+    <p>What the chart says:</p>
+    <ul>
+      <li><b>The walk beats the count by half again</b> in the top 100 (0.245 against 0.161), and by 30% in the top 10.</li>
+      <li><b>Mostly by ranking better, not by reaching further.</b> Only 17 of its hits in the top 100 are people the two-hop scan could not see. The gain comes from the hub discount ordering the two-hop candidates better.</li>
+      <li><b>α hardly matters</b> between 0.15 and 0.5.</li>
+      <li><b>It is a batch tool.</b> Exact spreading touches every friendship each round: 30 rounds × 160,000 directed friendships = 4,800,000 updates per user, against 988 reads for the exact two-hop scan of the same users. Walks need thousands to come close, which also costs more than the scan. So the walk scores are computed offline for every user and stored as each user's top 100.</li>
+    </ul>
+    <p>In an interview, this is the "random walk with restart" source behind follow recommendations; say what it adds (discounted hubs, reach beyond two hops), that it runs offline, and how it is computed at scale (walks for all users at once in a batch job, or local "push" methods).</p>
+    <p class="idea"><b>In one line.</b> A walk that keeps returning home scores everyone by all short routes from you, with each route through a hub diluted, and on this graph it ranks future friends better than the mutual count; it is computed offline.</p>
+
+    <details class="deep"><summary>The math, step by step: what the walk adds up, and why spreading settles</summary><div>
+      <p><b>Step 1: one step as a table.</b> Write <var>P</var> for the table of step chances: \(P_{fv} = 1/\deg(f)\) if <var>f</var> and <var>v</var> are friends, and 0 otherwise. Each row adds to 1. If the row vector \(x_t\) holds the walker's chances of being at each person after <var>t</var> steps, one more step gives \(x_t P\). In the six-person graph, Ben's row has 1/4 for each of You, Chloe, Dev and Esha.</p>
+      <p><b>Step 2: the walk with restarts.</b> With \(e_u\) the vector with 1 at you and 0 elsewhere, one round is "go home with chance α, otherwise step":</p>
+      <div class="eq">\[ x_{t+1} = \alpha\, e_u + (1 - \alpha)\, x_t P, \qquad \text{and the settled shares satisfy} \qquad \pi_u = \alpha\, e_u + (1 - \alpha)\, \pi_u P . \]</div>
+      <p><b>Step 3: unroll it.</b> Substitute the right-hand side into itself once: \(\pi_u = \alpha e_u + (1-\alpha)\alpha\, e_u P + (1-\alpha)^2 \pi_u P^2\). Keep going <var>T</var> times:</p>
+      <div class="eq">\[ \pi_u = \alpha \sum_{t=0}^{T-1} (1-\alpha)^t\, e_u P^t \;+\; (1-\alpha)^T \pi_u P^T \;\xrightarrow{T \to \infty}\; \alpha \sum_{t=0}^{\infty} (1-\alpha)^t\, e_u P^t . \]</div>
+      <p>The last term vanishes because \(\pi_u P^T\) has total weight at most 1 and \((1-\alpha)^T \to 0\). In words: the score of <var>v</var> adds up the chance of reaching <var>v</var> in exactly <var>t</var> steps, for every <var>t</var>, with longer routes discounted by \((1-\alpha)^t\).</p>
+      <p><b>Step 4: the two-step term is a discounted mutual count.</b> To reach <var>v</var> in two steps, the walker goes to a friend <var>f</var> of yours (chance \(1/\deg(u)\)) and then to <var>v</var> (chance \(1/\deg(f)\)), and <var>f</var> must be a mutual friend:</p>
+      <div class="eq">\[ (e_u P^2)_v = \sum_{f \in N(u) \cap N(v)} \frac{1}{\deg(u)}\cdot\frac{1}{\deg(f)} . \]</div>
+      <p>Each mutual friend votes \(1/\deg(f)\). Six-person graph: Esha \(\tfrac12(\tfrac14 + \tfrac14) = \tfrac14\), Dev and Farid \(\tfrac12 \cdot \tfrac14 = \tfrac18\). With Ben at 24 friends: Dev \(\tfrac12 \cdot \tfrac1{24} = \tfrac1{48}\), Farid still \(\tfrac18\). Day 4 meets this same sum as the <em>resource allocation</em> score.</p>
+      <p><b>Step 5: a step never increases the total error.</b> Measure the size of a vector <var>y</var> by \(\|y\|_1 = \sum_v |y_v|\). Then</p>
+      <div class="eq">\[ \|yP\|_1 = \sum_v \Big|\sum_f y_f P_{fv}\Big| \le \sum_f |y_f| \sum_v P_{fv} = \|y\|_1 , \]</div>
+      <p>using that the absolute value of a sum is at most the sum of absolute values, and that each row of <var>P</var> adds to 1 (or 0 for someone with no friends).</p>
+      <p><b>Step 6: the error shrinks every round.</b> Subtract the settled equation from the round: \(x_{t+1} - \pi_u = (1-\alpha)(x_t - \pi_u)P\). By step 5, \(\|x_{t+1} - \pi_u\|_1 \le (1-\alpha)\|x_t - \pi_u\|_1\). Both start as probability vectors, so their distance is at most 2, and after <var>t</var> rounds</p>
+      <div class="eq">\[ \|x_t - \pi_u\|_1 \le 2\,(1-\alpha)^t \qquad\Rightarrow\qquad t \ge \frac{\ln(2/\varepsilon)}{\ln\!\big(1/(1-\alpha)\big)} \text{ rounds reach error } \varepsilon . \]</div>
+      <p>For α = 0.3 and ε = 10<sup>−4</sup>: \(\ln 20{,}000 / \ln(1/0.7) = 9.90/0.357 \approx 28\) rounds, whatever the size of the graph. The same shrinking shows the settled shares exist and are unique: two different fixed points would have to be closer to each other than they are.</p>
+      <p><b>Step 7: walks are a fair estimate.</b> In <code>ppr_walks</code>, a walk stops before each step with chance α, so it makes exactly <var>t</var> moves with chance \(\alpha(1-\alpha)^t\), and is then at <var>v</var> with chance \((e_u P^t)_v\). Adding over <var>t</var> gives the series of step 3, so the share of walks that stop at <var>v</var> averages \(\pi_u(v)\), with variance \(\pi_u(v)(1 - \pi_u(v))/R\) for <var>R</var> walks. A walk makes \((1-\alpha)/\alpha\) moves on average (2.33 at α = 0.3, matching 2,330 reads per 1,000 walks).</p>
+      <p><b>What was proved.</b> Personalized PageRank adds up all routes from you, shorter ones weighted more and each route through a friend <var>f</var> divided by deg(<var>f</var>); spreading reaches it with error at most \(2(1-\alpha)^t\) after <var>t</var> rounds, and random walks estimate it fairly.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Reproduce the six-person shares, then the version where Ben has 24 friends.</li>
+      <li>Reproduce the settling table, then rank one user's candidates by mutual count and by PageRank, and look at the people where they disagree. What are their mutual friends' degrees?</li>
+      <li>Related LeetCode practice on random walks with stopping: <a class="lc" href="https://leetcode.com/problems/knight-probability-in-chessboard/">688 Knight Probability in Chessboard</a> (spread probability one step at a time, as <code>ppr</code> does).</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li><b>Pair queries.</b> To score one pair (<var>u</var>, <var>v</var>), a few walks from <var>u</var> can be combined with a local computation around <var>v</var> (bidirectional PageRank estimation). When does that help? (Hint: re-scoring a short candidate list.)</li>
+      <li><b>Weighted steps.</b> Step to friend <var>f</var> with chance proportional to how often you interact. Which LeetCode problem from the end of the day does each step become?</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions</summary><div>
+    <p><b>Disagreements.</b> The people PageRank promotes over the mutual count are those whose mutual friends have few friends; the ones it demotes are known through hubs, like Dev when Ben has 24 friends.</p>
+    <p><b>Weighted steps.</b> 528 Random Pick with Weight: build prefix sums of the interaction weights once per user, then each step is a binary search.</p>
+    </div></details>
+  </div>
+
+  <!-- ============================================================ DSA: small structures -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">DSA · three small structures behind sampling and filtering</span></div>
+    <p>Each idea today rests on a small structure an interviewer may ask for on its own: a random friend in constant time (walks and friend sampling), a weighted random pick (sampling with unequal chances), and the exact set that a Bloom filter approximates.</p>
+
+    <h4><a class="lc" href="https://leetcode.com/problems/insert-delete-getrandom-o1/">380 Insert Delete GetRandom O(1)</a></h4>
+    <p><b>The situation.</b> A walk step needs "a random friend" from a list that changes as friendships form and end. <b>Try the obvious thing.</b> A hash set adds and removes in constant time but has no positions, so picking a random element means walking it; a list has positions but removing from the middle shifts everything. <b>The idea.</b> Keep both: a gap-free array of the elements, and a map from each element to its position. To remove, move the last element into the hole, update its position, and drop the last slot. <b>Why it is right.</b> Two facts hold after every operation: the array holds exactly the set with no gaps, and the map gives each element's true position. Insert appends and records the position; remove overwrites the hole with the last element, records the new position and drops the duplicate at the end. A random position in a gap-free array is a random element. <b>Cost.</b> Constant time per operation on average, linear space.</p>
+    <div class="code"><div class="ch"><span>randomized_set.py · 380</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class RandomizedSet:                              # 380: insert, remove, getRandom in O(1)
+    def __init__(self):
+        self.pos, self.items = {}, []             # value -&gt; index, and a dense array
+
+    def insert(self, val):
+        if val in self.pos:
+            return False
+        self.pos[val] = len(self.items); self.items.append(val)
+        return True
+
+    def remove(self, val):
+        if val not in self.pos:
+            return False
+        i, last = self.pos[val], self.items[-1]
+        self.items[i], self.pos[last] = last, i   # move the last element into the hole
+        self.items.pop(); del self.pos[val]
+        return True
+
+    def getRandom(self):
+        return random.choice(self.items)</code></pre></div>
+
+    <h4><a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">528 Random Pick with Weight</a></h4>
+    <p><b>The situation.</b> Return index <var>i</var> with chance proportional to its weight. Weighted walks and the unequal-chance friend sample need it. <b>Try the obvious thing.</b> Repeat each index as many times as its weight and pick uniformly: memory grows with the total weight, and real-valued weights do not work. <b>The idea.</b> Lay the weights end to end on a line: running totals cut the line into pieces, piece <var>i</var> as long as weight <var>i</var>. Throw a point uniformly on the line and return the piece it lands in, found by binary search on the running totals. <b>Why it is right.</b> The point lands in a piece with chance (piece length) / (line length) = weight / total; <code>bisect_right</code> returns the first running total above the point, which is that piece, and a weight-0 piece has no length and is never returned. <b>Cost.</b> Linear to build, logarithmic per pick.</p>
+    <div class="code"><div class="ch"><span>weighted_pick.py · 528</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import bisect
+import itertools
+
+class Solution528:                                # 528: pick index i with prob. w[i] / sum(w)
+    def __init__(self, w):
+        self.prefix = list(itertools.accumulate(w))
+
+    def pickIndex(self):
+        x = random.random() * self.prefix[-1]     # uniform point on [0, total)
+        return bisect.bisect_right(self.prefix, x)</code></pre></div>
+
+    <h4><a class="lc" href="https://leetcode.com/problems/design-hashset/">705 Design HashSet</a></h4>
+    <p><b>The situation.</b> Build the exact set that the Bloom filter approximates. <b>The idea.</b> An array of buckets; key <var>x</var> lives in bucket \(h(x) \bmod M\), in a short list. <b>Why it is fast.</b> If the hash spreads keys evenly, a bucket holds on average (keys / buckets) of them, the <em>load factor</em>. Doubling the buckets whenever keys outnumber them keeps the load at most 1, so a lookup checks a constant number of keys on average. A doubling copies every key, but the copies add up to at most 8 + 16 + … + <var>n</var> ≤ 2<var>n</var> over <var>n</var> inserts, so each insert costs constant time on average. <b>Against the Bloom filter.</b> The hash set keeps the keys, so it is exact and can delete; the filter throws the keys away and keeps a few bits each.</p>
+    <div class="code"><div class="ch"><span>hash_set.py · 705</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MyHashSet:                                  # 705: separate chaining, resize at load 1
+    def __init__(self):
+        self.size, self.buckets = 0, [[] for _ in range(8)]
+
+    def _b(self, key):
+        return self.buckets[hash(key) % len(self.buckets)]
+
+    def add(self, key):
+        b = self._b(key)
+        if key not in b:
+            b.append(key); self.size += 1
+            if self.size &gt; len(self.buckets):     # keep chains O(1) long on average
+                old = [x for bucket in self.buckets for x in bucket]
+                self.buckets = [[] for _ in range(2 * len(self.buckets))]
+                for x in old:
+                    self._b(x).append(x)
+
+    def remove(self, key):
+        b = self._b(key)
+        if key in b:
+            b.remove(key); self.size -= 1
+
+    def contains(self, key):
+        return key in self._b(key)</code></pre></div>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/insert-delete-getrandom-o1/">380 Insert Delete GetRandom O(1)</a>, <a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">528 Random Pick with Weight</a>, <a class="lc" href="https://leetcode.com/problems/design-hashset/">705 Design HashSet</a>.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/insert-delete-getrandom-o1-duplicates-allowed/">381 Insert Delete GetRandom O(1) - Duplicates allowed</a>: the same swap trick when an element may appear several times.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/design-hashmap/">706 Design HashMap</a>: the same buckets, with a value per key.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/linked-list-random-node/">382 Linked List Random Node</a>: a uniform random element from a list whose length you do not know in advance (reservoir sampling).</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ System Design -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">System Design · several sources under one budget</span></div>
+
+    <h4>The situation</h4>
+    <p>We now have several ways to find candidates: the sampled two-hop scan, which runs per request under its read budget; PageRank and LSH partners, computed offline and stored per user; and, cheapest of all, members of the user's groups, which works even for someone with few friends. The ranker after them can score a few hundred candidates. How should the sources share that space?</p>
+
+    <h4>Try the obvious thing: one source, best effort</h4>
+    <p>Run the two-hop scan with a timeout and return whatever it has by then. Three problems: the output changes with machine load, so tests and experiments cannot be repeated; nobody downstream knows how complete the list is; and the 47% of new friendships with no mutual friend can never appear.</p>
+
+    <h4>The next idea: give each source a fixed share</h4>
+    <p>Each source returns a list, best first. Merge them by taking each source's first candidate, then each source's second, and so on (round-robin), skipping anyone already taken or excluded, until the list is full. Every source gets an equal share.</p>
+    <div class="code"><div class="ch"><span>merge.py · merge ranked sources, deduplicate, filter</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def merge_sources(sources, k, exclude):
+    """Round-robin merge of ranked candidate lists, deduplicated, hard filters applied.
+    Each source is a list of user ids, best first. Returns at most k ids."""
+    out, seen = [], set(exclude)
+    for rank in range(max((len(s) for s in sources), default=0)):
+        for s in sources:
+            if rank &lt; len(s) and s[rank] not in seen:
+                seen.add(s[rank]); out.append(s[rank])
+                if len(out) == k:
+                    return out
+    return out</code></pre></div>
+    <p><b>Why it is right.</b> <code>seen</code> starts as the excluded ids, and an id is added to the output only if it is not in <code>seen</code>, after which it joins <code>seen</code>: so no duplicates and no excluded ids. Ranks are visited in order, so every source's <var>r</var>-th candidate is considered before any source's (<var>r</var>+1)-th, and the loop stops at <var>k</var>. <b>Cost.</b> One set lookup per input entry. The <code>exclude</code> set may be the cheap Bloom-filter check, since it errs only by dropping.</p>
+
+    <h4>Measure it: fixed shares against pooling</h4>
+    <p>The same 1,000 users and 4,395 future friendships as the PageRank measurement. What fraction of the future friends is in the set of candidates handed to the ranker?</p>
+    <div class="tablewrap"><table>
+      <tr><th>Candidates handed to the ranker</th><th class="num">average list size</th><th class="num">share of future friends included</th></tr>
+      <tr><td>two-hop top 100</td><td class="num">98.2</td><td class="num">0.161</td></tr>
+      <tr><td>PageRank α = 0.3 top 100</td><td class="num">100.0</td><td class="num">0.245</td></tr>
+      <tr><td>fixed equal shares of the three (round-robin), 100 slots</td><td class="num">≤ 100</td><td class="num">0.216</td></tr>
+      <tr class="hi"><td>pooled: two-hop 100 + PageRank 100</td><td class="num">154.7</td><td class="num">0.278</td></tr>
+      <tr><td>pooled: two-hop 100 + PageRank 100 + LSH 100</td><td class="num">168.5</td><td class="num">0.284</td></tr>
+    </table></div>
+    <p>Fixed equal shares do <em>worse</em> than PageRank alone (0.216 against 0.245), because they hand a third of the slots to the weak LSH source. Pooling the sources does better than any of them: the two-hop and PageRank lists overlap by only 45%, so together they find 0.278 of future friends at 1.5 times the size. LSH adds little on this graph. The design lesson: <b>generate generously from several sources, then let a ranker that has learned from outcomes choose</b> (Day 4), rather than fixing shares by hand. The right share differs from user to user, and only the ranker sees each user.</p>
+    <p class="idea"><b>In one line.</b> Pool candidates from several cheap, different sources and let the ranker pick; fixed quotas spend slots on weak sources.</p>
+
+    <h4>What may be approximate, and what must stay exact</h4>
+    <div class="tablewrap"><table>
+      <tr><th>Decision</th><th>Approximate?</th><th>Why</th></tr>
+      <tr><td>Which two-hop candidates are found; their counts</td><td>Yes: sampling, hub cap</td><td>A missed candidate costs a little relevance; recall@10 measures how much.</td></tr>
+      <tr><td>Similarity and walk scores</td><td>Yes: MinHash, LSH, walks</td><td>The errors are random and measured; the ranker scores again anyway.</td></tr>
+      <tr><td>"Already shown" and "already friends" prefilters</td><td>Yes, one way: Bloom filter</td><td>A false "yes" drops a candidate; it never shows a wrong one.</td></tr>
+      <tr><td>Blocks (both directions), privacy settings, deactivated accounts</td><td><b>No</b></td><td>Showing one wrong person is a trust failure, not a relevance loss. Checked exactly, against the stored data, on every response (Day 5).</td></tr>
+      <tr><td>The "N mutual friends" text the user sees</td><td><b>No</b> (or not shown)</td><td>It is a factual claim about the graph. Count it exactly for the 10 shown (Day 1's intersection), or leave it out.</td></tr>
+    </table></div>
+
+    <h4>The whole path</h4>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">offline</span><span class="seq"><span class="nd">PageRank top 100</span><span class="nd">LSH partners</span><span class="nd">group members</span></span><span class="why">batch jobs, stored per user</span></div>
+      <div class="step"><span class="k">per request</span><span class="seq"><span class="nd hot">sampled two-hop</span></span><span class="why">read budget, hub cap, seeded order</span></div>
+      <div class="step"><span class="k">merge</span><span class="seq"><span class="nd">pool</span><span class="lk">→</span><span class="nd">deduplicate</span><span class="lk">→</span><span class="nd">Bloom prefilters</span></span><span class="why">about 150 candidates, each tagged with its sources</span></div>
+      <div class="step"><span class="k">rank</span><span class="seq"><span class="nd">model</span></span><span class="why">Day 4</span></div>
+      <div class="step"><span class="k">final 10</span><span class="seq"><span class="nd hot">exact checks</span></span><span class="why">blocks, privacy, exact mutual count for the text</span></div>
+    </div></div>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Add a groups source (members of the user's groups, smallest groups first) and measure what it adds to the pool.</li>
+      <li>Set shares from data: give each source slots in proportion to its measured recall. Does it beat the pool?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <p>Proportional shares recover most of the pool's recall in a fixed size, but the ranker over the pool is still the better design, because the right share differs per user: a new user's best source is groups, a well-connected user's is PageRank.</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/"><em>Mining of Massive Datasets</em></a> (free book): MinHash, LSH banding and the S-curve; Bloom filters; PageRank and topic-sensitive PageRank</li>
+      <li>Andrei Broder, "On the resemblance and containment of documents" (1997); Broder, Charikar, Frieze and Mitzenmacher, "Min-wise independent permutations" (STOC 1998)</li>
+      <li>Burton Bloom, "Space/time trade-offs in hash coding with allowable errors" (<em>Communications of the ACM</em>, 1970); Kirsch and Mitzenmacher, "Less hashing, same performance: building a better Bloom filter" (ESA 2006)</li>
+      <li>Liben-Nowell and Kleinberg, "The link-prediction problem for social networks" (<em>JASIST</em>, 2007): compares common neighbours, Jaccard, Adamic–Adar and rooted PageRank</li>
+      <li>Andersen, Chung and Lang, "Local graph partitioning using PageRank vectors" (FOCS 2006): the push method; Fogaras, Rácz, Csalogány and Sarlós, "Towards scaling fully personalized PageRank" (<em>Internet Mathematics</em>, 2005): walks for all users</li>
+      <li>Gupta et al., "WTF: The Who to Follow service at Twitter" (WWW 2013): a published follow-recommendation system with random-walk candidate generation</li>
+      <li>Covington, Adams and Sargin, "Deep neural networks for YouTube recommendations" (RecSys 2016): a published two-stage design, candidate generation then ranking</li>
+      <li><a href="https://en.wikipedia.org/wiki/MinHash">MinHash</a>, <a href="https://en.wikipedia.org/wiki/Locality-sensitive_hashing">Locality-sensitive hashing</a>, <a href="https://en.wikipedia.org/wiki/Bloom_filter">Bloom filter</a>, <a href="https://en.wikipedia.org/wiki/PageRank">PageRank</a> (Wikipedia)</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ Delivery -->
+  <div class="blk des">
+    <div class="bh"><span class="kind">Delivery · the candidate contract and its tests</span></div>
+    <p>Candidate generation is now several approximate sources with budgets. Write down what it promises the ranker, so each promise can become a test.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Part</th><th>Promise</th></tr>
+      <tr><td>Input</td><td><code>candidates(u, K, budget, seed)</code>: the user, the list size (say 200 for the ranker), the read budget in friend-list entries, and a seed made from the user and the day, so a refresh is stable.</td></tr>
+      <tr><td>Before</td><td><var>u</var> exists and is active; <var>K</var> ≥ 0; budget ≥ 0.</td></tr>
+      <tr><td>After: always exact</td><td>At most <var>K</var> ids, no duplicates, never <var>u</var>, never a current friend, never blocked in either direction, never someone whose privacy settings exclude <var>u</var>, never a deactivated account.</td></tr>
+      <tr><td>After: bounded</td><td>Reads ≤ budget (the sources' budgets add up to it). The same output for the same user, size, budget, seed and graph snapshot.</td></tr>
+      <tr><td>After: approximate, and says so</td><td>Which candidates appear, and their scores. Each candidate carries its sources and features with their sample sizes (the <var>s</var> behind a sampled count, the <var>k</var> behind a Jaccard estimate, the number of walks behind a PageRank score), and the list carries an <code>exact</code> flag.</td></tr>
+      <tr><td>Quality</td><td>Measured before each release, not promised per request: recall@10 against the exact answer, and the share of future friendships included on the time split.</td></tr>
+    </table></div>
+    <p>The tests in <code>day_3_solutions.py</code> already check several rows on small graphs: <code>sampled_suggest</code> never reads more than its budget and matches the exact answer when the budget is unlimited; <code>merge_sources</code> returns no duplicates and no excluded ids, and at most <var>k</var>; the Bloom filter never lets a stored key through.</p>
+    <div class="part"><b>Practice</b><ul>
+      <li>Turn every row of the contract into a test: no duplicates, no excluded ids, at most <var>K</var>, reads ≤ budget, the same output for the same seed. Run each on the six-person graph and on 100 random users of the week's graph.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>The two-hop source runs out of time. What does the response contain, and what does the <code>exact</code> flag say?</li>
+      <li>A brand-new user has 3 friends and no stored lists yet. Which sources still work?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+    <p><b>Out of time.</b> The scan returns its partial counts (it stopped at a budget, so it is a valid random sample), the stored lists are unaffected, the list is marked <code>exact: false</code>, and the exact filters run as always. <b>New user.</b> Groups (chosen at sign-up) and the two-hop scan over 3 friends, which is cheap and exact; PageRank and LSH lists appear after the next batch run.</p>
+    </div></details>
+  </div>
+
+  <p><b>What breaks next.</b> We can now find good candidates cheaply: a budgeted scan that keeps most of the exact top 10, walks that rank better than counts, and a pool that holds more of the people a user will actually befriend. But the order inside the pool still comes from a hand-made rule, the mutual-friend count, and the walk already showed that rule is crude. Day 4 stops guessing a rule and learns one from what actually happened: which suggestions turned into friendships.</p>
+
+  <div class="check" data-check="day3">
+    <div class="ch"><b>Checkpoint · Day 3</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d3a" data-dim="ml"><span class="tx">Explain why a random sample of friends, scaled by <var>d</var>/<var>s</var>, is fair on average; derive its variance and check it on the six-person graph and the six-friend example.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3b" data-dim="ml"><span class="tx">Measure tie-aware recall@10 against the exact answer as the read budget shrinks, with and without a hub cap, and explain the crossing as bias against variance.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3c" data-dim="dsa"><span class="tx">Compute Jaccard similarity; prove that min-hashes agree with probability <var>J</var> and that the estimate's variance is \(J(1-J)/k\); say why \((ax+b) \bmod p\) is a poor min-hash.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3d" data-dim="dsa"><span class="tx">Derive the LSH S-curve and its step, choose rows and bands, and measure recall against work.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3e" data-dim="dsa"><span class="tx">Derive a Bloom filter's false-positive rate and best number of hashes; explain why its one-way error suits "do not show" checks and why it cannot count mutual friends.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3f" data-dim="dsa"><span class="tx">Compute personalized PageRank by spreading and by walks, prove the \(2(1-\alpha)^t\) bound, and show on the six-person graph how it discounts a hub.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3g" data-dim="dsa"><span class="tx">Solve 380, 528 and 705, with the invariant or probability argument for each.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3h" data-dim="sys"><span class="tx">Combine several candidate sources under one budget, show that pooling beats fixed shares, and list what must stay exact.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="d3i" data-dim="del"><span class="tx">Write the candidate contract and turn each of its rows into a test.</span><span class="dim del">Delivery</span></label>
+  </div>
+</section>

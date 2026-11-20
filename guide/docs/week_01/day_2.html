@@ -9,9 +9,9 @@ details.deep>div{padding-top:.2rem}
 p.idea{margin:1.1rem 0;padding:.7rem 1rem;border-left:4px solid var(--trace);background:var(--trace-soft);border-radius:0 8px 8px 0}
 p.idea b{color:var(--trace)}
 </style>
-<title>People You May Know · Popular people</title>
+<title>People You May Know · The top k</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
+<meta name="description" content="Day 2: picking the best k, from a fixed list and from a stream, and on many machines at once.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -199,6 +199,10 @@ footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:v
 .dayhead{display:flex;gap:.6rem 1rem;align-items:baseline;flex-wrap:wrap}
 .blk{border:1px solid var(--line);border-top:3px solid var(--c,var(--accent));border-radius:12px;background:var(--panel);padding:1rem 1.1rem .6rem;margin:1.4rem 0}
 .blk.ml{--c:var(--ml)}.blk.alg{--c:var(--dsa)}.blk.des{--c:var(--sys)}
+.blk.dsa{--c:var(--dsa)}
+.blk.sys{--c:var(--sys)}
+.blk.ai{--c:var(--ai)}
+.blk.del{--c:var(--del)}
 .blk>.bh{display:flex;justify-content:space-between;gap:.4rem 1rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.2rem}
 .blk>.bh .kind{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--c)}
 .blk>h3{margin:.1rem 0 .5rem}
@@ -271,623 +275,732 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 .daycard span{font:.84rem/1.45 var(--f-display);color:var(--muted)}
 .daycard.hi{border-color:var(--accent);background:var(--accent-soft)}
 .weekmap a{font-weight:700}
+figure.fig{margin:1.4rem 0;display:grid;gap:.5rem}
+figure.fig img{display:block;width:100%;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+figure.fig figcaption{font-size:.88rem;color:var(--muted)}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
+  <div class="brand">People You May Know <span>from two friend lists to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
   <div class="rail-label">Week 1 · People You May Know</div>
-  <a href="index.html" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Count it exactly</a>
-  <a href="day_2.html" class="on" data-page="day_2.html"><span class="n">D2</span>Popular people</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Read less</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Learn who connects</a>
+  <a href="index.html" data-page="index.html"><span class="n">R</span>The problem</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Common friends</a>
+  <a href="day_2.html" class="on" data-page="day_2.html"><span class="n">D2</span>The top k</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>It is a graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Learn what engagement means</a>
   <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>A billion users</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
   <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
-<main><div class="page">
-<section class="s" id="day2" data-sec="day2">
-  <div class="shead"><span class="sno">DAY 2 · POPULAR PEOPLE</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span></span></div>
-  <h2>A few popular people make it slow for everyone</h2>
+<main><div class="page"><section class="s" id="day2" data-sec="day2">
+  <div class="shead"><span class="sno">DAY 2 · THE TOP K</span><span class="dims"><span class="dim dsa">DSA</span></span></div>
+  <h2>The top k: from a thousand counts to the ten on screen</h2>
+  <p><b>Where we are.</b> Day 1 ended with a dictionary for every user: each candidate, and how many mutual friends they share. On the week's data that dictionary is big. The smallest has 5 candidates, the median 888, the mean 1,191, and the largest 8,271. One user in ten has at least 2,478, and one in a hundred at least 4,607. The app shows ten. Today is about picking those ten: first from a dictionary that sits still while you look at it, then from counts that keep changing as friendships arrive, and finally, as an advanced part, from counts spread over many machines.</p>
 
-  <p><b>Where we are.</b> Day 1 ended with code that is exact and tested: for a person, walk to each of their friends, read each friend's friend list, count how often every stranger shows up, keep the top ten. Now run that same code for every one of the 10,000 people on the week's graph, and count how many list entries each call reads. The cheapest call reads 6 entries. The median call reads 1,023. The most expensive reads 51,806, more than 8,000 times the cheapest. Same code, same graph, same machine. Timed on one laptop, the median call took 0.23 ms and the slowest 1% took over 1.4 ms. Today is about why: who makes a request expensive, what that costs when we compute suggestions for everyone at once, and how to put a number on "slow" that you can trust.</p>
+  <p><b>By hand.</b> You's dictionary is Esha 2, Dev 1, Farid 1. The top 2 is Esha, then one of Dev and Farid, who tie on 1. The rule from the reading settles it: on a tie, the smaller id goes first. Dev is 3 and Farid is 5, so the answer is <b>Esha, Dev</b>. Every method on this page must return exactly that list, and the tie rule turns out to matter far more than this tiny example suggests.</p>
 
   <div class="metrics">
-    <div class="metric"><div class="v">73.8 vs 20</div><div class="l">friends a friend has, on average, against friends a person has</div></div>
-    <div class="metric"><div class="v">1% → 69%</div><div class="l">the 100 most popular people cause 69% of the work of computing everyone's suggestions</div></div>
-    <div class="metric"><div class="v">7.7×</div><div class="l">fewer checks to count triangles when you start from the least popular corner</div></div>
-    <div class="metric"><div class="v">4.9×</div><div class="l">the slowest 1% of requests (p99) cost almost five times the average</div></div>
+    <div class="metric"><div class="v">5.2×</div><div class="l">faster than sorting, by bucket counting: mutual-friend counts are small whole numbers</div></div>
+    <div class="metric"><div class="v">1.17</div><div class="l">comparisons per candidate for a size-10 heap, against 9.41 for a full sort</div></div>
+    <div class="metric"><div class="v">92.7%</div><div class="l">of users have a tie between their 10th and 11th candidate, so the tie rule decides the list</div></div>
+    <div class="metric"><div class="v">5.2%</div><div class="l">of the count changes caused by new friendships reach anyone's top 10</div></div>
   </div>
 
-  <!-- ============================================================ ML: skew -->
-  <div class="blk ml">
-    <div class="bh"><span class="kind">ML · most people have few friends, a few have very many</span></div>
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · the static top k: the list is fixed when you ask</span></div>
 
-    <h4>The obvious estimate: 20 × 20</h4>
-    <p>The week's graph has 100,000 friendships among 10,000 people. Each friendship gives one friend to each of two people, so the average person has 2 × 100,000 / 10,000 = 20 friends. Day 1's code reads the friend list of each of your friends. So the natural estimate is: 20 friends, each with a list of about 20, makes 20 × 20 = 400 entries per request.</p>
-    <p>Measured over all 10,000 people, the average request reads <b>1,477</b> entries, 3.7 times the estimate. The arithmetic is fine. The mistake is the assumption that your friends are typical people. They are not, and the rest of this block shows why.</p>
+    <h4>1 · The obvious attempt: sort everything</h4>
+    <p><b>The situation.</b> A request for You arrives. Day 1's counting pass has built the dictionary; nothing changes while we pick. Write <var>n</var> for the number of candidates and <var>k</var> for how many we show (10).</p>
+    <p><b>The obvious attempt.</b> Sort every candidate by (most mutual friends, then smaller id) and keep the first ten. It is one line, obviously correct, and it is the oracle every faster method is tested against.</p>
+    <div class="code"><div class="ch"><span>code/day_2/topk.py · sort</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topk_sort(count, k):
+    """O(n log n): sort every candidate, keep the first k."""
+    return sorted(count, key=lambda v: (-count[v], v))[:k]</code></pre></div>
+    <p><b>Where it breaks.</b> Sorting costs about \(n\log_2 n\) comparisons, so the work per candidate grows with <var>n</var>. Measured on a sample of 1,000 users (mean 1,195 candidates), Python's sort made <b>9.41 comparisons per candidate</b>. Nearly all of them put candidate 412 before candidate 413 in an order nobody will ever see.</p>
 
-    <h4>Who has how many friends</h4>
-    <p>The number of friends a person has is their <b>degree</b> (Day 1). The question is how degrees are spread across people. Degrees here run from 1 to 1,480, so we group them in buckets that double in width. For each bucket the chart shows two shares: of people, and of <b>friend ends</b>. Every friendship has two ends, one at each person, so a person with 30 friends owns 30 of the 200,000 ends.</p>
-    <div class="chart"><div class="t">How many friends people have, on the week's graph</div>
-      <div class="sub">Share of people</div>
-      <div class="br"><span>1–3</span><span class="tr"><i style="width:1.1%"></i></span><span class="v">0.5%</span></div>
-      <div class="br"><span>4–7</span><span class="tr"><i style="width:15.1%"></i></span><span class="v">7.6%</span></div>
-      <div class="br"><span>8–15</span><span class="tr"><i style="width:86.5%"></i></span><span class="v">43.3%</span></div>
-      <div class="br"><span>16–31</span><span class="tr"><i style="width:77.9%"></i></span><span class="v">38.9%</span></div>
-      <div class="br"><span>32–63</span><span class="tr"><i style="width:14.7%"></i></span><span class="v">7.3%</span></div>
-      <div class="br"><span>64–127</span><span class="tr"><i style="width:3.5%"></i></span><span class="v">1.7%</span></div>
-      <div class="br"><span>128–255</span><span class="tr"><i style="width:0.9%"></i></span><span class="v">0.47%</span></div>
-      <div class="br"><span>256–511</span><span class="tr"><i style="width:0.3%"></i></span><span class="v">0.12%</span></div>
-      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:0.2%"></i></span><span class="v">0.07%</span></div>
-      <div class="sub">Share of friend ends: where you land if you pick a friendship at random and look at one end</div>
-      <div class="br"><span>1–3</span><span class="tr"><i style="width:0.2%;--c:var(--trace)"></i></span><span class="v">0.07%</span></div>
-      <div class="br"><span>4–7</span><span class="tr"><i style="width:4.5%;--c:var(--trace)"></i></span><span class="v">2.3%</span></div>
-      <div class="br"><span>8–15</span><span class="tr"><i style="width:50.6%;--c:var(--trace)"></i></span><span class="v">25.3%</span></div>
-      <div class="br"><span>16–31</span><span class="tr"><i style="width:81.4%;--c:var(--trace)"></i></span><span class="v">40.7%</span></div>
-      <div class="br"><span>32–63</span><span class="tr"><i style="width:30.3%;--c:var(--trace)"></i></span><span class="v">15.1%</span></div>
-      <div class="br"><span>64–127</span><span class="tr"><i style="width:14.6%;--c:var(--trace)"></i></span><span class="v">7.3%</span></div>
-      <div class="br"><span>128–255</span><span class="tr"><i style="width:7.9%;--c:var(--trace)"></i></span><span class="v">4.0%</span></div>
-      <div class="br"><span>256–511</span><span class="tr"><i style="width:3.8%;--c:var(--trace)"></i></span><span class="v">1.9%</span></div>
-      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:6.7%;--c:var(--trace)"></i></span><span class="v">3.4%</span></div>
-      <div class="cap">The 7 people with 512 or more friends are 0.07% of people but own 3.4% of friend ends, 48 times their share. The top 1% (100 people) own 11.1% of ends; the top 10% own 32.1%.</div>
-    </div>
-    <p>Read the first half of the chart. Most people have between 8 and 31 friends. The <b>median</b>, the middle person, has 15. Then the bars shrink but never quite stop: 1% of people have 100 or more friends, and the most popular person has 1,480, 74 times the average. Because those few are so far out, they drag the average up: 69% of people have fewer friends than the average of 20.</p>
-    <p>A spread like this, where most values are modest and a few are enormous, is called a <b>heavy tail</b>. Real social networks have one (Ugander and others measured it on Facebook's graph, in the reading below). It is why "the average person" is a poor guide: the average describes almost nobody.</p>
-    <p class="idea"><b>In one line.</b> When the spread has a heavy tail, report the median and the top percentiles, not only the average; and expect the few largest values to decide every cost that grows faster than linearly.</p>
+    <h4>2 · Keep the ten best so far, with the worst of them on top</h4>
+    <p><b>The idea in plain words.</b> Walk through the candidates once and keep only the best ten seen so far. Arrange them so the <em>worst</em> of the ten is always the one you can see. Each new candidate is compared with that one. If it is not better, it is thrown away after one comparison. If it is better, it replaces the worst, and the pile reorders itself. The structure that keeps the smallest item on top and reorders in about \(\log_2 k\) steps is a <b>binary min-heap</b>; Python's is <code>heapq</code>.</p>
+    <p>The tie rule goes into the key: store (count, −id), so a larger tuple is a better candidate, and the root of the min-heap is the worst one kept.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">Dev 1</span><span class="seq"><span class="nd hot">Dev 1</span></span><span class="why">heap has room: push</span></div>
+      <div class="step"><span class="k">Esha 2</span><span class="seq"><span class="nd hot">Dev 1</span><span class="nd">Esha 2</span></span><span class="why">heap has room: push; Dev is the worst kept, so Dev is on top</span></div>
+      <div class="step"><span class="k">Farid 1</span><span class="seq"><span class="pp rm">Farid 1</span><span class="lk">vs</span><span class="nd hot">Dev 1</span></span><span class="why">same count, larger id: worse than the worst kept · <b>one comparison, rejected</b></span></div>
+    </div><div class="cap">You's candidates in dictionary order, k = 2. The heap ends holding Esha and Dev; reading it out best first gives Esha, Dev.</div></div>
+    <div class="code"><div class="ch"><span>code/day_2/topk.py · size-k heap</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topk_heap(count, k):
+    """O(n log k) time, O(k) memory: keep the k best seen so far; the worst of them sits on top."""
+    if k &lt;= 0:
+        return []
+    heap = []                                   # items (m, -v): the root is the worst one kept
+    for v, m in count.items():
+        item = (m, -v)                          # bigger is better: more friends, then smaller id
+        if len(heap) &lt; k:
+            heapq.heappush(heap, item)
+        elif item &gt; heap[0]:                    # beats the worst kept: replace it
+            heapq.heapreplace(heap, item)
+    return [-nv for m, nv in sorted(heap, reverse=True)]</code></pre></div>
+    <p><b>Measured.</b> <b>1.17 comparisons per candidate</b> on the same 1,000 users, eight times fewer than sorting. Most candidates lose to the root and leave. For the user with the most candidates (8,271), the heap changed only 78.1 times on average over 20 random orders of the candidates; the math below predicts \(k(1+\ln(n/k)) = 10(1 + \ln 827.1) = 77.2\).</p>
 
-    <details class="deep"><summary>The math, step by step: what "heavy-tailed" means, and why the tail sets the cost</summary><div>
-      <p><b>What we want to show.</b> That the friend counts here fall off like a power, and that for such a spread the average of the <em>squared</em> friend counts is set by the few largest ones. Squared counts are what requests cost, as the next sections show.</p>
-      <p><b>Step 1: a way to see the tail.</b> Instead of asking "what share has exactly <var>k</var> friends", ask "what share has <em>at least</em> <var>k</var> friends". Write it \(P(D \ge k)\), where <var>D</var> is the friend count of a person picked uniformly at random. On the week's graph:</p>
-      <div class="tablewrap"><table>
-        <tr><th class="num">k</th><th class="num">20</th><th class="num">50</th><th class="num">100</th><th class="num">200</th><th class="num">500</th><th class="num">1,000</th></tr>
-        <tr><td>\(P(D \ge k)\)</td><td class="num">30.7%</td><td class="num">3.68%</td><td class="num">1.01%</td><td class="num">0.27%</td><td class="num">0.07%</td><td class="num">0.04%</td></tr>
-      </table></div>
-      <p>The share falls, but slowly: from 100 friends to 1,000, ten times more, it drops from 1.01% to 0.04%, a factor of about 25. A share that falls by the same factor every time <var>k</var> is multiplied by ten (or doubled) is a <b>power law</b>: \(P(D \ge k) \approx c\,k^{-\alpha}\) for some constants <var>c</var> and <var>α</var>. Taking logarithms, \(\log P = \log c - \alpha \log k\), a straight line with slope −<var>α</var> on log-log axes. A least-squares line through the points for <var>k</var> from 20 to 480 has slope −1.90, so <var>α</var> ≈ 1.9. (This is a rough description; fitting power laws properly needs care, see Clauset, Shalizi and Newman below.) For contrast, an exponential tail \(P(D \ge k) \approx e^{-k/s}\) falls by a <em>growing</em> factor each time <var>k</var> is multiplied, which is why it has no giants.</p>
-      <p><b>Step 2: who contributes to the average of squares.</b> The average of squared friend counts is \(E[d^2] = \frac1n \sum_v \deg(v)^2\), with <var>n</var> people. Split people into the doubling buckets of the chart. The bucket around <var>k</var> holds about \(n\,c\,k^{-\alpha}\) people (the share with at least <var>k</var> friends, up to a constant factor), and each contributes about \(k^2\). So the bucket contributes about</p>
-      <div class="eq">\[ n\,c\,k^{-\alpha}\cdot k^2 \;=\; n\,c\,k^{\,2-\alpha}. \]</div>
-      <p>With <var>α</var> = 1.9, the exponent 2 − <var>α</var> = 0.1 is positive: each bucket contributes <em>more</em> than the one before. The last buckets, the giants, contribute the most. Check against the measurement: the 7 people with 512+ friends produce 48.5% of \(\sum_v \deg(v)^2\) on this graph.</p>
-      <p><b>What was shown.</b> Friend counts here follow roughly a power law with exponent near 2. For any such spread with <var>α</var> ≤ 2, the average of squares is set by the largest friend counts, and it keeps growing as the network grows and its biggest hub gets bigger.</p>
-    </div></details>
-
-    <h4>Where the popular people come from: the rich get richer</h4>
-    <p>If people made friends uniformly at random, would anyone end up with 74 times the average? Try it. Let 10,000 people join one at a time, each making 10 friendships with people already there, so the average is 20 friends as on the week's graph. Two rules for whom they pick:</p>
-    <ul>
-      <li><b>Uniform:</b> everyone already there is equally likely.</li>
-      <li><b>Rich get richer:</b> a person is picked with probability proportional to how many friends they already have. Someone with 40 friends is twice as likely to gain the next one as someone with 20. This is <b>preferential attachment</b> (the Barabási–Albert model).</li>
-    </ul>
-    <p>The code keeps a list with one entry per friend end, so a person with 40 friends appears 40 times. Picking a random entry picks a person in proportion to their friend count, in constant time.</p>
-    <div class="code"><div class="ch"><span>skew.py · rich get richer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def preferential_attachment(n, m, seed=0):
-    """Each new person befriends m existing people, picked with probability proportional to
-    how many friends they already have: the rich get richer."""
+    <h4>3 · Quickselect: throw away the half that cannot hold the answer</h4>
+    <p><b>The idea in plain words.</b> Pick a random candidate as a pivot and split the others into "better than the pivot" and "worse". If ten or more are better, the answer is among them: repeat there and forget the rest. If fewer, they all belong to the answer, together with the pivot: keep them and look for the remainder among the worse ones. Each round discards a large share of what is left. At the end, sort just the ten.</p>
+    <div class="code"><div class="ch"><span>code/day_2/topk.py · quickselect</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topk_quickselect(count, k, seed=0):
+    """O(n) on average: split around a random pivot, keep only the side that holds the answer."""
     rng = random.Random(seed)
-    adj = [set() for _ in range(n)]
-    ends = []                                  # person v appears here once per friend
-    for u in range(m + 1):                     # start from a small group of mutual friends
-        for v in range(u):
-            adj[u].add(v); adj[v].add(u); ends += [u, v]
-    for u in range(m + 1, n):
-        while len(adj[u]) &lt; m:
-            v = rng.choice(ends)               # uniform over ends = proportional to friend count
-            if v not in adj[u]:
-                adj[u].add(v); adj[v].add(u)
-        ends += [x for v in adj[u] for x in (u, v)]
-    return adj</code></pre></div>
+    keys = [(-m, v) for v, m in count.items()]  # distinct keys; smaller is better
+    best = []
+    while k &gt; 0 and keys:
+        p = rng.choice(keys)
+        better = [x for x in keys if x &lt; p]
+        if len(better) &gt;= k:
+            keys = better                       # all k answers are better than the pivot
+        else:
+            best += better + [p]                # all of these are answers
+            k -= len(better) + 1
+            keys = [x for x in keys if x &gt; p]
+    return [v for _, v in sorted(best)]</code></pre></div>
+    <p><b>Measured.</b> <b>2.18 comparisons per candidate</b>, counting every element of every pass. That is the best guarantee on paper, O(<var>n</var>) on average whatever <var>k</var> is, but for k = 10 it loses to the heap: quickselect makes a couple of full passes and builds new lists, while the heap makes one pass and rarely does anything but compare.</p>
+
+    <h4>4 · Bucket counting: the counts are small whole numbers</h4>
+    <p><b>The situation, looked at again.</b> A mutual-friend count is a whole number between 1 and the number of friends you have. On the week's data the 11,908,610 (user, candidate) counts are tiny: 86.6% equal 1 and 99.0% are at most 3. The largest count anywhere is 67, and the largest count in a typical user's dictionary is 5.</p>
+    <p><b>The idea.</b> Do not compare candidates at all. Make one bucket per possible count, drop each candidate into the bucket of its count, then walk the buckets from the top down, taking candidates until you have ten. Only the last bucket you take from needs ordering, and only by id. For You: bucket 2 holds Esha, bucket 1 holds Dev and Farid. Take Esha; one more is needed, and the smallest id in bucket 1 is Dev.</p>
+    <div class="code"><div class="ch"><span>code/day_2/topk.py · bucket counting</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topk_bucket(count, k):
+    """O(n + max count): counts are small whole numbers, so drop each candidate in the bucket of
+    its count and walk the buckets from the top. Only the last bucket touched needs ordering."""
+    if not count:
+        return []
+    buckets = [[] for _ in range(max(count.values()) + 1)]
+    for v, m in count.items():
+        buckets[m].append(v)
+    out = []
+    for m in range(len(buckets) - 1, 0, -1):
+        need = k - len(out)
+        if need == 0:
+            break
+        out += heapq.nsmallest(need, buckets[m])   # smallest ids first inside a bucket
+    return out</code></pre></div>
+    <p><b>Measured.</b> <b>1.06 steps per candidate</b>: one to drop each candidate in its bucket, one per bucket visited, plus the comparisons inside the last bucket. This is <a class="lc" href="https://leetcode.com/problems/top-k-frequent-elements/">347</a>'s trick, and it is the day's first live problem.</p>
+
+    <h4>5 · Measured on the week's data</h4>
+    <p>All four methods returned identical top-10 lists for all 10,000 users (and agree on 2,000 random dictionaries with many ties in <code>topk.py</code>). Times are pure Python on one laptop core, best of three runs over all users; the ratio to sorting is the number to keep.</p>
+    <div class="chart"><div class="t">Time per user, top 10 of each user's candidates (all 10,000 users, mean 1,191 candidates)</div>
+      <div class="br"><span>sort</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">504 µs</span></div>
+      <div class="br"><span>quickselect</span><span class="tr"><i style="width:45%"></i></span><span class="v">227 µs</span></div>
+      <div class="br"><span>size-10 heap</span><span class="tr"><i style="width:34%"></i></span><span class="v">169 µs</span></div>
+      <div class="br"><span>heapq.nsmallest</span><span class="tr"><i style="width:26%"></i></span><span class="v">132 µs</span></div>
+      <div class="br"><span>bucket counting</span><span class="tr"><i style="width:19%;--c:var(--good)"></i></span><span class="v">97 µs</span></div>
+      <div class="cap"><code>heapq.nsmallest</code> is the same size-k heap, written in C inside the standard library, with the tie rule passed as a key.</div>
+    </div>
     <div class="tablewrap"><table>
-      <tr><th>Rule (10,000 people, 10 new friendships each)</th><th class="num">median</th><th class="num">top 1% start at</th><th class="num">most popular</th></tr>
-      <tr><td>Uniform</td><td class="num">17</td><td class="num">58</td><td class="num">92</td></tr>
-      <tr class="hi"><td>Rich get richer</td><td class="num">14</td><td class="num">102</td><td class="num">475</td></tr>
+      <tr><th>Method</th><th>Cost</th><th class="num">comparisons per candidate</th><th class="num">× faster than sort</th><th>Extra memory</th><th>Works on a stream?</th><th>Pick it when</th></tr>
+      <tr><td>Sort</td><td>O(<var>n</var> log <var>n</var>)</td><td class="num">9.41</td><td class="num">1.00</td><td><var>n</var></td><td>no</td><td><var>n</var> is small, or you need the whole order</td></tr>
+      <tr><td>Size-k heap</td><td>O(<var>n</var> log <var>k</var>), about one comparison each</td><td class="num">1.17</td><td class="num">2.99</td><td><var>k</var></td><td>yes</td><td><var>k</var> ≪ <var>n</var>; any kind of score; data arriving over time</td></tr>
+      <tr><td>Quickselect</td><td>O(<var>n</var>) on average, O(<var>n</var>²) at worst</td><td class="num">2.18</td><td class="num">2.22</td><td><var>n</var></td><td>no</td><td><var>k</var> is a large share of <var>n</var></td></tr>
+      <tr class="hi"><td>Bucket counting</td><td>O(<var>n</var> + largest count)</td><td class="num">1.06 steps</td><td class="num">5.19</td><td><var>n</var> + largest count</td><td>no</td><td>scores are small whole numbers, as mutual-friend counts are</td></tr>
     </table></div>
-    <p>Same number of friendships, same average. Uniform picking gives nobody more than 92 friends. Rich-get-richer grows a person with 475, and the people who joined first are the ones who got there: they had the longest time to snowball.</p>
-    <p><b>Does the week's graph grow this way?</b> Use the order in which the week's friendships formed. Count each person's friends among the first 80% of friendships (their "past" friends), then the new friendships they make in the last 20%. If the rich get richer, new friendships should grow in proportion to past ones.</p>
-    <div class="tablewrap"><table>
-      <tr><th>Past friends</th><th class="num">people</th><th class="num">new friends, on average</th><th class="num">new per past friend</th></tr>
-      <tr><td>1–3</td><td class="num">178</td><td class="num">1.79</td><td class="num">0.70</td></tr>
-      <tr><td>4–7</td><td class="num">1,620</td><td class="num">2.25</td><td class="num">0.39</td></tr>
-      <tr><td>8–15</td><td class="num">5,045</td><td class="num">2.91</td><td class="num">0.26</td></tr>
-      <tr><td>16–31</td><td class="num">2,553</td><td class="num">4.58</td><td class="num">0.22</td></tr>
-      <tr><td>32–63</td><td class="num">446</td><td class="num">9.91</td><td class="num">0.24</td></tr>
-      <tr><td>64–127</td><td class="num">111</td><td class="num">21.39</td><td class="num">0.25</td></tr>
-      <tr><td>128–255</td><td class="num">29</td><td class="num">41.90</td><td class="num">0.25</td></tr>
-      <tr><td>256+</td><td class="num">13</td><td class="num">125.85</td><td class="num">0.23</td></tr>
-    </table></div>
-    <p>From 16 past friends up, every past friend brings about 0.22–0.25 new ones: growth in proportion to what you have. Below 16 the rate is higher, as if everyone starts with a few "free" friends; that variant still produces a heavy tail. Part of the mechanism is Day 1's own: triadic closure. When people meet through a friend of a friend, a person with 1,000 friends can be reached through any of 1,000 friendships, so they are met far more often. Introductions through friends are rich-get-richer in disguise.</p>
+    <p>Bucket counting wins here because of a property of the data, not of the algorithm. On Day 4 the score becomes a model's probability, a real number with no small range of values, and the buckets are gone; the size-k heap is the method that survives every change of score.</p>
 
-    <details class="deep"><summary>The math, step by step: why rich-get-richer gives a power law and uniform does not</summary><div>
-      <p><b>What we want to show.</b> Under preferential attachment, the share of people with at least <var>k</var> friends is \((m/k)^2\), a power law. Under uniform attachment it falls exponentially.</p>
-      <p><b>Setup.</b> People arrive one per time step; person number <var>t</var> arrives at time <var>t</var> and makes <var>m</var> friendships. Write \(k_i(t)\) for the friend count of person <var>i</var> at time <var>t</var>. After <var>t</var> steps there are about <var>mt</var> friendships, so friend counts add up to 2<var>mt</var>.</p>
-      <p><b>Step 1: how fast one person grows.</b> Each of the <var>m</var> new friendships lands on person <var>i</var> with probability \(k_i / 2mt\) (their share of all friend ends). So on average <var>i</var> gains \(m \cdot k_i/2mt = k_i/2t\) friends per step. Small numbers first: with <var>k</var> = 20 at <var>t</var> = 1,000, that is 20/2,000 = 0.01 friends per step. Treat <var>k</var> as a smooth quantity (the <b>mean-field</b> approximation):</p>
-      <div class="eq">\[ \frac{dk_i}{dt} = \frac{k_i}{2t}. \]</div>
-      <p><b>Step 2: solve it.</b> Move the <var>k</var> terms to one side and the <var>t</var> terms to the other, and integrate from the moment \(t_i\) when <var>i</var> arrived with <var>m</var> friends:</p>
-      <div class="eq">\[ \int_m^{k_i} \frac{dk}{k} = \int_{t_i}^{t} \frac{ds}{2s} \;\Rightarrow\; \ln\frac{k_i}{m} = \frac12 \ln\frac{t}{t_i} \;\Rightarrow\; k_i(t) = m\sqrt{t / t_i}. \]</div>
-      <p>An early arrival has small \(t_i\) and so a large \(t/t_i\): they grow the most. Person 100 at time 10,000 has \(10\sqrt{100} = 100\) friends; person 2,500 has \(10\sqrt{4} = 20\).</p>
-      <p><b>Step 3: turn growth into a share.</b> Arrival times are spread evenly over \([0, t]\), so the share of people who arrived before time <var>x</var> is <var>x</var>/<var>t</var>. A person has at least <var>k</var> friends exactly when \(m\sqrt{t/t_i} \ge k\), that is, when \(t_i \le m^2 t / k^2\). So</p>
-      <div class="eq">\[ P(k_i \ge k) = P\!\Big(t_i \le \frac{m^2 t}{k^2}\Big) = \frac{m^2 t / k^2}{t} = \frac{m^2}{k^2}. \]</div>
-      <p>With <var>m</var> = 10: 25% at <var>k</var> = 20, 6.25% at 40, 1.56% at 80. The simulation above gives 26.1%, 6.98% and 1.69%, and its log-log slope over 20–160 is −1.97 against the predicted −2.</p>
-      <p><b>Step 4: the uniform rule, for contrast.</b> Now each new friendship lands on <var>i</var> with probability 1/<var>t</var> (one of <var>t</var> people), so \(dk_i/dt = m/t\). Integrating the same way gives \(k_i(t) = m\,(1 + \ln(t/t_i))\). Having at least <var>k</var> friends means \(\ln(t/t_i) \ge (k-m)/m\), that is \(t_i \le t\,e^{-(k-m)/m}\), so \(P(k_i \ge k) = e^{-(k-m)/m}\). Each extra <var>m</var> friends cuts the share by a factor <var>e</var>: an exponential tail, with no giants.</p>
-      <p><b>What was shown.</b> Growth in proportion to what you have makes early arrivals grow like \(\sqrt{t}\) without limit, and the share with at least <var>k</var> friends falls like \(1/k^2\). Equal chances for everyone give a tail that falls exponentially.</p>
-    </div></details>
+    <h4>6 · Ties, and why the list must be the same every time</h4>
+    <p><b>The situation.</b> With counts this small, ties are not a corner case. Of the 9,998 users with more than ten candidates, <b>9,271 (92.7%)</b> have a tie between their 10th and 11th candidate. Without a tie rule, "the top 10" is not one list but many, and which one you get depends on the order a dictionary happens to iterate in, or which machine answered first.</p>
+    <ul>
+      <li><b>Tests.</b> The sort is the oracle. If two correct methods may return different lists, an exact comparison fails at random and the test gets loosened until it no longer catches real bugs.</li>
+      <li><b>Caching.</b> A cached list that differs from a fresh one with no change in the data looks like a change to every system downstream: the user sees the list reshuffle on refresh, and anything that compares old and new lists does useless work.</li>
+      <li><b>Experiments.</b> On Day 4, two versions of the ranker are compared on real users. Random reshuffling at the cutoff adds noise to both arms that has nothing to do with either version.</li>
+    </ul>
+    <p>So the rule is part of the key, in every method: (count, −id) in the heap, (−count, id) in quickselect, and smallest ids first inside a bucket. Each key is unique because ids are, so every method has exactly one right answer.</p>
 
-    <h4>Your friends have more friends than you</h4>
-    <p>Back to the six people from the reading. You are friends with Ben and Chloe; Ben and Chloe are friends; Ben knows Dev and Esha; Chloe knows Esha and Farid. Count everyone's friends, and the average friend count of their friends:</p>
-    <div class="tablewrap"><table>
-      <tr><th>Person</th><th>Friends</th><th class="num">friend count</th><th class="num">their friends' average</th></tr>
-      <tr class="hi"><td>You</td><td>Ben, Chloe</td><td class="num">2</td><td class="num">(4 + 4) / 2 = 4</td></tr>
-      <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td class="num">4</td><td class="num">(2 + 4 + 1 + 2) / 4 = 2.25</td></tr>
-      <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td class="num">4</td><td class="num">(2 + 4 + 2 + 1) / 4 = 2.25</td></tr>
-      <tr><td>Dev</td><td>Ben</td><td class="num">1</td><td class="num">4</td></tr>
-      <tr><td>Esha</td><td>Ben, Chloe</td><td class="num">2</td><td class="num">4</td></tr>
-      <tr><td>Farid</td><td>Chloe</td><td class="num">1</td><td class="num">4</td></tr>
-    </table></div>
-    <p>Four of the six people have fewer friends than their friends do on average. Only Ben and Chloe, the two most popular, do not. The reason is in the friend lists themselves. Ben appears in 4 lists, because 4 people count him as a friend. Dev appears in 1. So when you look at "a friend" of anyone, you are four times as likely to be looking at Ben as at Dev. Popular people are over-represented among friends, by exactly their popularity.</p>
-    <p>Put a number on it. The 7 friendships have 14 ends. The average person has 14 / 6 ≈ 2.33 friends. Now pick one of the 14 friend ends at random and ask how many friends that person has: Ben's 4 ends each say 4, Chloe's 4 ends say 4, the 2 ends at You say 2, Esha's 2 say 2, Dev's and Farid's single ends say 1. The average over ends is (16 + 16 + 4 + 4 + 1 + 1) / 14 = 42 / 14 = 3. A friend has 3 friends on average; a person has 2.33.</p>
-    <p>This is the <b>friendship paradox</b>: on average, your friends have more friends than you do (Feld, 1991). It holds in every network where friend counts differ at all. The code computes both versions: the average over friend ends, and the average over people of "my friends' average".</p>
-    <div class="code"><div class="ch"><span>skew.py · the friendship paradox</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def friend_degree_means(adj):
-    """Mean friend count, and two ways to ask 'how many friends do my friends have?'."""
-    deg = [len(a) for a in adj]
-    n, ends = len(adj), sum(deg)               # every friendship has two ends
-    mean_d = ends / n
-    # pick a random friendship, look at one end: user v is picked deg[v] times out of `ends`
-    friend_of_edge = sum(d * d for d in deg) / ends
-    # for each person, average their friends' counts; then average over people
-    users = [u for u in range(n) if deg[u]]
-    friend_of_user = sum(sum(deg[f] for f in adj[u]) / deg[u] for u in users) / len(users)
-    return mean_d, friend_of_edge, friend_of_user</code></pre></div>
-    <p>On the week's graph the average person has 20 friends, and the average friend has <b>73.8</b>. Averaged person by person, it is 76.2. Of the 10,000 people, 96.5% have fewer friends than their friends do on average, and 73.8% have fewer than even the <em>median</em> of their friends. The paradox is not a few hubs pulling an average up; it is how almost everyone sees the network.</p>
-    <p class="idea"><b>In one line.</b> Following a friendship lands you on a popular person more often than picking a person at random does, so "a friend" has far more friends than "a person": 73.8 against 20 here.</p>
-
-    <details class="deep"><summary>The math, step by step: the friendship paradox, in both forms</summary><div>
-      <p><b>What we want to show.</b> (1) The average friend count over friend ends equals \(E[d^2]/E[d]\), and it is at least the average friend count \(E[d]\). (2) The person-by-person version is also at least \(E[d]\).</p>
-      <p><b>Symbols.</b> <var>n</var> people, <var>m</var> friendships. \(\deg(v)\) is the number of friends of person <var>v</var>. The friend ends add up to \(\sum_v \deg(v) = 2m\), because each friendship adds 1 to two people's counts. \(E[d] = 2m/n\) is the average friend count, \(E[d^2] = \frac1n\sum_v \deg(v)^2\) the average of its square.</p>
-      <p><b>Step 1: the chance of landing on <var>v</var>.</b> Pick one of the 2<var>m</var> friend ends uniformly. Person <var>v</var> owns \(\deg(v)\) of them, so the end is <var>v</var>'s with probability \(\deg(v)/2m\). In the six-person example Ben owns 4 of 14 ends: probability 4/14.</p>
-      <p><b>Step 2: the average over ends.</b> Weight each person's friend count by that probability:</p>
-      <div class="eq">\[ \sum_v \deg(v)\cdot\frac{\deg(v)}{2m} = \frac{\sum_v \deg(v)^2}{\sum_v \deg(v)} = \frac{\tfrac1n\sum_v \deg(v)^2}{\tfrac1n\sum_v \deg(v)} = \frac{E[d^2]}{E[d]}. \]</div>
-      <p>Six people: \(\sum \deg^2 = 4 + 16 + 16 + 1 + 4 + 1 = 42\), \(\sum \deg = 14\), ratio 3, as counted by hand.</p>
-      <p><b>Step 3: compare with \(E[d]\).</b> The <b>variance</b> of the friend counts is \(\operatorname{Var}(d) = E[d^2] - E[d]^2\), the average squared distance from the mean. Substitute \(E[d^2] = E[d]^2 + \operatorname{Var}(d)\):</p>
-      <div class="eq">\[ \frac{E[d^2]}{E[d]} = \frac{E[d]^2 + \operatorname{Var}(d)}{E[d]} = E[d] + \frac{\operatorname{Var}(d)}{E[d]} \;\ge\; E[d]. \]</div>
-      <p>A variance is never negative, so the friend average is at least the person average, and the gap is \(\operatorname{Var}(d)/E[d]\). It is zero only when everyone has the same number of friends. On the week's graph \(E[d^2] = 1{,}476.8\), so \(\operatorname{Var}(d) = 1{,}476.8 - 400 = 1{,}076.8\) and \(20 + 1{,}076.8/20 = 73.84\).</p>
-      <p><b>Step 4: the person-by-person version.</b> Now each person averages their own friends' counts, and we average over people. Add up all those personal averages and regroup the sum by friendship. A friendship between <var>u</var> and <var>v</var> appears twice: in <var>u</var>'s average it contributes \(\deg(v)/\deg(u)\), and in <var>v</var>'s it contributes \(\deg(u)/\deg(v)\). So</p>
-      <div class="eq">\[ \sum_u \frac{1}{\deg u}\sum_{f\text{ friend of }u} \deg f \;=\; \sum_{\text{friendships } \{u,v\}}\Big(\frac{\deg v}{\deg u} + \frac{\deg u}{\deg v}\Big). \]</div>
-      <p><b>Step 5: each pair term is at least 2.</b> For positive <var>x</var> and <var>y</var>, \(x/y + y/x - 2 = (x - y)^2/(xy) \ge 0\). Check: 4/1 + 1/4 = 4.25 ≥ 2. So the whole sum is at least 2 per friendship, which is 2<var>m</var>. Divide by <var>n</var>: the average over people is at least \(2m/n = E[d]\). (If some people have no friends, average over the rest; the bound only gets stronger.) Six people: (4 + 2.25 + 2.25 + 4 + 4 + 4) / 6 ≈ 3.42 ≥ 2.33.</p>
-      <p><b>What was shown.</b> Both ways of asking "how many friends do my friends have" give at least the average friend count, with equality only when all counts are equal. The first gap is exactly the variance divided by the mean.</p>
-    </div></details>
-
-    <h4>So what does one request cost?</h4>
-    <p>Day 1's code reads the whole friend list of each of your friends. So the cost of your request, its <b>work</b>, is the sum of your friends' friend counts. For You in the six-person example: Ben has 4 friends and Chloe has 4, so the work is 8. Your own count (2) does not decide it; your friends' counts do.</p>
-    <div class="code"><div class="ch"><span>skew.py · work per request</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def work(adj, u):
-    """Entries Day 1's exact scan reads for user u: the sum of u's friends' friend counts."""
-    return sum(len(adj[f]) for f in adj[u])</code></pre></div>
-    <p>Now average the work over everyone. Each person's list is read once by each of their friends. Ben's list has 4 entries and is read by 4 people, so Ben adds 4 × 4 = 16 to the total. Every person <var>v</var> adds their friend count squared. So</p>
-    <div class="eq">\[ \text{average work} \;=\; \frac{1}{n}\sum_{v} \deg(v)^2 \;=\; E[d^2] \;=\; 1{,}477, \qquad\text{not}\qquad E[d]^2 = 20^2 = 400. \]</div>
-    <p>That is the whole story of the 400 estimate: it squared the average, when the cost is the average of the squares. The gap between the two is the variance, and the heavy tail makes the variance large. A person with <var>d</var> friends does roughly <var>d</var> × 73.8 work, because each of their friends is "a friend" with 73.8 friends on average:</p>
-    <div class="tablewrap"><table>
-      <tr><th>Friend count</th><th class="num">people</th><th class="num">average work</th><th class="num">work per friend</th></tr>
-      <tr><td>4–7</td><td class="num">756</td><td class="num">403</td><td class="num">67.4</td></tr>
-      <tr><td>8–15</td><td class="num">4,325</td><td class="num">907</td><td class="num">77.5</td></tr>
-      <tr><td>16–31</td><td class="num">3,893</td><td class="num">1,633</td><td class="num">78.1</td></tr>
-      <tr><td>32–63</td><td class="num">733</td><td class="num">3,005</td><td class="num">72.7</td></tr>
-      <tr><td>64–127</td><td class="num">173</td><td class="num">5,808</td><td class="num">69.0</td></tr>
-      <tr><td>128–255</td><td class="num">47</td><td class="num">10,683</td><td class="num">63.2</td></tr>
-      <tr><td>256–511</td><td class="num">12</td><td class="num">17,000</td><td class="num">53.6</td></tr>
-      <tr class="hi"><td>512–1,480</td><td class="num">7</td><td class="num">37,461</td><td class="num">39.1</td></tr>
-    </table></div>
-    <p>For almost everyone the work per friend stays near 70–78. It falls for the most popular people, because there are only a handful of other giants to be friends with: the person with 1,480 friends is friends with all 6 other people who have more than 500, and the other 1,474 of their friends are ordinary. Still, their request is the most expensive one on the graph: 51,806 entries, 35 times the average. Because work is a sum of stored friend counts, a server can compute it before running a request, which is what lets later designs route or limit expensive requests.</p>
-    <p class="idea"><b>In one line.</b> A request's cost is the sum of your friends' friend counts; averaged over people it is the average of squared friend counts, 1,477 here, and the heavy tail is why that is 3.7 times the naive 400.</p>
-
-    <details class="deep"><summary>The math, step by step: average work is E[d²], and why hubs fall below d × 73.8</summary><div>
-      <p><b>What we want to show.</b> (1) The average work over people is exactly \(E[d^2]\). (2) Under a stated assumption, a person with <var>d</var> friends does \(d \cdot E[d^2]/E[d]\) work on average; and why the most popular people do less.</p>
-      <p><b>Step 1: write the total.</b> Let \(W(u) = \sum_{f \text{ friend of } u} \deg(f)\) be the work for person <var>u</var>. The total over everyone, \(\sum_u W(u)\), adds \(\deg(f)\) once for each pair (<var>u</var>, <var>f</var>) where <var>f</var> is a friend of <var>u</var>.</p>
-      <p><b>Step 2: count the same pairs the other way.</b> Fix <var>f</var>. How many pairs have <var>f</var> in the second place? One per friend of <var>f</var>: \(\deg(f)\) pairs. Each adds \(\deg(f)\). So <var>f</var> contributes \(\deg(f)^2\), and</p>
-      <div class="eq">\[ \sum_u W(u) = \sum_f \deg(f)^2 \quad\Rightarrow\quad \frac1n\sum_u W(u) = E[d^2]. \]</div>
-      <p>Six people: works 8, 9, 9, 4, 8, 4 add to 42, and squares 4, 16, 16, 1, 4, 1 add to 42. On the week's graph both totals are 14,768,324, and 14,768,324 / 10,000 = 1,476.8. This kind of argument, counting one set of pairs in two orders, is called <b>double counting</b>.</p>
-      <p><b>Step 3: work for a given friend count, under an assumption.</b> Assume the friends of a person behave like friend ends picked at random, regardless of how many friends that person has. Then each of the <var>d</var> friends has \(E[d^2]/E[d]\) friends on average (the paradox, Step 2 above), and the average of a sum is the sum of the averages:</p>
-      <div class="eq">\[ E[W(u) \mid \deg u = d] = d \cdot \frac{E[d^2]}{E[d]} \approx 73.8\,d. \]</div>
-      <p>The assumption says there is no <b>degree correlation</b>: popular people are not especially likely to befriend each other, nor to avoid each other. Measured as the correlation between the friend counts at the two ends of a friendship (the <b>assortativity</b>), the week's graph has −0.037, close to none. The table above fits 73.8 × <var>d</var> within 10% for friend counts 4–127, which is 98.8% of people.</p>
-      <p><b>Step 4: why the most popular people fall below.</b> Two effects. First, a person cannot be their own friend, but random friend ends include their own. Removing them gives \(d\,(\sum_v \deg(v)^2 - d^2)/(2m - d)\); for the person with 1,480 friends that lowers the prediction from 109,286 to 93,771. Second, there are only 7 people with more than 500 friends, and you can be friends with each at most once. Random friend ends would land on those 7 about 50 times out of 1,480; the most popular person can reach them at most 6 times, and does. Its true work is 51,806. This limit is called the <b>structural cutoff</b>: in a network without repeated friendships, giants are forced to connect to ordinary people.</p>
-      <p><b>What was shown.</b> The average work per request is exactly the average squared friend count. For typical people, work is about 73.8 times their friend count; for giants it is less, because there are not enough other giants to go around.</p>
-    </div></details>
-
-    <div class="part"><b>Practice</b><ul>
-      <li>Compute the average friend count, the friend-end average and the person-by-person average on the past graph (first 80,000 friendships) and on the full graph. Does the gap grow as the network grows?</li>
-      <li>Run <code>preferential_attachment</code> and measure the share with at least 20, 40 and 80 friends; compare with \((m/k)^2\). Replace the pick with <code>rng.randrange(u)</code> for the uniform rule and compare with \(e^{-(k-m)/m}\).</li>
-      <li>Reproduce the work-by-friend-count table, and add a column with the self-excluded prediction from the deep block.</li>
-      <li>Prove that the friend-end average is at least 1 and at least \(E[d]\) when nobody is friendless.</li>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"Top k of <var>n</var>: sort is O(<var>n</var> log <var>n</var>); a size-k min-heap whose root is the worst kept is O(<var>n</var> log <var>k</var>) time and O(<var>k</var>) memory and works on a stream; quickselect is O(<var>n</var>) on average; if the scores are small integers, bucket them in O(<var>n</var> + max)."</li>
+      <li>Say the tie rule before you code, and put it in the key.</li>
+      <li>Follow-ups to expect. <em>k close to n?</em> Quickselect, or select the <var>n</var> − <var>k</var> to drop. <em>Output in order?</em> Pop the heap: <var>k</var> log <var>k</var> more. <em>Data too big for memory?</em> The heap reads it once and keeps <var>k</var>. <em>Worst case matters?</em> Quickselect with a median-of-medians pivot is O(<var>n</var>) always, rarely worth it in practice.</li>
     </ul></div>
-    <div class="part"><b>Problem variations</b><ul>
-      <li>Shuffle the graph while keeping everyone's friend count: repeatedly pick two friendships <var>a</var>–<var>b</var> and <var>c</var>–<var>d</var> and swap them to <var>a</var>–<var>d</var> and <var>c</var>–<var>b</var> when that creates no duplicate. Does the average work change? Does the table by friend count?</li>
-      <li>A follower network is directed. Which counts decide the cost of "people followed by the people you follow"?</li>
-      <li>A star: one person with <var>n</var> − 1 friends, everyone else with only that one friend. Compute all three averages as <var>n</var> grows.</li>
-    </ul></div>
-    <details class="sol"><summary>Solution</summary><div>
-      <p><b>Shuffle.</b> Friend counts are unchanged, so \(\sum_v \deg(v)^2\) and the average work are unchanged (it depends only on the counts, by the double-counting proof). The shuffle destroys any degree correlation, so the table moves toward 73.8 × <var>d</var>, except for the giants, which still hit the structural cutoff.</p>
-      <p><b>Directed.</b> The scan reads the "following" list of each person you follow. The total over everyone is \(\sum_v \text{in}(v)\cdot\text{out}(v)\): <var>v</var>'s list has out(<var>v</var>) entries and is read by its in(<var>v</var>) followers. A celebrity with many followers who follows few is cheap; one who follows many is expensive.</p>
-      <p><b>Star.</b> \(E[d] = 2(n-1)/n \to 2\). Friend-end average: \(((n-1)^2 + (n-1))/(2(n-1)) = n/2\). Person-by-person: the centre's friends have 1 each, each leaf's one friend has \(n-1\), so \((1 + (n-1)(n-1))/n \approx n\). Both grow without limit while the average stays at 2.</p>
-      <p><b>Bound.</b> \(E[d^2] \ge E[d]\) because \(d^2 \ge d\) for every whole number \(d \ge 1\); \(E[d^2] \ge E[d]^2\) because the variance is never negative. Divide both by \(E[d]\).</p>
+    <p class="idea"><b>In one line.</b> Compare each candidate with the worst of the ten kept, and most are rejected in one comparison; when the scores are small whole numbers, do not compare at all.</p>
+
+    <details class="deep"><summary>The math, step by step: the cost of sorting, why the heap is correct and how often it changes, quickselect's average</summary><div>
+      <p>Order candidates by the key (−count, id): smaller is better, and no two keys are equal because ids differ.</p>
+      <p><b>Sorting needs about n log₂ n comparisons.</b> A comparison sort must be able to produce any of the <var>n</var>! orders, and each comparison has two outcomes, so it needs at least \(\log_2 n!\) comparisons in the worst case. Stirling's formula gives</p>
+      <div class="eq">\[ \log_2 n! \;\approx\; n\log_2 n - n\log_2 e \;\approx\; n\log_2 n - 1.44\,n . \]</div>
+      <p>For <var>n</var> = 1,195, \(\log_2 1{,}195 \approx 10.2\), so about 10.2 − 1.44 ≈ 8.8 comparisons per candidate. Python's sort made 9.41 on average over the sampled users, close to this floor.</p>
+      <p><b>The heap is correct.</b> Claim: after the first <var>i</var> candidates, the heap holds exactly the best \(\min(i,k)\) of them. True while it fills. Suppose it is true and the heap is full; its root <var>r</var> is the <var>k</var>-th best so far. A new candidate <var>x</var> worse than <var>r</var> is beaten by <var>k</var> candidates already seen, so it cannot be in the top <var>k</var>, and leaving the heap alone is right. If <var>x</var> beats <var>r</var>, the new top <var>k</var> is the old one with <var>r</var> swapped for <var>x</var>, which is what <code>heapreplace</code> does.</p>
+      <p><b>How often the heap changes.</b> In a random order, the <var>i</var>-th candidate goes in exactly when it is among the best <var>k</var> of the first <var>i</var>. Each of those <var>i</var> is equally likely to hold any rank, so for <var>i</var> &gt; <var>k</var> the chance is \(k/i\). Try <var>k</var> = 10: the 20th candidate goes in with chance 1/2, the 1,000th with chance 1/100. Adding up,</p>
+      <div class="eq">\[ E[\text{insertions}] \;=\; k + \sum_{i=k+1}^{n}\frac{k}{i} \;\approx\; k\Big(1 + \ln\frac{n}{k}\Big). \]</div>
+      <p>Each insertion costs O(log <var>k</var>); every other candidate costs one comparison. So the total is about <var>n</var> + (a few dozen) × log₂ <var>k</var>, which is why 1.17 per candidate was measured.</p>
+      <p><b>Quickselect averages a constant per candidate.</b> A round over <var>s</var> keys costs at most 2<var>s</var> comparisons (two passes). Call a round <em>good</em> if the pivot lands in the middle half of the ranks; a random pivot is good with probability 1/2, so on average two rounds bring one good one, and after it at most 3<var>s</var>/4 keys remain. Shrinking from <var>s</var> to 3<var>s</var>/4 therefore costs at most 4<var>s</var> on average, and</p>
+      <div class="eq">\[ E[\text{comparisons}] \;\le\; 4n\Big(1 + \tfrac34 + \big(\tfrac34\big)^2 + \cdots\Big) \;=\; \frac{4n}{1 - 3/4} \;=\; 16\,n . \]</div>
+      <p>The bound is loose: 2.18 per candidate was measured. The worst case, a bad pivot every round, is \(n^2\), and random pivots make it vanishingly unlikely.</p>
+      <p><b>Bucket counting.</b> Dropping <var>n</var> candidates costs <var>n</var>; the walk visits at most <var>M</var> buckets, where <var>M</var> is the largest count; choosing the smallest ids from the buckets taken costs O(<var>b</var> log <var>k</var>) for a bucket of size <var>b</var>. In total O(<var>n</var> + <var>M</var>), and here <var>M</var> ≤ 67.</p>
     </div></details>
-    <div class="part"><b>Further reading</b><ul>
-      <li>Scott L. Feld, "Why Your Friends Have More Friends Than You Do", <em>American Journal of Sociology</em> 96(6), 1991; <a href="https://en.wikipedia.org/wiki/Friendship_paradox">Friendship paradox</a> (Wikipedia)</li>
-      <li>Albert-László Barabási, <a href="http://networksciencebook.com/"><em>Network Science</em></a>, chapters 4 (the scale-free property) and 5 (the Barabási–Albert model), free online</li>
-      <li>Barabási and Albert, "Emergence of Scaling in Random Networks", <em>Science</em> 286, 1999; <a href="https://en.wikipedia.org/wiki/Preferential_attachment">Preferential attachment</a> (Wikipedia)</li>
-      <li>Clauset, Shalizi and Newman, <a href="https://arxiv.org/abs/0706.1062">Power-law distributions in empirical data</a>, <em>SIAM Review</em>, 2009: how to fit and test a power law</li>
-      <li>Ugander, Karrer, Backstrom and Marlow, <a href="https://arxiv.org/abs/1111.4503">The Anatomy of the Facebook Social Graph</a>, 2011: friend counts, the friendship paradox and degree correlations measured on a real social network</li>
-      <li>M. E. J. Newman, <em>Networks</em>, 2nd ed., Oxford University Press, 2018: degree distributions and the configuration model</li>
-    </ul></div>
   </div>
+</section>
 
-  <!-- ============================================================ ALGORITHMS -->
-  <div class="blk alg">
-    <div class="bh"><span class="kind">Algorithms · suggestions for everyone at once, and who pays for them</span></div>
+<section class="s" id="day2-stream" data-sec="day2-stream">
+  <div class="shead"><span class="sno">DAY 2 · THE TOP K</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span></span></div>
+  <h2>The top k when the data keeps arriving</h2>
+  <p><b>The situation.</b> The dictionary does not sit still. The week's 100,000 friendships are stored in the order they formed (column <code>t</code> of <code>edges.csv</code>), and every new one changes someone's counts. Replaying them in that order turns the static question into three stream questions: keep every user's ten fresh as friendships arrive; track a statistic of the stream, such as the median; and find the items that occur most often when there are too many items to count them all.</p>
 
-    <h4>The situation: compute everyone's ten in one batch</h4>
-    <p>Instead of computing suggestions when someone opens the app, a common plan computes everyone's top ten in one batch job and stores them, so a request only looks up a list. The batch needs the mutual-friend count of every pair of non-friends who share at least one friend. How much work is that, and who causes it?</p>
-    <p><b>The obvious way:</b> take every pair of people and intersect their friend lists (Day 1). With 10,000 people that is 49,995,000 pairs. Only 11.9% of them share any friend at all, so almost all of the intersections return nothing. At a billion people the number of pairs is about 5 × 10<sup>17</sup>. The work has to come from pairs that actually share a friend.</p>
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · counts that change: keeping every top 10 fresh</span></div>
 
-    <h4>Count through the middle friend</h4>
-    <p>Turn the question around. Instead of asking each pair "who do you have in common?", let each person introduce every pair of their own friends. If Ben is friends with both You and Dev, then Ben is one mutual friend of You and Dev. Work it by hand on the six people:</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">Ben</span><span class="seq"><span class="nd">You</span><span class="nd">Chloe</span><span class="nd">Dev</span><span class="nd">Esha</span></span><span class="why">6 pairs. You–Chloe and Chloe–Esha are already friends. Adds 1 to <b>You–Dev, You–Esha, Chloe–Dev, Dev–Esha</b>.</span></div>
-      <div class="step"><span class="k">Chloe</span><span class="seq"><span class="nd">You</span><span class="nd">Ben</span><span class="nd">Esha</span><span class="nd">Farid</span></span><span class="why">6 pairs. You–Ben and Ben–Esha are already friends. Adds 1 to <b>You–Esha, You–Farid, Ben–Farid, Esha–Farid</b>.</span></div>
-      <div class="step"><span class="k">You, Esha</span><span class="seq"><span class="nd">Ben</span><span class="nd">Chloe</span></span><span class="why">One pair each, Ben–Chloe, already friends. Dev and Farid have one friend each: no pairs.</span></div>
-    </div><div class="cap">Result: You–Esha 2, every other pair 1. For You that is Esha (2), then Dev and Farid (1 each): Day 1's answer, found without asking any pair directly. Total: 14 pairs visited.</div></div>
-    <div class="code"><div class="ch"><span>batch.py · mutual counts for everyone, one middle friend at a time</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def all_pairs_mutual(adj):
-    """Mutual-friend counts for every non-friend pair u &lt; v that has one,
-    found by letting each person w introduce every pair of their own friends."""
-    m = Counter()
-    for w in range(len(adj)):
-        nb = sorted(adj[w])
-        for i, u in enumerate(nb):             # each pair of w's friends, once
-            for v in nb[i + 1:]:
-                if v not in adj[u]:
-                    m[u, v] += 1               # w is one mutual friend of u and v
-    return m</code></pre></div>
-    <p>Only pairs that share a friend are ever touched. On the week's graph the function finds 5,954,305 pairs of non-friends with at least one mutual friend.</p>
+    <h4>7 · What one new friendship changes</h4>
+    <p><b>By hand.</b> Suppose Dev and Chloe become friends. Chloe is now a mutual friend of Dev and of each of Chloe's other friends: You, Esha and Farid (Ben is already Dev's friend, so nothing changes there). That is three pairs, each counted from both sides: six count changes. And Chloe stops being Dev's candidate, because she is now his friend. For You, Dev goes from 1 to 2 and ties with Esha; Dev has the smaller id, so You's top 2 becomes <b>Dev, Esha</b>.</p>
+    <p><b>The idea.</b> Keep the counts and the top 10 for every user, and update them in place. A count that goes <em>up</em> is easy: the candidate either is already in the ten (move it up) or must beat the worst of the ten to enter, the same one comparison as the size-k heap. A candidate that <em>disappears</em> (because the two just became friends) is the hard case: if it was in the ten, the eleventh best has to be found again, from the full dictionary.</p>
+    <div class="code"><div class="ch"><span>code/day_2/fresh.py · exact top k under new friendships</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class FreshTopK:
+    def __init__(self, k=10):
+        self.k = k
+        self.friends = defaultdict(set)
+        self.count = defaultdict(dict)   # user -&gt; {candidate: mutual friends}, always exact
+        self.top = defaultdict(list)     # user -&gt; sorted (-count, id), at most k long
+        self.changes = self.top_changes = self.recomputes = 0
 
-    <h4>The bill: the sum of squared friend counts, and who pays it</h4>
-    <p>A person with <var>d</var> friends introduces every pair of them: about <var>d</var>²/2 pairs. Ben, with 4 friends, made 6; a person with 1,480 friends makes 1,094,460. The total work is the sum of squared friend counts, the same quantity as the average work per request, now for everyone at once. On the week's graph it is 14,768,324 entry reads if you run Day 1's code for each person, exactly 10,000 × 1,477; counting each unordered pair once, as the code above does, visits 7,284,162 pairs, about half. If all 10,000 people had exactly 20 friends, the same 100,000 friendships would cost 10,000 × 20² = 4,000,000. The spread of friend counts, not their number, makes the difference.</p>
-    <p>Who pays? Each person's share of the bill is their friend count squared. Compare their share of friendships with their share of the work:</p>
-    <div class="chart"><div class="t">Share of friend ends against share of the work, for the most popular people</div>
-      <div class="sub">Top 0.1% (10 people)</div>
-      <div class="br"><span>friend ends</span><span class="tr"><i style="width:3.9%;--c:var(--muted)"></i></span><span class="v">3.9%</span></div>
-      <div class="br"><span>work</span><span class="tr"><i style="width:51.6%"></i></span><span class="v">51.6%</span></div>
-      <div class="sub">Top 1% (100 people)</div>
-      <div class="br"><span>friend ends</span><span class="tr"><i style="width:11.1%;--c:var(--muted)"></i></span><span class="v">11.1%</span></div>
-      <div class="br"><span>work</span><span class="tr"><i style="width:69.1%"></i></span><span class="v">69.1%</span></div>
-      <div class="sub">Top 10% (1,000 people)</div>
-      <div class="br"><span>friend ends</span><span class="tr"><i style="width:32.1%;--c:var(--muted)"></i></span><span class="v">32.1%</span></div>
-      <div class="br"><span>work</span><span class="tr"><i style="width:83.9%"></i></span><span class="v">83.9%</span></div>
-      <div class="cap">The single most popular person (1,480 friends) causes 1,480² = 2,190,400 of the 14,768,324 units: 14.8% of all the work, alone.</div>
-    </div>
-    <p>Squaring turns a mild concentration of friendships into a severe concentration of work. It also breaks the obvious way to spread the batch over many machines. Split the job by middle friend, and the machine that gets the most popular person has 15% of the whole job by itself; everyone else waits for it. Suri and Vassilvitskii named this "the curse of the last reducer" (reading below).</p>
-    <p class="idea"><b>In one line.</b> Computing mutual counts for everyone costs the sum of squared friend counts, so the most popular 1% of people cause 69% of the work.</p>
+    def bump(self, x, y):
+        """y gained one mutual friend with x. Counts only grow here, so x's top k changes
+        only if y is already in it or now beats the worst of it."""
+        self.changes += 1
+        c = self.count[x][y] = self.count[x].get(y, 0) + 1
+        t = self.top[x]
+        for i, (_, v) in enumerate(t):
+            if v == y:
+                t[i] = (-c, y)
+                if i &gt; 0 and t[i] &lt; t[i - 1]:
+                    t.sort(); self.top_changes += 1
+                return
+        if len(t) &lt; self.k or (-c, y) &lt; t[-1]:
+            t.append((-c, y)); t.sort(); del t[self.k:]; self.top_changes += 1
 
-    <details class="deep"><summary>The math, step by step: the cost is Σ deg², counted two ways</summary><div>
-      <p><b>What we want to show.</b> Both natural orders of computing all mutual counts do work equal to the sum of squared friend counts (up to the small term 2<var>m</var>), so the cost is decided by the spread of friend counts.</p>
-      <p><b>Step 1: mutual counts as a matrix product.</b> Write the friendships as a table <var>A</var> with a row and a column per person: \(A_{uv} = 1\) if <var>u</var> and <var>v</var> are friends, 0 otherwise (the <b>adjacency matrix</b>, Day 1). Multiply <var>A</var> by itself. By the rule for matrix products, \((A^2)_{uv} = \sum_w A_{uw}A_{wv}\). A term is 1 exactly when <var>w</var> is a friend of both <var>u</var> and <var>v</var>, so the sum counts their mutual friends. All mutual counts are one matrix product.</p>
-      <p><b>Step 2: the middle-friend order.</b> Group the sum by <var>w</var>. Person <var>w</var> contributes 1 to \((A^2)_{uv}\) for every ordered pair (<var>u</var>, <var>v</var>) of distinct friends of <var>w</var>: \(\deg(w)(\deg(w) - 1)\) pairs. The total is</p>
-      <div class="eq">\[ \sum_w \deg(w)\big(\deg(w) - 1\big) = \sum_w \deg(w)^2 - \sum_w \deg(w) = \sum_w \deg(w)^2 - 2m. \]</div>
-      <p>The code visits unordered pairs, half of this: \(\sum_w \binom{\deg w}{2}\). Six people: \(\binom{2}{2} + \binom{4}{2} + \binom{4}{2} + \binom{2}{2} = 1 + 6 + 6 + 1 = 14\), the 14 pairs of the hand example.</p>
-      <p><b>Step 3: the row order.</b> Row <var>u</var> of \(A^2\) is the sum of the rows of <var>u</var>'s friends. Computing it reads each friend's list once, which is Day 1's <code>suggest(adj, u)</code>, with work \(W(u)\). Over all people, by double counting (the ML block), \(\sum_u W(u) = \sum_f \deg(f)^2\). This row-by-row order is <b>Gustavson's algorithm</b> for multiplying sparse matrices.</p>
-      <p><b>Step 4: what the sum depends on.</b> \(\sum_v \deg(v)^2 = n\,E[d^2] = n\,(E[d]^2 + \operatorname{Var}(d))\). Two networks with the same number of people and friendships have the same \(E[d]\), so they differ only by the variance. The week's graph: \(10{,}000 \times (400 + 1{,}076.8) = 14{,}768{,}000\) up to rounding, against 4,000,000 with no variance.</p>
-      <p><b>What was shown.</b> Whichever order you choose, computing all mutual counts costs about \(\sum_v \deg(v)^2\), and that is the number of friendships times the friend-end average, set by the variance of friend counts.</p>
-    </div></details>
+    def unlink(self, x, y):
+        """x and y just became friends, so y stops being x's candidate. If y was in x's top k,
+        the next best must be found again from the full dict."""
+        if self.count[x].pop(y, None) is not None and any(v == y for _, v in self.top[x]):
+            self.recomputes += 1
+            self.top[x] = sorted(heapq.nsmallest(self.k, ((-c, v) for v, c in self.count[x].items())))
 
-    <h4>Triangles, and starting from the least popular corner</h4>
-    <p>A <b>triangle</b> is three people who are all friends with each other: a friend of a friend who became a friend. Day 1's clustering coefficient is built from triangle counts, and counting them is the classic example of an algorithm whose cost depends on the spread of friend counts. LeetCode 1761 is the same loop with a different total.</p>
-    <p><b>The obvious way:</b> for each person, check every pair of their friends for a friendship. That is the middle-friend loop again, so it costs the same 7,284,162 checks on the week's graph, and 1,094,460 of them at the most popular person alone. It also finds each triangle three times, once from each corner.</p>
-    <p><b>The idea.</b> Count each triangle only at its <em>least popular</em> corner. Rank everyone by friend count (ties broken by id), and point every friendship from the less popular person to the more popular one. Each person then only looks upward: at friends ranked above them. The most popular person has nobody above them, so they do no work at all. On the six people, Chloe and Ben have 4 friends each (Chloe ranks higher, by id), You and Esha have 2, Dev and Farid 1:</p>
-    <div class="dg">
-      <svg viewBox="0 0 470 258" width="100%" style="max-width:32rem;display:block;margin:0 auto" role="img" aria-label="The six-person graph with every friendship pointing from the less popular person to the more popular one. Chloe, the most popular, has no arrows leaving her.">
-        <defs><marker id="d2arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
-        <g style="stroke:var(--muted);stroke-width:1.6;fill:none" marker-end="url(#d2arr)">
-          <line x1="82" y1="153" x2="145" y2="94"/>
-          <line x1="85" y1="157" x2="283" y2="45"/>
-          <line x1="176" y1="75" x2="281" y2="41"/>
-          <line x1="151" y1="198" x2="159" y2="100"/>
-          <line x1="295" y1="143" x2="178" y2="88"/>
-          <line x1="309" y1="133" x2="302" y2="55"/>
-          <line x1="392" y1="200" x2="310" y2="52"/>
-        </g>
-        <g style="font:600 13px var(--f-mono);text-anchor:middle">
-          <circle cx="300" cy="35" r="17" style="fill:var(--accent);stroke:none"/><text x="300" y="40" style="fill:var(--panel)">C</text>
-          <circle cx="160" cy="80" r="17" style="fill:var(--accent-soft);stroke:var(--accent)"/><text x="160" y="85" style="fill:var(--ink)">B</text>
-          <circle cx="70" cy="165" r="17" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="70" y="170" style="fill:var(--ink)">You</text>
-          <circle cx="310" cy="150" r="17" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="310" y="155" style="fill:var(--ink)">E</text>
-          <circle cx="150" cy="215" r="17" style="fill:var(--panel);stroke:var(--line)"/><text x="150" y="220" style="fill:var(--ink)">D</text>
-          <circle cx="400" cy="215" r="17" style="fill:var(--panel);stroke:var(--line)"/><text x="400" y="220" style="fill:var(--ink)">F</text>
-        </g>
-        <g style="font:12px var(--f-display);fill:var(--muted)">
-          <text x="325" y="30">Chloe · 4 friends · 0 up</text>
-          <text x="138" y="66" style="text-anchor:end">Ben · 4 friends · 1 up</text>
-          <text x="20" y="200">You · 2 · 2 up</text>
-          <text x="310" y="184" style="text-anchor:middle">Esha · 2 · 2 up</text>
-          <text x="175" y="228">Dev · 1 · 1 up</text>
-          <text x="400" y="250" style="text-anchor:middle">Farid · 1 · 1 up</text>
-        </g>
-      </svg>
-      <div class="cap">Every arrow points from fewer friends to more. Chloe receives four arrows and sends none, so she starts no work.</div>
-    </div>
-    <p>Now, for each arrow <var>u</var> → <var>v</var>, ask which people above <var>v</var> are also above <var>u</var>. You → Ben: above Ben is Chloe, and Chloe is above You too: triangle {You, Ben, Chloe}. Esha → Ben: Chloe is above Esha too: triangle {Esha, Ben, Chloe}. Dev → Ben: Chloe is not Dev's friend, no triangle. Every other arrow ends at Chloe, who has nobody above her. Total: 3 checks and 2 triangles, against 14 checks the obvious way.</p>
-    <div class="code"><div class="ch"><span>triangles.py · each triangle once, at its least popular corner</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def count_triangles(adj):
-    """Each triangle counted once, at its least popular corner."""
-    n = len(adj)
-    rank = [0] * n
-    for i, v in enumerate(sorted(range(n), key=lambda v: (len(adj[v]), v))):
-        rank[v] = i                            # fewer friends = lower rank; ties by id
-    up = [{w for w in adj[v] if rank[w] &gt; rank[v]} for v in range(n)]   # point edges upward
-    t = 0
-    for u in range(n):
-        for v in up[u]:                        # u ranks below v
-            t += sum(1 for w in up[v] if w in up[u])   # w ranks above both, and is u's friend
-    return t</code></pre></div>
-    <p>The week's graph has 71,976 triangles. Here is the work each method needs to find them:</p>
-    <div class="chart"><div class="t">Checks needed to count the 71,976 triangles</div>
-      <div class="br"><span>every pair of friends</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">7,284,162</span></div>
-      <div class="br"><span>point arrows by id only</span><span class="tr"><i style="width:33.4%;--c:var(--trace)"></i></span><span class="v">2,433,041</span></div>
-      <div class="br"><span>point arrows by friend count</span><span class="tr"><i style="width:13%"></i></span><span class="v">944,405</span></div>
-      <div class="cap">With arrows by friend count, nobody has more than 19 people above them, and the most popular person has 0. With arrows by id alone, one person still has 1,185 above them.</div>
-    </div>
-    <p>Pointing arrows by id also counts each triangle once, but a popular person with a small id keeps most of their friends "above" them and still does a lot of work. Ordering by friend count is what makes the guarantee: however skewed the network, the work grows no faster than <var>m</var><sup>1.5</sup> for <var>m</var> friendships, instead of with squared friend counts.</p>
-    <p class="idea"><b>In one line.</b> Point each friendship toward the more popular person and look only upward: every triangle is found once, popular people do almost no work, and the total is at most about <var>m</var><sup>1.5</sup>.</p>
+    def add_friendship(self, a, b):
+        self.unlink(a, b); self.unlink(b, a)
+        for f in self.friends[b]:            # b becomes a mutual friend of a and each f
+            if f != a and f not in self.friends[a]:
+                self.bump(a, f); self.bump(f, a)
+        for f in self.friends[a]:            # a becomes a mutual friend of b and each f
+            if f != b and f not in self.friends[b]:
+                self.bump(b, f); self.bump(f, b)
+        self.friends[a].add(b); self.friends[b].add(a)
 
-    <details class="deep"><summary>The math, step by step: each triangle counted once, and the O(m<sup>1.5</sup>) bound</summary><div>
-      <p><b>What we want to show.</b> (1) The upward loop counts every triangle exactly once. (2) Nobody has more than \(\sqrt{2m}\) people above them. (3) So the total work is at most \(m\sqrt{2m}\).</p>
-      <p><b>The order.</b> Write \(u \prec v\) ("<var>u</var> ranks below <var>v</var>") if <var>u</var> has fewer friends, or the same number and a smaller id. Any two different people are comparable and there are no ties. For person <var>v</var>, write \(d^+(v)\) for the number of friends ranked above them ("up") and \(d^-(v) = \deg(v) - d^+(v)\) for those below.</p>
-      <p><b>Step 1: every triangle is counted once.</b> Take a triangle and name its corners in rank order, \(a \prec b \prec c\). Its arrows are <var>a</var> → <var>b</var>, <var>a</var> → <var>c</var>, <var>b</var> → <var>c</var>. When the loop handles <var>a</var> → <var>b</var>, it finds <var>c</var> above <var>b</var> and above <var>a</var>: counted. Handling <var>a</var> → <var>c</var> would need <var>b</var> above <var>c</var>, but \(b \prec c\). Handling <var>b</var> → <var>c</var> would need <var>a</var> above <var>c</var>, but \(a \prec c\). So exactly once. And anything the loop counts is a triangle, since all three friendships exist.</p>
-      <p><b>Step 2: nobody has many people above them.</b> Small numbers first. Suppose some person had 500 people above them on the week's graph. Each of those ranks above them, so has at least as many friends: at least 500 each. That is at least 500 × 500 = 250,000 friend ends, more than the 200,000 that exist. Impossible. In symbols: let \(k = d^+(v)\). Each of the <var>k</var> people above <var>v</var> has \(\deg \ge \deg(v) \ge k\) friends, so together they own at least \(k^2\) friend ends. All friend ends add up to 2<var>m</var>, so \(k^2 \le 2m\) and \(k \le \sqrt{2m}\). On the week's graph \(\sqrt{200{,}000} \approx 447\); the measured maximum is 19.</p>
-      <p><b>Step 3: add up the work.</b> Handling an arrow <var>u</var> → <var>v</var> costs \(d^+(v)\) lookups (one per person above <var>v</var>). Person <var>v</var> is at the head of \(d^-(v)\) arrows. So the total is</p>
-      <div class="eq">\[ \sum_{\text{arrows } u \to v} d^+(v) \;=\; \sum_v d^-(v)\, d^+(v) \;\le\; \sqrt{2m}\sum_v d^-(v) \;=\; \sqrt{2m}\cdot m. \]</div>
-      <p>The inequality uses Step 2 for each \(d^+(v)\); the last step uses that every friendship is one arrow, so the \(d^-(v)\) add up to <var>m</var>. Add \(O(n \log n + m)\) to sort and point the arrows. The obvious loop's \(\sum_v \binom{\deg v}{2}\) can be as large as \(n^2/2\) for a star with only \(n - 1\) friendships; this bound holds for every network. On the week's graph the bound is 44.7 million and the measured work is 944,405, 2% of it.</p>
-      <p><b>What was shown.</b> Ranking by friend count and looking only upward counts each triangle once with at most \(m\sqrt{2m} = O(m^{1.5})\) checks, whatever the spread of friend counts. The result goes back to Chiba and Nishizeki (1985).</p>
-    </div></details>
+    def suggest(self, u):
+        return [v for _, v in self.top[u]]
 
-    <h4>Capping hubs, and what it costs in quality</h4>
-    <p>Back to a single request. The most expensive part of anyone's request is reading the lists of their most popular friends. The simplest fix: skip any friend with more than some number of friends, the <b>cap</b>. Then the work of a request is at most cap × (your own friend count), whatever the network looks like.</p>
-    <div class="code"><div class="ch"><span>capped.py · Day 1's scan, skipping hubs</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def suggest_capped(adj, u, k=10, cap=200):
-    """Day 1's exact scan, except a friend with more than `cap` friends is skipped."""
-    direct = adj[u]
-    count = Counter()
-    for f in direct:
-        if len(adj[f]) &gt; cap:
-            continue                           # a hub: its list costs the most and says the least
-        for v in adj[f]:
-            if v != u and v not in direct:
-                count[v] += 1
-    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), count</code></pre></div>
-    <p>What does it save, and what does it lose? Two quality measures. First, of the ten people Day 1's exact code suggests, how many does the capped version still suggest? (Day 3 turns this into a metric, recall against the exact answer.) Second, the real test: build suggestions on the past graph (the first 80% of friendships) and count how many of everyone's top ten became friends in the last 20%.</p>
-    <div class="tablewrap"><table>
-      <tr><th>Cap</th><th class="num">people skipped</th><th class="num">average work</th><th class="num">p99 work</th><th class="num">largest work</th><th class="num">exact top 10 kept</th><th class="num">future friends found</th></tr>
-      <tr><td>none</td><td class="num">0</td><td class="num">1,477</td><td class="num">7,284</td><td class="num">51,806</td><td class="num">100%</td><td class="num">1,845</td></tr>
-      <tr><td>1,000</td><td class="num">4</td><td class="num">882</td><td class="num">4,366</td><td class="num">48,449</td><td class="num">87.7%</td><td class="num">1,866</td></tr>
-      <tr><td>500</td><td class="num">7</td><td class="num">760</td><td class="num">3,718</td><td class="num">46,571</td><td class="num">83.6%</td><td class="num">1,872</td></tr>
-      <tr class="hi"><td>200</td><td class="num">27</td><td class="num">597</td><td class="num">2,909</td><td class="num">41,558</td><td class="num">73.7%</td><td class="num">1,889</td></tr>
-      <tr><td>100</td><td class="num">100</td><td class="num">456</td><td class="num">2,338</td><td class="num">34,236</td><td class="num">61.4%</td><td class="num">1,845</td></tr>
-      <tr><td>50</td><td class="num">354</td><td class="num">334</td><td class="num">1,671</td><td class="num">26,317</td><td class="num">48.6%</td><td class="num">1,831</td></tr>
-    </table></div>
-    <p>Skipping just 27 people (0.27%) cuts the average work by 60% and the p99 by 60%. A quarter of the exact suggestions change, yet the suggestions predict future friendships slightly <em>better</em>: 1,889 against 1,845. The reason is the paradox again. A mutual friend with 1,000 friends is weak evidence that two of those 1,000 know each other; a mutual friend with 15 is strong evidence. The exact count treats them the same, so hubs add cost and noise. Day 4 turns this into a weight (Adamic–Adar). Cap too hard, at 50, and real evidence goes too: quality falls below the exact version.</p>
-    <p>Look at the largest-work column: it barely moves. The most expensive request belongs to the most popular person, and their 1,480 friends are mostly ordinary people, so a cap on friends' friend counts does not help them. Bounding that request needs a different idea: reading only some of your own friends.</p>
-    <p class="idea"><b>In one line.</b> Skipping the lists of a few hubs cuts most of the work and costs little or no quality, because hubs are the most expensive and least informative mutual friends; it does not fix the hub's own request.</p>
 
-    <div class="part"><b>Practice</b><ul>
-      <li><a href="https://leetcode.com/problems/find-the-town-judge/">997. Find the Town Judge</a>: friend counts in a directed graph.</li>
-      <li><a href="https://leetcode.com/problems/maximal-network-rank/">1615. Maximal Network Rank</a>: two friend counts and one shared friendship.</li>
-      <li><a href="https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/">1761. Minimum Degree of a Connected Trio in a Graph</a>: triangle listing with the upward trick.</li>
-      <li><a href="https://leetcode.com/problems/find-center-of-star-graph/">1791. Find Center of Star Graph</a>: the extreme hub.</li>
-      <li>Own: run <code>all_pairs_mutual</code> using only middle friends with at most 200 friends. What share of pairs lose all their mutual friends?</li>
-      <li>Own: prove that pointing arrows by id alone counts each triangle once, and build a network with <var>m</var> friendships on which it does about <var>m</var>² work.</li>
-    </ul></div>
-    <div class="part"><b>Problem variations</b><ul>
-      <li>List the triangles instead of counting them. Show the output alone can have about <var>m</var><sup>1.5</sup> triangles, so the upward loop is as fast as possible for listing.</li>
-      <li>1615 with a billion cities: only cities with the top two road counts can be in a best pair. Prove it, then count the pairs you must check.</li>
-      <li>For each friendship, count the triangles through it (how "embedded" it is) with the same upward loop.</li>
-      <li>The batch job is split by middle friend. Split each hub's pairs into chunks of at most 100,000 updates. How many chunks does the most popular person need?</li>
-    </ul></div>
-    <details class="sol"><summary>Solution</summary><div>
-      <div class="code"><div class="ch"><span>lc_997.py · Find the Town Judge, O(n + |trust|)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findJudge(n, trust):
-    score = [0] * (n + 1)
-    for a, b in trust:
-        score[a] -= 1                          # trusting someone disqualifies a
-        score[b] += 1                          # being trusted counts for b
-    for p in range(1, n + 1):
-        if score[p] == n - 1:                  # possible only if trusted by all and trusting none
-            return p
-    return -1</code></pre></div>
-      <p>The judge is trusted by <var>n</var> − 1 people and trusts nobody. Trusted-by is at most <var>n</var> − 1 and trusts is at least 0, so "trusted-by minus trusts = <var>n</var> − 1" happens only for the judge, and one score per person suffices.</p>
-      <div class="code"><div class="ch"><span>lc_1615.py · Maximal Network Rank, O(n² + m)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def maximalNetworkRank(n, roads):
-    deg = [0] * n
-    road = set()
-    for a, b in roads:
-        deg[a] += 1; deg[b] += 1
-        road.add((min(a, b), max(a, b)))
-    best = 0
-    for a in range(n):
-        for b in range(a + 1, n):
-            best = max(best, deg[a] + deg[b] - ((a, b) in road))   # a shared road counts once
-    return best</code></pre></div>
-      <p>The rank of a pair is the number of roads touching either city: the two road counts, minus 1 if the road between them was counted twice.</p>
-      <div class="code"><div class="ch"><span>lc_1761.py · Minimum Degree of a Connected Trio, O(m^1.5)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def minTrioDegree(n, edges):
-    adj = [set() for _ in range(n + 1)]
-    for a, b in edges:
-        adj[a].add(b); adj[b].add(a)
-    deg = [len(s) for s in adj]
-    up = [[w for w in adj[v] if (deg[w], w) &gt; (deg[v], v)] for v in range(n + 1)]
-    best = math.inf
-    for u in range(1, n + 1):
-        for v in up[u]:
-            for w in up[v]:
-                if w in adj[u]:                # u, v, w is a trio, found once
-                    best = min(best, deg[u] + deg[v] + deg[w] - 6)
-    return -1 if best == math.inf else best</code></pre></div>
-      <p>The same upward order as <code>count_triangles</code>, so each trio is found once. A trio's degree is the number of edges leaving it: the three counts minus the 6 ends of its own three edges.</p>
-      <div class="code"><div class="ch"><span>lc_1791.py · Find Center of Star Graph, O(1)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findCenter(edges):
-    (a, b), (c, d) = edges[0], edges[1]
-    return a if a in (c, d) else b             # the centre is on every edge, so on the first two</code></pre></div>
-      <p>The centre is on every edge, so it is the one endpoint the first two edges share.</p>
-      <p><b>Bad case for id order.</b> A star whose centre has id 0, plus friendships among the leaves: every leaf friendship makes the loop scan the centre's long upward list. <b>Hub chunks.</b> The most popular person has 1,480 × 1,479 = 2,188,920 ordered pairs, so 22 chunks of at most 100,000.</p>
-    </div></details>
-    <div class="part"><b>Further reading</b><ul>
-      <li>Chiba and Nishizeki, "Arboricity and Subgraph Listing Algorithms", <em>SIAM Journal on Computing</em> 14(1), 1985</li>
-      <li>Schank and Wagner, "Finding, Counting and Listing All Triangles in Large Graphs, an Experimental Study", WEA 2005</li>
-      <li>Suri and Vassilvitskii, "Counting Triangles and the Curse of the Last Reducer", WWW 2011</li>
-      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/"><em>Mining of Massive Datasets</em></a>, chapter 10 (counting triangles, also on many machines)</li>
-      <li>Gustavson, "Two Fast Algorithms for Sparse Matrices: Multiplication and Permuted Transposition", <em>ACM Transactions on Mathematical Software</em> 4(3), 1978</li>
-    </ul></div>
-  </div>
+# The running example, built one friendship at a time.
+YOU, BEN, CHLOE, DEV, ESHA, FARID = range(6)
+s = FreshTopK(k=2)
+for a, b in [(YOU, BEN), (YOU, CHLOE), (BEN, CHLOE), (BEN, DEV), (BEN, ESHA), (CHLOE, ESHA), (CHLOE, FARID)]:
+    s.add_friendship(a, b)
+assert s.count[YOU] == {DEV: 1, ESHA: 2, FARID: 1} and s.suggest(YOU) == [ESHA, DEV]
+before = s.changes
+s.add_friendship(DEV, CHLOE)                 # Chloe now vouches for Dev with You, Esha and Farid
+assert s.changes - before == 6               # Dev-You, Dev-Esha, Dev-Farid, both directions
+assert CHLOE not in s.count[DEV]             # a friend is no longer a candidate
+assert s.count[YOU] == {DEV: 2, ESHA: 2, FARID: 1}
+assert s.suggest(YOU) == [DEV, ESHA]         # a tie at 2; Dev has the smaller id</code></pre></div>
+    <p><b>Measured, replaying all 100,000 friendships.</b> The friendships caused <b>14,280,420</b> count changes: <b>143 per new friendship</b> on average and 3,308 for the most expensive one (a friendship involving a user with very many friends touches all their friends). Only <b>5.2%</b> of those changes altered anybody's top 10; the rest stopped at the one comparison with the worst of the ten. Removals forced <b>16,795</b> recomputes from the full dictionary, 16.8 per 100 friendships: each one is a new friend who had been in the other person's top 10 when the friendship formed. At the end, every user's counts and top 10 were checked against a fresh recount.</p>
+    <p>The takeaway for design: per new friendship, the work is proportional to how many friends the two people have, and almost none of it changes what anyone sees. That is the case for updating stored lists incrementally rather than recomputing them; Day 5 builds that pipeline.</p>
 
-  <!-- ============================================================ ML: percentiles -->
-  <div class="blk ml">
-    <div class="bh"><span class="kind">ML · how slow is slow: percentiles and p99</span></div>
+    <h4>8 · A stream of numbers: the k-th largest so far (LeetCode 703)</h4>
+    <p>The size-k heap needs nothing from the future: it reads each item once and keeps <var>k</var>. That makes it the standard answer for "top k of a stream" and for <a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">703</a>, the day's second live problem: after each new number, report the <var>k</var>-th largest seen so far. The root of a size-k min-heap is exactly that number.</p>
+    <div class="code"><div class="ch"><span>code/day_2/stream.py · LeetCode 703</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class KthLargest:
+    """703: a size-k min-heap; its root is the k-th largest number seen so far."""
 
-    <h4>The situation: one number for "fast enough"</h4>
-    <p>We want to promise that suggestions are fast for nearly everyone. Which number do we watch? Try the obvious one, the average, on ten logged request costs: 310, 120, 950, 480, 205, 3,100, 640, 150, 820, 270. They add to 7,045, so the average is 704.5. But 7 of the 10 requests cost less than that, and one cost 3,100, more than four times as much. The average answers "how much work in total". It does not answer "how bad is a bad request".</p>
+    def __init__(self, k, nums):
+        self.k, self.heap = k, []
+        for x in nums:
+            self.add(x)
 
-    <h4>Percentiles, in plain words</h4>
-    <p>Sort the costs. The <b>p50</b> (the median) is the value halfway along: half the requests cost at most that. The <b>p95</b> is the value 95% of the way along, and the <b>p99</b> is 99% of the way: only the slowest 1% cost more. The simplest rule, <b>nearest rank</b>, takes the value at position ⌈<var>p</var> × <var>n</var>⌉ in the sorted list, counting from 1.</p>
-    <div class="dg"><div class="steps">
-      <div class="step"><span class="k">p50</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd hot">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd">3100</span></span><span class="why">position ⌈0.5 × 10⌉ = <b>5</b> → 310.</span></div>
-      <div class="step"><span class="k">p90</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd hot">950</span><span class="nd">3100</span></span><span class="why">position ⌈0.9 × 10⌉ = <b>9</b> → 950.</span></div>
-      <div class="step"><span class="k">p99</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd hot">3100</span></span><span class="why">position ⌈9.9⌉ = <b>10</b>: with ten requests, "p99" is just the largest.</span></div>
-    </div><div class="cap">With ten requests the p99 is the maximum, so it says nothing about the slowest 1%. How many requests a p99 needs is the question of the next section.</div></div>
-    <div class="code"><div class="ch"><span>latency.py · nearest-rank percentile</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def percentile(xs, p):
-    """Nearest rank: sort, then take the value at position ceil(p * n), counting from 1.
-    p = 0.5 is the median (p50), p = 0.99 is p99."""
-    s = sorted(xs)
-    return s[max(1, math.ceil(p * len(s))) - 1]</code></pre></div>
-    <p>Now the week's graph. Take the work of all 10,000 requests, one per person:</p>
-    <div class="tablewrap"><table>
-      <tr><th></th><th class="num">average</th><th class="num">p50</th><th class="num">p90</th><th class="num">p95</th><th class="num">p99</th><th class="num">p99.9</th><th class="num">largest</th></tr>
-      <tr class="hi"><td>entries read per request</td><td class="num">1,477</td><td class="num">1,023</td><td class="num">3,015</td><td class="num">3,870</td><td class="num">7,284</td><td class="num">18,461</td><td class="num">51,806</td></tr>
-    </table></div>
-    <p>Only 38.7% of requests cost more than the average, and the p99 is 4.9 times the average. A budget set from the average would be broken by more than a third of requests. And here the slow requests are not bad luck: they belong to the same people every time, the ones with popular friends. The slowest 1% have a median of 151 friends, against 15 for everyone.</p>
-    <p>Why count entries instead of timing the code? Both were measured. Timed twice on one laptop, Day 1's code had a median of 0.23 ms per request both times, a p99 of 1.42 ms and then 1.48 ms, and a maximum of 6.6 ms and then 7.2 ms. Time tracks entries read closely (correlation 0.98 in the first run, 0.92 in the second), yet the slowest call belonged to a different person in each run: the one with 1,132 friends, then the one with 1,480. A clock also measures whatever else the machine was doing at that moment. Entries read are exact and identical on every run and every machine, so they make a clean stand-in for cost here; on a real server you record time, and everything below applies to it unchanged.</p>
-    <p class="idea"><b>In one line.</b> State a speed promise as a percentile ("p99 under budget"), because the average hides the tail and the tail is where the unhappy users are.</p>
+    def add(self, val):
+        if len(self.heap) &lt; self.k:
+            heapq.heappush(self.heap, val)
+        elif val &gt; self.heap[0]:
+            heapq.heapreplace(self.heap, val)
+        return self.heap[0]</code></pre></div>
+    <p>O(log <var>k</var>) per number and O(<var>k</var>) memory, however long the stream runs.</p>
 
-    <h4>How sure is a p99 from a sample?</h4>
-    <p>A real dashboard never sees every request; it sees a sample. Here we know the true p99 of all 10,000 requests, 7,284, so we can check how well a sample estimates it. Draw <var>n</var> requests at random and compute their p99. One draw gives one number. How far off might it be?</p>
-    <p><b>The idea of the bootstrap</b> (Efron, 1979): you cannot draw more samples from the real traffic, so treat your sample as if it were the whole traffic and draw from <em>it</em>. Pick <var>n</var> values from the sample with replacement (some repeat, some are left out), compute the p99, and repeat 2,000 times. The spread of those 2,000 p99s shows how much the estimate moves from sample to sample. The middle 95% of them is a 95% <b>confidence interval</b>.</p>
-    <div class="code"><div class="ch"><span>latency.py · bootstrap interval for p99</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def bootstrap_ci(xs, p=0.99, b=2000, level=0.95, seed=0):
-    """Resample the data with replacement b times, take each resample's p99,
-    and keep the middle 95% of those b values."""
-    rng = np.random.default_rng(seed)
-    x = np.asarray(xs)
-    n = len(x)
-    k = max(1, math.ceil(p * n)) - 1           # the nearest-rank position, 0-based
-    resamples = x[rng.integers(0, n, size=(b, n))]
-    reps = np.sort(resamples, axis=1)[:, k]
-    a = (1 - level) / 2
-    return np.quantile(reps, a), np.quantile(reps, 1 - a)</code></pre></div>
-    <div class="tablewrap"><table>
-      <tr><th class="num">requests sampled</th><th class="num">sample p99</th><th class="num">bootstrap 95% interval</th><th class="num">contains the true 7,284?</th></tr>
-      <tr><td class="num">100</td><td class="num">5,240</td><td class="num">[4,286, 9,894]</td><td class="num">yes</td></tr>
-      <tr><td class="num">1,000</td><td class="num">9,891</td><td class="num">[6,469, 14,518]</td><td class="num">yes</td></tr>
-      <tr class="hi"><td class="num">10,000</td><td class="num">7,213</td><td class="num">[6,663, 8,143]</td><td class="num">yes</td></tr>
-    </table></div>
-    <p>A sample of 1,000 overshot by 36%: its p99 landed on one of a few sparse large values. Its interval still caught the truth. But does "95%" really mean 95%? Repeat the whole experiment 200 times at each size and count how often the interval contains 7,284:</p>
-    <div class="chart"><div class="t">How often a "95%" bootstrap interval for p99 contains the true p99 (200 repetitions each)</div>
-      <div class="br"><span>100 requests</span><span class="tr"><i style="width:62.5%;--c:var(--bad)"></i></span><span class="v">62.5%</span></div>
-      <div class="br"><span>300 requests</span><span class="tr"><i style="width:78%;--c:var(--trace)"></i></span><span class="v">78.0%</span></div>
-      <div class="br"><span>1,000 requests</span><span class="tr"><i style="width:94.5%"></i></span><span class="v">94.5%</span></div>
-      <div class="cap">At 100 requests the interval misses more than a third of the time. Its average width falls from 8,173 at 100 requests to 3,937 at 1,000.</div>
-    </div>
-    <p>Why does it fail at 100? A resample can only contain values that are in the sample, so no bootstrap p99 is larger than the sample's largest value. With 100 requests there is a 0.99<sup>100</sup> = 36.6% chance that none of them is in the true slowest 1%. Then the sample's largest value is below the true p99, every resampled p99 is too, and the interval must miss. The coverage can never beat 1 − 0.366 = 63.4%, and it measured 62.5%. The fix is more data: to say anything about p99 you need at least 299 requests per group you compare, and in practice many more; for p99.9, about 3,000.</p>
-    <p class="idea"><b>In one line.</b> A p99 from a sample needs an interval, and it needs hundreds of requests at the very least; the bootstrap gives the interval for any statistic, but it cannot see a tail the sample never reached.</p>
-
-    <details class="deep"><summary>The math, step by step: order statistics, an interval that needs no assumptions, and why p99 needs 299 samples</summary><div>
-      <p><b>What we want to show.</b> (1) Why nearest rank is the natural estimate. (2) An exact 95% interval for the true p99 that holds for any distribution. (3) Why no method can give a finite upper end with fewer than 299 samples. (4) Why tail percentiles are noisy.</p>
-      <p><b>Symbols.</b> Let <var>X</var> be the cost of a random request and \(F(x) = P(X \le x)\) the share of requests costing at most <var>x</var> (the <b>distribution function</b>). The true <var>p</var>-quantile is the smallest <var>x</var> with \(F(x) \ge p\); for <var>p</var> = 0.99 it is the p99, written \(q_{0.99}\). A sample is \(X_1, \dots, X_n\). Sorted, its <var>k</var>-th smallest value is written \(X_{(k)}\), the <var>k</var>-th <b>order statistic</b>.</p>
-      <p><b>Step 1: nearest rank.</b> In the sample, the share at or below \(X_{(k)}\) is at least <var>k</var>/<var>n</var>. The smallest <var>k</var> with \(k/n \ge p\) is \(k = \lceil pn \rceil\). So the sample's own p99 is \(X_{(\lceil 0.99 n \rceil)}\): the same definition, applied to the sample. Ten requests: ⌈9.9⌉ = 10.</p>
-      <p><b>Step 2: one count decides everything.</b> Fix a value <var>x</var>. Each sample is at most <var>x</var> with probability \(F(x)\), independently, so the number of samples at most <var>x</var>, call it \(B_x\), is a binomial count: <var>n</var> coin flips with success chance \(F(x)\). The <var>k</var>-th smallest value is at most <var>x</var> exactly when at least <var>k</var> samples are:</p>
-      <div class="eq">\[ X_{(k)} \le x \iff B_x \ge k. \]</div>
-      <p><b>Step 3: an interval with no assumptions.</b> Put <var>x</var> = \(q_{0.99}\). For a continuous distribution \(F(q_{0.99}) = 0.99\), so the count <var>B</var> of samples below the true p99 is Binomial(<var>n</var>, 0.99), whatever the distribution looks like. For ranks <var>j</var> &lt; <var>k</var>, the true p99 lies between \(X_{(j)}\) and \(X_{(k)}\) exactly when \(j \le B &lt; k\):</p>
-      <div class="eq">\[ P\big(X_{(j)} \le q_{0.99} &lt; X_{(k)}\big) = \sum_{i=j}^{k-1} \binom{n}{i}\, 0.99^i\, 0.01^{\,n-i}. \]</div>
-      <p>Choose the closest pair of ranks whose probability is at least 0.95, and \([X_{(j)}, X_{(k)}]\) is a 95% interval. This is the <b>order-statistic interval</b>. It never uses the shape of <var>F</var>.</p>
-      <div class="code"><div class="ch"><span>latency.py · the order-statistic interval</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def order_stat_ci(xs, p=0.99, level=0.95):
-    """Distribution-free interval [x_(j), x_(k)]: the narrowest pair of ranks with
-    P(j &lt;= B &lt; k) &gt;= level, where B ~ Binomial(n, p) counts samples below the true p99."""
-    s = sorted(xs)
-    n = len(s)
-    logpmf = [math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1)
-              + i * math.log(p) + (n - i) * math.log1p(-p) for i in range(n + 1)]
-    cdf = np.cumsum(np.exp(logpmf))            # cdf[i] = P(B &lt;= i)
-    best = None
-    for j in range(1, n + 1):                  # P(j &lt;= B &lt; k) = cdf[k-1] - cdf[j-1]
-        k = int(np.searchsorted(cdf, cdf[j - 1] + level - 1e-12)) + 1
-        k = min(k, n + 1)                      # k = n + 1: no sample value is high enough
-        if cdf[k - 1] - cdf[j - 1] &gt;= level - 1e-12 and (best is None or k - j &lt; best[1] - best[0]):
-            best = (j, k)
-    j, k = best
-    return s[j - 1], (s[k - 1] if k &lt;= n else math.inf)</code></pre></div>
-      <p>On the same samples as the table: 100 requests gives [4,872, ∞), 1,000 gives [7,124, 15,025], 10,000 gives [6,714, 8,228]. Over 200 repetitions it contained the truth 98.5%, 94.0% and 94.5% of the time at 100, 300 and 1,000 requests: close to its promise at every size, where the bootstrap fell to 62.5% and 78.0% at the two smaller sizes.</p>
-      <p><b>Step 4: why 299.</b> The highest rank is <var>n</var>, so the best possible upper end is the sample maximum \(X_{(n)}\). It fails when all <var>n</var> samples are below the true p99, which has probability \(0.99^n\). For a 95% upper end we need \(0.99^n \le 0.05\). Take logarithms (both sides negative, so the inequality flips when dividing):</p>
-      <div class="eq">\[ n \ln 0.99 \le \ln 0.05 \;\Rightarrow\; n \ge \frac{\ln 0.05}{\ln 0.99} = \frac{-2.996}{-0.01005} = 298.07. \]</div>
-      <p>So 299 samples at least. At 100 samples, \(0.99^{100} = 0.366\): that is why the order-statistic interval has no upper end there, and why the bootstrap, which cannot go above the sample maximum, covers at most 63.4%. For p99.9 the same step gives \(\ln 0.05/\ln 0.999 \approx 2{,}994\).</p>
-      <p><b>Step 5: why the tail is noisy.</b> Near the true p99, the share of the sample below <var>x</var> rises at a rate equal to the density \(f(q_{0.99})\): how many requests have costs close to the p99. The share below the true p99 has variance \(0.99 \times 0.01 / n\) (binomial). Turning a share error into a cost error divides by the density, so</p>
-      <div class="eq">\[ \operatorname{Var}(\hat q_{0.99}) \approx \frac{0.99 \times 0.01}{n\, f(q_{0.99})^2}. \]</div>
-      <p>In a heavy tail, few requests have costs near the p99, so the density is tiny and its square in the denominator makes the variance large. Compare the average, whose variance is \(\sigma^2/n\) with no density at all.</p>
-      <p><b>What was shown.</b> The sample p99 is the sorted value at rank ⌈0.99<var>n</var>⌉. A binomial count gives an exact interval around it that works for any distribution. No interval can bound p99 from above with fewer than 299 samples, and tail percentiles are noisy because so few requests live near them.</p>
-    </div></details>
-
-    <div class="part"><b>Practice</b><ul>
-      <li><a href="https://leetcode.com/problems/find-median-from-data-stream/">295. Find Median from Data Stream</a>: a running p50 with two heaps. Then change it to keep a running p99.</li>
-      <li>Find the smallest number of samples for which the order-statistic interval for p99.9 has a finite upper end; then for p50.</li>
-      <li>On the week's graph, sample 300 requests 200 times and measure the coverage of both intervals. Explain the result using 0.99<sup>300</sup>.</li>
-      <li>Bootstrap the <em>difference</em> of two p99s: requests with a cap of 200 against requests without, on the same sampled people. Why resample people, and not each version separately?</li>
-    </ul></div>
-    <div class="part"><b>Problem variations</b><ul>
-      <li>Costs arrive as a stream of billions of values and you cannot keep them all. Estimate p99 in bounded memory. (A histogram with buckets that grow by a fixed ratio bounds the relative error by the bucket width.)</li>
-      <li>Two servers each report their own p99. Can you combine two p99s into the p99 of all requests? Show that you cannot in general, and say what each server must send instead.</li>
-      <li>Requests are not independent: after a popular person posts, all their friends open the app at once. Which step of the binomial argument breaks?</li>
-    </ul></div>
-    <details class="sol"><summary>Solution</summary><div>
-      <div class="code"><div class="ch"><span>lc_295.py · Find Median from Data Stream, O(log n) per number</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MedianFinder:
-    """Two heaps: `lo` holds the smaller half (as negatives, a max-heap), `hi` the larger half."""
+    <h4>9 · A statistic of a stream: the running median with two heaps (LeetCode 295)</h4>
+    <p><b>The situation.</b> A useful health number for any friend-suggestion product: when a friendship forms, how many mutual friends did the two people already have? If most new friendships close a triangle through a mutual friend, mutual-friend counting is aimed at the right people. We want this as a running number, without storing every value.</p>
+    <p><b>The idea.</b> Keep the smaller half of the values in a max-heap and the larger half in a min-heap. The median sits at the top of one or between the two tops. Each new value goes through the lower heap into the upper one, and one value moves back if the halves become uneven: O(log <var>n</var>) per value. Moving the boundary from the half to 90% gives any percentile with the same two heaps.</p>
+    <div class="code"><div class="ch"><span>code/day_2/stream.py · LeetCode 295, and any percentile</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MedianFinder:
+    """295: lower half in a max-heap (stored negated), upper half in a min-heap; len(lo) - len(hi) is 0 or 1."""
 
     def __init__(self):
         self.lo, self.hi = [], []
 
     def addNum(self, num):
         heapq.heappush(self.lo, -num)
-        heapq.heappush(self.hi, -heapq.heappop(self.lo))   # move the largest of lo into hi
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))   # the largest of the lower half moves up
         if len(self.hi) &gt; len(self.lo):
-            heapq.heappush(self.lo, -heapq.heappop(self.hi))   # keep len(lo) &gt;= len(hi)
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))
 
     def findMedian(self):
         if len(self.lo) &gt; len(self.hi):
             return float(-self.lo[0])
-        return (-self.lo[0] + self.hi[0]) / 2</code></pre></div>
-      <p>The lower half sits in a max-heap (stored as negatives) and the upper half in a min-heap, with the lower half at most one larger. Every new number passes through the lower heap into the upper one, so the halves stay ordered. For a running p99, keep the heaps at a 99 : 1 size ratio instead of 1 : 1.</p>
-      <p><b>Smallest sample.</b> The upper end is finite only if \(1 - p^n \ge 0.95\), so \(n \ge \ln 0.05/\ln p\): 2,995 for p99.9 and 5 for p50 (a two-sided p50 interval needs \(2 \times 0.5^n \le 0.05\), so 6).</p>
-      <p><b>300 samples.</b> \(0.99^{300} = 0.049\), so the bootstrap's ceiling is about 95%; in practice it falls short (78.0% measured), because resamples rarely contain the few largest values in the right proportion. The order-statistic interval measured 94.0%.</p>
-      <p><b>Paired difference.</b> The same heavy people are heavy in both versions, so the two p99s move together. Resampling people and computing both versions on the same resample keeps that link, which makes the interval for the difference both correct and narrower.</p>
-      <p><b>Combining p99s.</b> Two situations with the same pair of server p99s but different overall p99s prove no formula can work. A: server 1 has 100 values of 1 (p99 = 1), server 2 has 100 values of 2 (p99 = 2); overall rank 198 of 200 is 2. B: server 1 as before, server 2 has 98 zeros and 2 twos (its 99th value is 2, so p99 = 2); overall the values are 98 zeros, 100 ones, 2 twos, and rank 198 is 1. Each server must send a summary that adds up, such as a histogram on shared bucket boundaries.</p>
-      <p><b>Dependence.</b> <var>B</var> is binomial only if samples are independent. Bursts of linked requests make <var>B</var> spread more than a binomial, so the true interval is wider than the formula says.</p>
+        return (-self.lo[0] + self.hi[0]) / 2
+
+
+class QuantileFinder:
+    """Any running percentile with the same two heaps: lo keeps the ceil(q*n) smallest numbers,
+    so its largest one is the nearest-rank q-quantile. q = 0.5 gives the lower median."""
+
+    def __init__(self, q):
+        self.q, self.n, self.lo, self.hi = q, 0, [], []
+
+    def add(self, num):
+        self.n += 1
+        heapq.heappush(self.lo, -num)
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))
+        while len(self.lo) &lt; math.ceil(self.q * self.n):
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))
+
+    def value(self):
+        return -self.lo[0]</code></pre></div>
+    <p><b>Measured.</b> Treat each block of 10,000 friendships as one "hour" and start fresh heaps at the start of each hour (a <em>tumbling window</em>):</p>
+    <div class="tablewrap"><table>
+      <tr><th>hour</th><th class="num">1</th><th class="num">2</th><th class="num">3</th><th class="num">4</th><th class="num">5</th><th class="num">6</th><th class="num">7</th><th class="num">8</th><th class="num">9</th><th class="num">10</th></tr>
+      <tr><td>median mutual friends</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+      <tr><td>p90</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">2</td><td class="num">2</td><td class="num">3</td></tr>
+      <tr><td>share with at least one</td><td class="num">14%</td><td class="num">31%</td><td class="num">41%</td><td class="num">45%</td><td class="num">49%</td><td class="num">53%</td><td class="num">56%</td><td class="num">58%</td><td class="num">61%</td><td class="num">63%</td></tr>
+    </table></div>
+    <p>Early on, most people have few friends and new friendships rarely have a mutual friend. By the last hour, 63% do and the median is 1. A single number over the whole history would hide that trend; a windowed statistic shows it.</p>
+  </div>
+
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · heavy hitters: too many items to count them all</span></div>
+
+    <h4>10 · Who gained the most friends this hour?</h4>
+    <p><b>The situation.</b> A "trending" feature, or a check for accounts adding friends suspiciously fast, needs the users who gained the most friends in the last hour. Each new friendship is two arrivals, one per person. In the last hour of the replay there are 20,000 arrivals from <b>7,819 different users</b>; the exact top 10 gained 142, 109, 102, 99, 70, 52, 52, 45, 40 and 39 friends.</p>
+    <p><b>The obvious attempt</b> is a dictionary with a counter per user and a top-k at the end. It is exact, and its memory grows with the number of distinct users. Suppose 100 million users each gain a friend in an hour: at 16 bytes per entry that is 1.6 GB per window, per machine that counts. We want memory set by how many winners we need, not by how many users there are.</p>
+
+    <p><b>Misra–Gries: m counters, and everyone pays when there is no room.</b> Keep at most <var>m</var> counters. An arrival with a counter adds one. An arrival with no counter takes a free one. If none is free, every counter drops by one, the newcomer's arrival included, and counters at zero are freed. Each estimate is an <em>under</em>count, by at most <var>N</var>/(<var>m</var>+1) after <var>N</var> arrivals.</p>
+    <p><b>Space-Saving: the newcomer takes over the smallest counter.</b> Same <var>m</var> counters, one change: with no room, the newcomer replaces the item with the smallest counter and inherits its count plus one. Each estimate is now an <em>over</em>count, by at most <var>N</var>/<var>m</var>, and the counter remembers how much of it may be inherited.</p>
+    <div class="code"><div class="ch"><span>code/day_2/stream.py · Space-Saving</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class SpaceSaving:
+    """m counters. A new item takes over the smallest counter and inherits its count + 1,
+    so each estimate is an overcount by at most N/m; the item's error is stored with it."""
+
+    def __init__(self, m):
+        self.m, self.c, self.err = m, {}, {}
+        self.heap = []                          # (count, item), with stale entries skipped lazily
+
+    def add(self, x):
+        if x in self.c:
+            self.c[x] += 1
+        elif len(self.c) &lt; self.m:
+            self.c[x], self.err[x] = 1, 0
+        else:
+            while True:                         # find the current smallest counter
+                cnt, y = heapq.heappop(self.heap)
+                if self.c.get(y) == cnt:
+                    break
+            del self.c[y], self.err[y]
+            self.c[x], self.err[x] = cnt + 1, cnt   # x may have been seen up to cnt times before
+        heapq.heappush(self.heap, (self.c[x], x))
+        if len(self.heap) &gt; 4 * self.m:         # drop stale entries now and then
+            self.heap = [(c, y) for y, c in self.c.items()]
+            heapq.heapify(self.heap)
+
+    def estimate(self, x):
+        return self.c.get(x, 0)
+
+    def top(self, k):
+        return heapq.nsmallest(k, self.c, key=lambda y: (-self.c[y], y))</code></pre></div>
+    <p><b>Measured on the last hour</b> (20,000 arrivals). Recall@10 is the share of the true top 10 that each method returns; the error is averaged over the true top 10.</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">counters m</th><th class="num">bound N/m</th><th class="num">Misra–Gries recall@10</th><th class="num">mean undercount</th><th class="num">Space-Saving recall@10</th><th class="num">mean error</th></tr>
+      <tr><td class="num">20</td><td class="num">1,000</td><td class="num">0.0</td><td class="num">75.0</td><td class="num">0.1</td><td class="num">154.6</td></tr>
+      <tr><td class="num">50</td><td class="num">400</td><td class="num">0.0</td><td class="num">75.0</td><td class="num">0.1</td><td class="num">114.8</td></tr>
+      <tr><td class="num">100</td><td class="num">200</td><td class="num">0.0</td><td class="num">75.0</td><td class="num">0.1</td><td class="num">84.6</td></tr>
+      <tr><td class="num">200</td><td class="num">100</td><td class="num">0.5</td><td class="num">67.3</td><td class="num">0.6</td><td class="num">30.4</td></tr>
+      <tr class="hi"><td class="num">500</td><td class="num">40</td><td class="num">1.0</td><td class="num">37.4</td><td class="num">1.0</td><td class="num">1.6</td></tr>
+    </table></div>
+    <p><b>Read it through the bound.</b> The guarantee covers only items that occur more than <var>N</var>/<var>m</var> times. The leader gained 142 friends, so it is guaranteed only once 20,000/<var>m</var> &lt; 142, that is <var>m</var> ≥ 141. At <var>m</var> = 200 the bound is 100, so the three users above 100 are safe, and recall is 0.6. At <var>m</var> = 500, about one counter for every 16 users who appeared, both methods find the whole top 10, and Space-Saving's counts are within 1.6 on average while Misra–Gries still undercounts by 37.4. This stream is fairly flat: the leader has 0.7% of the arrivals. On a skewed stream (a few accounts with a burst of activity) far fewer counters are enough, which is exactly the case these summaries are built for.</p>
+    <details class="deep"><summary>The math, step by step: why Misra–Gries undercounts by at most N/(m+1), and Space-Saving overcounts by at most N/m</summary><div>
+      <p><b>Misra–Gries.</b> Call an arrival that finds no free counter a <em>decrement step</em>. It lowers <var>m</var> counters by one and throws away its own arrival: <var>m</var> + 1 units of count disappear. Counts never go below zero, and the total that ever went in is <var>N</var>, so there are at most <var>N</var>/(<var>m</var>+1) decrement steps. An item's counter misses one of its arrivals only in a decrement step (its own counter dropped, or it was the newcomer thrown away), so</p>
+      <div class="eq">\[ \text{true}(x) - \frac{N}{m+1} \;\le\; \text{estimate}(x) \;\le\; \text{true}(x). \]</div>
+      <p>Any item with more than <var>N</var>/(<var>m</var>+1) arrivals therefore still has a positive counter at the end: it cannot be lost.</p>
+      <p><b>Space-Saving.</b> Every arrival raises the sum of the counters by exactly one (a takeover replaces a count <var>c</var> by <var>c</var> + 1). So once the counters are full, they add up to <var>N</var>, and the smallest of the <var>m</var> is at most <var>N</var>/<var>m</var>. A newcomer inherits the smallest count, and that inheritance is the only error it ever carries:</p>
+      <div class="eq">\[ \text{true}(x) \;\le\; \text{estimate}(x) \;\le\; \text{true}(x) + \text{err}(x), \qquad \text{err}(x) \le \min \text{counter} \le \frac{N}{m}. \]</div>
+      <p>An item without a counter at the end has been seen at most as often as the current smallest counter, at most <var>N</var>/<var>m</var>, so any item above <var>N</var>/<var>m</var> is kept. The tests in <code>stream.py</code> check all four inequalities on 30 random skewed streams. Because each estimate comes with its error, an item whose (estimate − err) beats the next item's estimate is <em>certainly</em> in the top <var>k</var>.</p>
     </div></details>
+
+    <h4>11 · Count-Min: counts without storing ids</h4>
+    <p><b>The idea.</b> Keep <var>d</var> rows of <var>w</var> counters and one hash function per row. An arrival adds one to its cell in every row. To estimate an item's count, read its <var>d</var> cells and take the smallest. Other items that land in the same cell can only add to it, so the estimate never undercounts, and taking the minimum over rows keeps the excess small. The sketch stores no ids, so for a top k it is paired with a size-k heap of the items with the largest estimates so far.</p>
+    <div class="code"><div class="ch"><span>code/day_2/stream.py · Count-Min, with a small top-k on the side</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class CountMin:
+    """d rows of w counters. An estimate never undercounts, and overcounts by more than
+    (e/w)·N with probability at most e^-d. It stores no ids, so a size-k heap keeps the candidates."""
+
+    P = (1 &lt;&lt; 61) - 1
+
+    def __init__(self, w, d, k, seed=0):
+        rng = random.Random(seed)
+        self.w, self.k = w, k
+        self.ab = [(rng.randrange(1, self.P), rng.randrange(self.P)) for _ in range(d)]
+        self.rows = [[0] * w for _ in range(d)]
+        self.best = {}                          # the k items with the largest estimates so far
+
+    def _cells(self, x):
+        return [((a * x + b) % self.P) % self.w for a, b in self.ab]
+
+    def add(self, x):
+        est = None
+        for row, j in zip(self.rows, self._cells(x)):
+            row[j] += 1
+            est = row[j] if est is None else min(est, row[j])
+        if x in self.best or len(self.best) &lt; self.k:
+            self.best[x] = est
+        else:
+            worst = min(self.best, key=lambda y: (self.best[y], -y))
+            if (est, -x) &gt; (self.best[worst], -worst):
+                del self.best[worst]
+                self.best[x] = est
+
+    def estimate(self, x):
+        return min(row[j] for row, j in zip(self.rows, self._cells(x)))
+
+    def top(self, k):
+        return sorted(self.best, key=lambda y: (-self.estimate(y), y))[:k]</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th class="num">width w (d = 4)</th><th class="num">counters</th><th class="num">recall@10</th><th class="num">mean overcount, true top 10</th><th class="num">largest overcount, all users</th><th class="num">bound (e/w)·N</th></tr>
+      <tr><td class="num">50</td><td class="num">210</td><td class="num">0.6</td><td class="num">351.6</td><td class="num">461</td><td class="num">1,087</td></tr>
+      <tr><td class="num">100</td><td class="num">410</td><td class="num">0.7</td><td class="num">163.1</td><td class="num">225</td><td class="num">544</td></tr>
+      <tr><td class="num">200</td><td class="num">810</td><td class="num">0.7</td><td class="num">79.6</td><td class="num">121</td><td class="num">272</td></tr>
+      <tr><td class="num">500</td><td class="num">2,010</td><td class="num">0.7</td><td class="num">25.6</td><td class="num">51</td><td class="num">109</td></tr>
+    </table></div>
+    <p>The overcount stays well inside the bound for every one of the 7,819 users, and shrinks as <var>w</var> grows. But the top-10 recall stops at 0.7: in a flat stream many users sit close to the cutoff, and collisions lift a few of them above real winners. Count-Min is the right tool for a different question: "how many friends did <em>this</em> user gain?", answered for any user, with sketches that merge by adding cell by cell (across machines or across time windows), using only plain counters. For "which users", Space-Saving, which stores the ids, did better with fewer counters.</p>
+    <details class="deep"><summary>The math, step by step: the Count-Min error bound</summary><div>
+      <p>Fix an item <var>x</var> and one row. Its cell holds true(<var>x</var>) plus the arrivals of every other item hashed to the same cell. With a hash family where two different items collide with probability 1/<var>w</var>, the expected excess is</p>
+      <div class="eq">\[ E[\text{excess}] \;=\; \sum_{y \ne x} \text{true}(y)\cdot\frac1w \;\le\; \frac{N}{w}. \]</div>
+      <p>The excess is never negative, so Markov's inequality applies: the chance it exceeds <var>e</var> times its mean is at most 1/<var>e</var>.</p>
+      <div class="eq">\[ P\Big(\text{excess} > \frac{e}{w}N\Big) \;\le\; \frac1e . \]</div>
+      <p>The estimate is the minimum over <var>d</var> rows with independent hashes, and it is too large only if <em>every</em> row is: probability at most \(e^{-d}\). So with \(w = \lceil e/\varepsilon \rceil\) and \(d = \lceil \ln(1/\delta) \rceil\), every estimate is within \(\varepsilon N\) with probability at least \(1 - \delta\). With <var>d</var> = 4 that probability is \(1 - e^{-4} \approx 98.2\%\) per item; with <var>w</var> = 500 and <var>N</var> = 20,000 the bound is \(2.718 \times 20{,}000 / 500 \approx 109\), and the largest overcount measured was 51.</p>
+    </div></details>
+
+    <h4>12 · Windows: "this hour" in three ways</h4>
+    <ul>
+      <li><b>Tumbling.</b> Start fresh summaries every hour, as the medians above did. Cheap; the answer jumps at the hour boundary.</li>
+      <li><b>Sliding, exact.</b> Keep the last <var>W</var> arrivals in a queue: count the newcomer, uncount the one that fell out. Exact, with memory proportional to <var>W</var>.</li>
+      <li><b>Sliding, approximate.</b> Split the hour into, say, six ten-minute pieces, keep one sketch per piece, and add the six when asked. Count-Min sketches with the same hashes add cell by cell; every ten minutes the oldest piece is dropped. Memory is six sketches, whatever the traffic.</li>
+    </ul>
+    <div class="code"><div class="ch"><span>code/day_2/stream.py · exact counts over the last W arrivals</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class WindowCounts:
+    """Exact counts over the last W arrivals: add the newcomer, forget the one that fell out."""
+
+    def __init__(self, W):
+        self.W, self.q, self.c = W, deque(), Counter()
+
+    def add(self, x):
+        self.q.append(x)
+        self.c[x] += 1
+        if len(self.q) &gt; self.W:
+            old = self.q.popleft()
+            self.c[old] -= 1
+            if self.c[old] == 0:
+                del self.c[old]</code></pre></div>
+
+    <h4>13 · Static or stream: which one does the product need?</h4>
+    <div class="tablewrap"><table>
+      <tr><th>Need</th><th>Shape</th><th>Tool</th></tr>
+      <tr><td>The ten suggestions for one user, when they open the app</td><td>static: the dictionary is built, then read</td><td>bucket counting for counts; size-k heap for model scores</td></tr>
+      <tr><td>Stored lists that stay correct as friendships form</td><td>stream of updates to known counts</td><td>in-place updates against the worst of the ten; recompute on removal</td></tr>
+      <tr><td>Trending: who gained the most friends this hour; bursts of friend requests</td><td>stream with too many distinct items</td><td>Space-Saving (ids and a bound); Count-Min for per-user counts</td></tr>
+      <tr><td>Health and speed: median mutual friends, p99 request cost</td><td>a statistic of a stream</td><td>two heaps, reset per window; mergeable histograms when windows or machines must combine</td></tr>
+    </table></div>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"For top k of a stream, a size-k min-heap: O(log <var>k</var>) per item, O(<var>k</var>) memory. For a running median, two heaps."</li>
+      <li>"For the most frequent items when I cannot count everything: Space-Saving with <var>m</var> counters finds every item above <var>N</var>/<var>m</var> and bounds each count's error; Count-Min answers per-item counts within (<var>e</var>/<var>w</var>)<var>N</var> with probability 1 − <var>e</var><sup>−d</sup>, and sketches add."</li>
+      <li>Follow-ups to expect: <em>only the last hour?</em> Windows, above. <em>Counts can go down?</em> Count-Min handles −1 updates (estimates are then no longer one-sided with the minimum; use the median of the rows); Space-Saving does not.</li>
+    </ul></div>
+    <p class="idea"><b>In one line.</b> When the data never stops, keep a summary whose size is set by the answer you need, and know its error bound.</p>
+  </div>
+</section>
+
+<section class="s" id="day2-scale" data-sec="day2-scale">
+  <div class="shead"><span class="sno">DAY 2 · THE TOP K</span><span class="dims"><span class="dim sys">Systems</span><span class="dim dsa">DSA</span></span></div>
+  <h2>Advanced · at scale: the top k when the counts live on many machines</h2>
+  <p><b>The situation.</b> At a billion users, neither the friend lists nor the candidate counts fit on one machine. They are split into <b>shards</b>, and a request for You asks <var>s</var> shards for their part and combines the answers at a <b>coordinator</b>. Whether "each shard sends its top 10, the coordinator merges" is right depends entirely on how the data was split.</p>
+
+  <div class="blk sys">
+    <div class="bh"><span class="kind">Systems · local top k, then merge</span></div>
+
+    <h4>14 · Each shard sends its top k; a heap of heads merges them</h4>
+    <p><b>When each candidate lives on exactly one shard</b>, for example when candidates are split by id, each shard holds complete counts for its candidates and returns its ten best, best first. The best item overall must be the head of one of these lists. So keep the heads in a heap ordered best-first, pop the best, and push the next item from the same list: LeetCode 23's merge, stopped after <var>k</var> pops.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">start</span><span class="seq"><span class="nd hot">Esha 2</span><span class="nd">Dev 1</span></span><span class="why">shard A sent [Esha 2]; shard B sent [Dev 1, Farid 1]; one head each</span></div>
+      <div class="step"><span class="k">pop 1</span><span class="seq"><span class="pp add">Esha 2</span></span><span class="why">shard A is empty · <b>output Esha</b></span></div>
+      <div class="step"><span class="k">pop 2</span><span class="seq"><span class="pp add">Dev 1</span><span class="lk">push</span><span class="nd">Farid 1</span></span><span class="why"><b>output Dev</b>; k = 2, done</span></div>
+    </div><div class="cap">You's candidates split over two shards. Two pops give Esha, Dev, the same list as on one machine.</div></div>
+    <div class="code"><div class="ch"><span>code/day_2/distributed.py · merge the shards' lists</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def local_top(count, k):
+    """What one shard sends: its k best (count, id) pairs, best first."""
+    return [(v, count[v]) for v in topk_sort(count, k)]
+
+
+def merge_topk(lists, k):
+    """lists: one best-first list of (id, count) per shard. Returns the k best ids overall.
+    Exact when every id lives on exactly one shard. O(s + k log s) for s shards."""
+    heap = [(-lst[0][1], lst[0][0], s, 0) for s, lst in enumerate(lists) if lst]
+    heapq.heapify(heap)                          # one entry per shard: its best unsent item
+    out = []
+    while heap and len(out) &lt; k:
+        _, v, s, i = heapq.heappop(heap)         # the best head is the best item left anywhere
+        out.append(v)
+        if i + 1 &lt; len(lists[s]):
+            w, c = lists[s][i + 1]
+            heapq.heappush(heap, (-c, w, s, i + 1))
+    return out</code></pre></div>
+    <p><b>Cost.</b> The heap never holds more than one entry per shard, so each pop costs about log₂ <var>s</var>, and the merge reads at most <var>s</var> + <var>k</var> items, however many candidates each shard has. <b>Measured</b>: with each user's candidates split by <code>id mod s</code>, the merged top 10 equalled the single-machine top 10 for all 10,000 users at <var>s</var> = 2, 4, 8 and 16, and each shard sent at most 10 pairs.</p>
+
+    <h4>15 · The trap: one candidate's count split across shards</h4>
+    <p><b>How it happens.</b> Day 1's counting pass reads each friend's list. Friend lists are naturally stored with their owner, so friend <var>f</var>'s list lives on shard <var>f</var> mod <var>s</var>. A shard can then count only the mutual friends it stores: it computes a <em>partial</em> count for each candidate, and the true count is the sum over shards. Esha's two mutual friends, Ben and Chloe, can live on different shards.</p>
+    <p><b>A tiny counterexample</b> (hypothetical counts, <var>k</var> = 1). Shard 1 counts Dev 3, Esha 2. Shard 2 counts Farid 3, Esha 2. Each sends its top 1: Dev 3 and Farid 3. The coordinator picks Dev. But Esha's true count is 2 + 2 = 4, more than anyone's, and neither shard ever mentioned her.</p>
+    <div class="dg">
+      <div class="seq"><span class="lk">shard 1&nbsp;</span><span class="nd hot">Dev 3</span><span class="nd">Esha 2</span></div>
+      <div class="seq" style="margin-top:.5rem"><span class="lk">shard 2&nbsp;</span><span class="nd hot">Farid 3</span><span class="nd">Esha 2</span></div>
+      <div class="seq" style="margin-top:.5rem"><span class="lk">sent&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="pp rm">Dev 3</span><span class="pp rm">Farid 3</span><span class="lk">truth</span><span class="pp add">Esha 4</span></div>
+      <div class="cap">Local top 1 per shard, then add up: the winner is the one item each shard ranked second.</div>
+    </div>
+    <div class="code"><div class="ch"><span>code/day_2/distributed.py · local top k on partial counts, and the counterexample</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def split_topk(partials, k):
+    """partials: one dict per shard, candidate -&gt; partial count. Each shard sends its local
+    top k; the coordinator adds up what it received. Ships at most s*k pairs; can miss the winner."""
+    got = Counter()
+    for p in partials:
+        for v, c in local_top(p, k):
+            got[v] += c
+    return topk_sort(got, k), sum(min(k, len(p)) for p in partials)
+
+
+# ---- the trap: Esha's mutual friends are split between two shards (hypothetical counts)
+split = [{DEV: 3, ESHA: 2}, {FARID: 3, ESHA: 2}]   # truth: Esha 4, Dev 3, Farid 3
+assert split_topk(split, 1)[0] == [DEV]             # each shard's top 1 hides Esha
+assert shuffle_topk(split, 1)[0] == [ESHA]
+assert tput_topk(split, 1)[0] == [ESHA]</code></pre></div>
+    <p><b>Measured on the week's data.</b> For every user, shard the mutual-friend counting by middle friend (<var>f</var> mod <var>s</var>), let each shard send its local top 10 of partial counts, and add up what arrives. "Worse" means the list shows someone with fewer mutual friends than someone it left out; ties alone do not count. "Share of best" is the total mutual friends of the ten shown, divided by the best possible total.</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">shards s</th><th class="num">lists differing</th><th class="num">lists worse</th><th class="num">share of best</th><th class="num">pairs sent per user</th></tr>
+      <tr><td class="num">2</td><td class="num">97.5%</td><td class="num">82.1%</td><td class="num">0.920</td><td class="num">19.9</td></tr>
+      <tr><td class="num">4</td><td class="num">99.0%</td><td class="num">94.6%</td><td class="num">0.845</td><td class="num">38.3</td></tr>
+      <tr><td class="num">8</td><td class="num">99.1%</td><td class="num">97.7%</td><td class="num">0.783</td><td class="num">66.3</td></tr>
+      <tr><td class="num">16</td><td class="num">99.1%</td><td class="num">98.5%</td><td class="num">0.744</td><td class="num">98.3</td></tr>
+    </table></div>
+    <p>Even two shards give most users a worse list, and the damage grows with the number of shards: each shard sees a thinner slice of every count, so its local ranking says less about the total. The plan is cheap and fast, and wrong.</p>
+
+    <h4>16 · Two fixes: aggregate first, or prune with a threshold</h4>
+    <p><b>Aggregate by candidate first (shuffle by key).</b> Each shard sends every partial count to the machine that owns that candidate (candidate id mod <var>s</var>). The owner adds them up, and now each candidate lives on exactly one machine with its full count: section 14's merge is exact again. This is the reduce step of Day 1's MapReduce job. The price is shipping every partial count: <b>1,284 pairs per user</b> at <var>s</var> = 2, rising to 1,394 at <var>s</var> = 16, more than the 1,191 candidates because a candidate appears on several shards.</p>
+    <p><b>A threshold algorithm (TPUT).</b> Ship only what could matter, in three rounds:</p>
+    <ol>
+      <li>Each shard sends its top <var>k</var>. The coordinator adds up what it has: a lower bound on each total. Call the <var>k</var>-th best of these τ.</li>
+      <li>Any item whose total reaches τ must have a partial of at least τ/<var>s</var> on some shard (if every share were below τ/<var>s</var>, the sum would be below τ). So each shard sends every item with a partial of at least τ/<var>s</var>.</li>
+      <li>Now every unsent partial is known to be below τ/<var>s</var>, which caps each item's total from above. Items whose cap falls short of the <var>k</var>-th best lower bound are out; for the few left, fetch their missing partials and rank exactly.</li>
+    </ol>
+    <p>On the counterexample: round 1 gives τ = 3 (Dev 3, Farid 3), so the cut is ⌈3/2⌉ = 2; round 2 brings Esha 2 from both shards, total 4; round 3 confirms Esha, 4.</p>
+    <div class="code"><div class="ch"><span>code/day_2/distributed.py · TPUT, exact in three rounds</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def tput_topk(partials, k):
+    """Three rounds, exact. Round 1: each shard sends its top k; tau1 = the k-th best partial sum.
+    Round 2: each shard sends every candidate whose partial count is &gt;= tau1/s. A candidate it does
+    not send has a partial below tau1/s there, which bounds its total from above. Round 3: fetch the
+    missing partials of the candidates whose upper bound still reaches the k-th best lower bound."""
+    s = len(partials)
+    known = [dict() for _ in range(s)]           # what the coordinator has received from each shard
+    for j, p in enumerate(partials):
+        for v, c in local_top(p, k):
+            known[j][v] = c
+    shipped = sum(len(x) for x in known)
+
+    def lower():
+        lo = Counter()
+        for x in known:
+            lo.update(x)
+        return lo
+
+    lo = lower()
+    tau1 = sorted(lo.values(), reverse=True)[k - 1] if len(lo) &gt;= k else 0
+    cut = math.ceil(tau1 / s)                    # a shard sends every partial &gt;= tau1/s
+    for j, p in enumerate(partials):
+        for v, c in p.items():
+            if c &gt;= cut and v not in known[j]:
+                known[j][v] = c
+                shipped += 1
+    lo = lower()
+    tau2 = sorted(lo.values(), reverse=True)[k - 1] if len(lo) &gt;= k else 0
+    hidden = max(cut - 1, 0)                     # the most an unsent partial can be
+    keep = [v for v in lo if lo[v] + hidden * sum(v not in x for x in known) &gt;= tau2]
+    total = {}
+    for v in keep:                               # round 3: exact totals for the survivors
+        for j, p in enumerate(partials):
+            if v not in known[j] and v in p:
+                shipped += 1
+        total[v] = sum(p.get(v, 0) for p in partials)
+    return topk_sort(total, k), shipped</code></pre></div>
+    <p><b>Measured.</b> Both fixes returned the exact list for every user at every <var>s</var>. Pairs sent per user:</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">shards s</th><th class="num">local top 10 (wrong)</th><th class="num">shuffle (exact)</th><th class="num">TPUT (exact)</th><th class="num">TPUT ÷ shuffle, the 149 users with 10th-best count ≥ 8</th></tr>
+      <tr><td class="num">2</td><td class="num">19.9</td><td class="num">1,284.2</td><td class="num">679.4</td><td class="num">0.03</td></tr>
+      <tr><td class="num">4</td><td class="num">38.3</td><td class="num">1,339.6</td><td class="num">1,270.7</td><td class="num">0.49</td></tr>
+      <tr><td class="num">8</td><td class="num">66.3</td><td class="num">1,374.4</td><td class="num">1,357.7</td><td class="num">0.94</td></tr>
+      <tr><td class="num">16</td><td class="num">98.3</td><td class="num">1,393.9</td><td class="num">1,393.9</td><td class="num">1.00</td></tr>
+    </table></div>
+    <p>TPUT halves the traffic at two shards and then fades. The reason is in round 2: the median user's 10th-best count is only 2, so the cut ⌈τ/<var>s</var>⌉ falls to 1 as soon as <var>s</var> ≥ τ, and "send every partial of at least 1" means send everything. For the 149 users whose 10th-best count is at least 8, TPUT sends 3% of the shuffle's pairs at two shards. A threshold algorithm pays off when the winners' scores are large compared with the number of shards; mutual-friend counts are not, which is one reason to aggregate by candidate in a batch job instead (Day 5).</p>
+    <p><b>The idea behind it, plainly.</b> TPUT is the network version of Fagin's threshold algorithm: read every shard's sorted list in step, and keep a threshold equal to the sum of the current heads, the best total any unread item could still have. Stop as soon as the <var>k</var>-th best total you know is at least the threshold. Nothing unread can win.</p>
+    <details class="deep"><summary>The math, step by step: why the merge needs only each shard's top k, and why TPUT is exact</summary><div>
+      <p><b>Merge, one shard per item.</b> Suppose candidate <var>v</var> is in the overall top <var>k</var> and lives on shard <var>j</var>. Fewer than <var>k</var> candidates anywhere beat <var>v</var>, so fewer than <var>k</var> on shard <var>j</var> do: <var>v</var> is in shard <var>j</var>'s own top <var>k</var> and is sent. The heap of heads then outputs items best first: the top of the heap is the best head, and every unsent item is no better than its own shard's head.</p>
+      <p><b>Why split counts break it.</b> The argument needs "fewer than <var>k</var> items beat <var>v</var> <em>on shard j</em>". With partial counts, shard <var>j</var> ranks by its partial, and <var>v</var>'s partial can be beaten by <var>k</var> items whose totals are smaller than <var>v</var>'s. That is the counterexample.</p>
+      <p><b>TPUT is exact.</b> Let τ₁ be the <var>k</var>-th best lower bound after round 1, and \(c = \lceil \tau_1 / s \rceil\). In round 2 each shard sends every partial ≥ <var>c</var>, so an unsent partial is at most <var>c</var> − 1 (counts are integers).</p>
+      <ul>
+        <li>An item sent by no shard has total at most \(s(c-1) < s\cdot\tau_1/s = \tau_1\).</li>
+        <li>After round 2, let τ₂ be the <var>k</var>-th best lower bound; τ₂ ≥ τ₁ because lower bounds only grow. An item with known partials summing to <var>L</var> and <var>u</var> unsent shards has total at most \(L + u(c-1)\). Keep it if this reaches τ₂.</li>
+        <li>The <var>k</var> items behind τ₂ have totals ≥ τ₂ and are kept. Every dropped item has total &lt; τ₂, strictly worse than all <var>k</var> of them, ties included. So the exact top <var>k</var> of the kept items, after round 3, is the exact top <var>k</var> overall.</li>
+      </ul>
+      <p><code>distributed.py</code> checks TPUT and the merge against the brute force on 3,000 random cases.</p>
+    </div></details>
+
+    <h4>17 · Fan-out: a request is as slow as its slowest shard</h4>
+    <p>Every plan above asks <var>s</var> shards and waits for all of them. The coordinator cannot answer until the last reply arrives, so the request takes as long as the <em>slowest</em> of <var>s</var> replies, and the more shards a request touches, the more likely one of them is having a slow moment. This is the strongest argument for laying data out so that the common request touches as few shards as possible: store each user's precomputed suggestions together on one shard, and do the cross-shard aggregation in a batch job, away from the request. Day 5 does the tail-latency arithmetic and builds that layout.</p>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"Local top k + merge with a heap is exact only if each item's whole score lives on one shard. If scores are sums of partial scores across shards, local top k can miss the winner; aggregate by key first, or use a threshold algorithm like TPUT."</li>
+      <li>"Merging <var>s</var> sorted lists of which we need <var>k</var>: a heap of heads, O(<var>s</var> + <var>k</var> log <var>s</var>)."</li>
+      <li>"Fan-out to <var>s</var> shards makes latency the maximum of <var>s</var> latencies; keep the request path on one shard when you can."</li>
+    </ul></div>
+    <p class="idea"><b>In one line.</b> Before you merge local winners, ask whether any item's score is split across machines; if it is, add first and rank second.</p>
+  </div>
+</section>
+
+<section class="s" id="day2-practice" data-sec="day2-practice">
+  <div class="shead"><span class="sno">DAY 2 · THE TOP K</span><span class="dims"><span class="dim dsa">DSA</span></span></div>
+  <h2>Practice</h2>
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · LeetCode, grouped by technique</span></div>
+
+    <h4>★ Do live: 347. Top K Frequent Elements</h4>
+    <p>Solve <a class="lc" href="https://leetcode.com/problems/top-k-frequent-elements/">347. Top K Frequent Elements</a> out loud: count with a hash map, then say the three ways to pick the top <var>k</var> (sort, size-k heap, buckets) with their costs, and code the bucket version, which meets the problem's "better than O(<var>n</var> log <var>n</var>)" follow-up because a count can never exceed <var>n</var>. Then answer: what changes if the input is a stream? (The heap.)</p>
+    <details class="sol"><summary>A solution</summary><div>
+      <div class="code"><div class="ch"><span>code/day_2/leetcode.py · 347</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topKFrequent(nums, k):                           # 347: bucket by count, O(n)
+    count = Counter(nums)
+    buckets = [[] for _ in range(len(nums) + 1)]      # a count is at most n
+    for x, c in count.items():
+        buckets[c].append(x)
+    out = []
+    for c in range(len(nums), 0, -1):
+        for x in buckets[c]:
+            out.append(x)
+            if len(out) == k:
+                return out
+    return out</code></pre></div>
+      <p>It is section 4 with "number of mutual friends" replaced by "number of occurrences". The problem accepts any order among the <var>k</var>; in PYMK we would also fix the tie rule.</p>
+    </div></details>
+
+    <h4>★ Do live: 703. Kth Largest Element in a Stream</h4>
+    <p>Solve <a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-a-stream/">703. Kth Largest Element in a Stream</a>: explain why the heap must be a <em>min</em>-heap of size <var>k</var> (its root is the answer, and the root is what a newcomer must beat), and state O(log <var>k</var>) per <code>add</code> and O(<var>k</var>) memory. The solution is section 8's <code>KthLargest</code>.</p>
+
+    <div class="part"><b>Selection: heap or quickselect</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/kth-largest-element-in-an-array/">215. Kth Largest Element in an Array</a>: quickselect, O(<var>n</var>) on average; handle repeated values with a three-way split.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/k-closest-points-to-origin/">973. K Closest Points to Origin</a>: a size-k max-heap of distances; compare squared distances, no square roots.</li>
+    </ul></div>
+    <div class="part"><b>Frequency with a tie rule</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/top-k-frequent-words/">692. Top K Frequent Words</a>: 347 with ties broken alphabetically, exactly section 6's point; put (−count, word) in the key.</li>
+    </ul></div>
+    <div class="part"><b>Statistics of a stream</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/find-median-from-data-stream/">295. Find Median from Data Stream</a>: two heaps. Then change the size ratio to keep a running p90, as <code>QuantileFinder</code> does.</li>
+    </ul></div>
+    <div class="part"><b>Merging sorted lists</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/merge-k-sorted-lists/">23. Merge k Sorted Lists</a>: section 14's heap of heads, run until every list is empty; O(<var>N</var> log <var>k</var>).</li>
+      <li><a class="lc" href="https://leetcode.com/problems/find-k-pairs-with-smallest-sums/">373. Find K Pairs with Smallest Sums</a>: a merge of lists that are never built: for each <var>i</var>, the pairs (<var>i</var>, <var>j</var>) form a sorted list in <var>j</var>.</li>
+    </ul></div>
+    <details class="sol"><summary>Solutions: 215, 692, 973, 23, 373 (295 is in section 9)</summary><div>
+      <div class="code"><div class="ch"><span>code/day_2/leetcode.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findKthLargest(nums, k, seed=0):                  # 215: quickselect, O(n) expected
+    rng = random.Random(seed)
+    while True:
+        p = rng.choice(nums)
+        hi = [x for x in nums if x &gt; p]
+        eq = sum(1 for x in nums if x == p)
+        if k &lt;= len(hi):
+            nums = hi
+        elif k &lt;= len(hi) + eq:
+            return p
+        else:
+            k -= len(hi) + eq
+            nums = [x for x in nums if x &lt; p]
+
+
+def topKFrequentWords(words, k):                      # 692: ties broken alphabetically, O(n log k)
+    count = Counter(words)
+    return heapq.nsmallest(k, count, key=lambda w: (-count[w], w))
+
+
+def kClosest(points, k):                              # 973: keep the k closest in a max-heap of size k
+    heap = []
+    for x, y in points:
+        d = -(x * x + y * y)                          # negated: heapq is a min-heap
+        if len(heap) &lt; k:
+            heapq.heappush(heap, (d, x, y))
+        elif d &gt; heap[0][0]:
+            heapq.heapreplace(heap, (d, x, y))
+    return [[x, y] for _, x, y in heap]
+
+
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+
+def mergeKLists(lists):                               # 23: heap of heads, O(N log k)
+    heap = [(node.val, i, node) for i, node in enumerate(lists) if node]
+    heapq.heapify(heap)
+    dummy = tail = ListNode()
+    while heap:
+        _, i, node = heapq.heappop(heap)              # i breaks ties: nodes are not comparable
+        tail.next = tail = node
+        if node.next:
+            heapq.heappush(heap, (node.next.val, i, node.next))
+    return dummy.next
+
+
+def kSmallestPairs(nums1, nums2, k):                  # 373: a merge of lists that are never built
+    if not nums1 or not nums2:
+        return []
+    heap = [(nums1[i] + nums2[0], i, 0) for i in range(min(k, len(nums1)))]
+    heapq.heapify(heap)
+    out = []
+    while heap and len(out) &lt; k:
+        _, i, j = heapq.heappop(heap)
+        out.append([nums1[i], nums2[j]])
+        if j + 1 &lt; len(nums2):
+            heapq.heappush(heap, (nums1[i] + nums2[j + 1], i, j + 1))
+    return out</code></pre></div>
+    </div></details>
+    <div class="part"><b>On the week's data</b><ul>
+      <li>Rerun <code>measure_static.py</code> with <var>k</var> = 100 and <var>k</var> = 1,000. At what <var>k</var> does quickselect overtake the heap, and does bucket counting care about <var>k</var> at all?</li>
+      <li>Change <code>FreshTopK</code> to keep 12 per user and show 10. How many of the 16,795 recomputes does the spare pair avoid?</li>
+      <li>Run Space-Saving over the whole replay (200,000 arrivals) instead of the last hour; the totals are now friend counts. How many counters find the top 10, and how does that compare with the <var>N</var>/<var>m</var> bound?</li>
+      <li>Rerun <code>measure_distributed.py</code> with shards chosen by <code>hash(f) mod s</code> instead of <code>f mod s</code>. How much do the numbers move, and why is the split of each count, not the choice of hash, the problem?</li>
+    </ul></div>
     <div class="part"><b>Further reading</b><ul>
-      <li>Bradley Efron and Robert Tibshirani, <em>An Introduction to the Bootstrap</em>, Chapman &amp; Hall, 1993</li>
-      <li>Larry Wasserman, <em>All of Statistics</em>, Springer, 2004: chapters 7 (the empirical distribution function) and 8 (the bootstrap)</li>
-      <li>H. A. David and H. N. Nagaraja, <em>Order Statistics</em>, 3rd ed., Wiley, 2003: distribution-free intervals for quantiles</li>
-      <li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)">Bootstrapping (statistics)</a> and <a href="https://en.wikipedia.org/wiki/Order_statistic">Order statistic</a> (Wikipedia)</li>
-      <li><a href="https://github.com/HdrHistogram/HdrHistogram">HdrHistogram</a>: a histogram built for recording latency with bounded relative error</li>
+      <li>Cormen, Leiserson, Rivest and Stein, <em>Introduction to Algorithms</em>: heaps (chapter 6), medians and order statistics (chapter 9)</li>
+      <li>C. A. R. Hoare, "Algorithm 65: Find", <em>Communications of the ACM</em> 4, 1961 (quickselect)</li>
+      <li>Jayadev Misra and David Gries, "Finding repeated elements", <em>Science of Computer Programming</em> 2, 1982</li>
+      <li>Ahmed Metwally, Divyakant Agrawal and Amr El Abbadi, "Efficient computation of frequent and top-k elements in data streams", ICDT 2005 (Space-Saving)</li>
+      <li>Graham Cormode and S. Muthukrishnan, "An improved data stream summary: the count-min sketch and its applications", <em>Journal of Algorithms</em> 55, 2005</li>
+      <li>Ronald Fagin, Amnon Lotem and Moni Naor, "Optimal aggregation algorithms for middleware", PODS 2001 (the threshold algorithm)</li>
+      <li>Pei Cao and Zhe Wang, "Efficient top-K query calculation in distributed networks", PODC 2004 (TPUT)</li>
+      <li>Python documentation, <a href="https://docs.python.org/3/library/heapq.html">heapq</a> (<code>heapreplace</code>, <code>nsmallest</code>)</li>
     </ul></div>
   </div>
 
-  <p><b>What breaks next.</b> Capping hubs cut the average work by 60%, but the most expensive request did not move: the most popular person still reads 1,480 friend lists, 41,558 entries even with the cap. And everything today still reads every list it touches; at a billion people with hundreds of friends each, that is far too much. The way out is to read less on purpose: look at only some of your friends, or a compact summary of each list, and still find almost the same people. Day 3 does that, and measures what it loses against the exact answers computed today.</p>
+  <p><b>Next.</b> Every cost today came back to the same thing: how many friends your friends have. A new friendship touches every friend of both people; a request reads every friend's list; the expensive users are the ones next to someone with very many friends. Day 3 gives this web of friend lists its proper name, a graph, and measures how uneven it is.</p>
 
-  <div class="check" data-check="day2"><div class="ch"><b>Checkpoint · Day 2</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="d2a" data-dim="ml"><span class="tx">Draw the friend-count distribution of the week's graph and explain why the average (20) describes almost nobody: give the median, the p99 and the largest count.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2b" data-dim="ml"><span class="tx">Explain rich-get-richer growth in words, simulate it against uniform growth, and derive that the share with at least k friends is (m/k)².</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2c" data-dim="ml"><span class="tx">Prove the friendship paradox in both forms, and reproduce 3 vs 2.33 on the six people and 73.8 vs 20 on the week's graph.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2d" data-dim="ml"><span class="tx">Show by double counting that the average request reads E[d²] = 1,477 entries, not 20 × 20 = 400.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2e" data-dim="dsa"><span class="tx">Compute everyone's mutual counts through the middle friend, derive the Σ deg² cost, and measure that the top 1% cause 69% of it.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2f" data-dim="dsa"><span class="tx">Count triangles from the least popular corner; prove each is counted once and the work is O(m<sup>1.5</sup>); solve 1761.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2g" data-dim="dsa"><span class="tx">Implement hub capping, measure the work it saves and the quality it keeps, and explain why the largest request does not shrink; solve 997 and 1615.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="d2h" data-dim="ml"><span class="tx">Compute p50, p95 and p99 by nearest rank, bootstrap a 95% interval for p99, and explain why 100 samples cannot bound it (0.99<sup>100</sup> = 0.366).</span><span class="dim ml">ML</span></label>
+  <div class="check" data-check="day2">
+    <div class="ch"><b>Checkpoint · Day 2</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d2a" data-dim="dsa"><span class="tx">Take the top 2 of Esha 2, Dev 1, Farid 1 by sort, size-k heap, quickselect and buckets, by hand, getting Esha, Dev each time; say where the tie rule lives in each key, and what an unstable tie rule breaks when 92.7% of users tie at the cutoff.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2b" data-dim="dsa"><span class="tx">Explain why the heap makes about one comparison per candidate (1.17 against 9.41 for sorting) and derive the k(1 + ln(n/k)) insertions (77.2 predicted, 78.1 measured).</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2c" data-dim="dsa"><span class="tx">Say when bucket counting applies, why it wins on mutual-friend counts (5.19× faster than sorting) and why it disappears once scores are probabilities; solve ★347 live, then 215, 692 and 973.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2d" data-dim="dsa"><span class="tx">Keep every user's top 10 exact under new friendships: trace Dev–Chloe on the six people (six count changes; You's top 2 becomes Dev, Esha) and explain why an increase costs one comparison and a removal forces a recompute.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2e" data-dim="dsa"><span class="tx">Solve ★703 live and 295; extend the two heaps to a running p90 and reproduce the per-hour table of mutual friends at formation.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2f" data-dim="ml"><span class="tx">Prove the Misra–Gries N/(m+1) and Space-Saving N/m bounds, and use them to explain why the last hour's top 10 needs at least 141 counters before the leader is guaranteed.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2g" data-dim="ml"><span class="tx">Derive the Count-Min bound (e/w)·N with probability 1 − e<sup>−d</sup>, compare it with the measured overcounts, and say when to choose Count-Min over Space-Saving.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2h" data-dim="sys"><span class="tx">Merge shards' top-k lists with a heap of heads (23, 373) and prove it exact when each item lives on one shard; build the split-count counterexample; fix it by shuffling by key or with TPUT, explain why TPUT saves little on mutual-friend counts, and why fan-out makes a request as slow as its slowest shard.</span><span class="dim sys">Systems</span></label>
   </div>
 </section>
-<div class="pager"><a class="btn" href="day_1.html">← Count it exactly</a><a class="btn pri" href="day_3.html">Read less →</a></div>
+<div class="pager"><a class="btn" href="day_1.html">← Common friends</a><a class="btn pri" href="day_3.html">It is a graph →</a></div>
 <footer>
   <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
   <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
@@ -909,165 +1022,9 @@ const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
 const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
 const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
-const chunk = (t, p) => t.match(p) || [];
-const simChunks = t => $("simMode").value === "words" ? t.split(/\s+/).filter(Boolean) : chunk(t, PAT);
-function show(bytes) {
-  try { return dec.decode(new Uint8Array(bytes)).replace(/ /g, "·").replace(/\n/g, "⏎"); }
-  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
-}
-const span = (bytes, cls = "") => `<span class="tk${cls}">${esc(show(bytes))}</span>`;
-
-/* ---------- Chunker ---------- */
-function chRender() {
-  const t = $("chText").value, marks = $("chMarks").checked;
-  const cs = chunk(t, marks ? PAT_M : PAT);
-  $("chOut").innerHTML = cs.map(c => {
-    const lone = /^\p{M}/u.test(c);
-    return `<span class="tk${lone ? " mk" : ""}" title="${enc.encode(c).length} bytes">${esc(c.replace(/ /g, "·"))}</span>`;
-  }).join("");
-  const lone = cs.filter(c => /^\p{M}/u.test(c)).length;
-  $("chStat").innerHTML = `<b>${cs.length}</b> chunks` + (lone ? ` · <b>${lone}</b> start with a mark (red): a word was cut in two` : "");
-}
-if ($("chText")) {
-  $("chText").addEventListener("input", chRender);
-  $("chMarks").addEventListener("change", chRender);
-  chRender();
-}
-
-/* ---------- Min-heap of [negCount, a, b] ---------- */
-const less = (x, y) => x[0] !== y[0] ? x[0] < y[0] : x[1] !== y[1] ? x[1] < y[1] : x[2] < y[2];
-function hpush(h, v) { h.push(v); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(h[i], h[p])) break; [h[i], h[p]] = [h[p], h[i]]; i = p; } }
-function sift(h, i) { const n = h.length; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < n && less(h[l], h[m])) m = l; if (r < n && less(h[r], h[m])) m = r; if (m === i) return; [h[i], h[m]] = [h[m], h[i]]; i = m; } }
-function hpop(h) { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; sift(h, 0); } return top; }
-function heapify(h) { for (let i = (h.length >> 1) - 1; i >= 0; i--) sift(h, i); }
-
-/* ---------- Trainer, written exactly like the Python ---------- */
-const K = (a, b) => a + "," + b;
-const unK = k => k.split(",").map(Number);
-function mergeIds(ids, a, b, id) {
-  const out = [];
-  for (let i = 0; i < ids.length;) {
-    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
-    else { out.push(ids[i]); i += 1; }
-  }
-  return out;
-}
-let S;
-function simInit() {
-  const cnt = new Map();
-  for (const c of simChunks($("simText").value)) cnt.set(c, (cnt.get(c) || 0) + 1);
-  const words = [...cnt].map(([c, f]) => ({ids: [...enc.encode(c)], f}));
-  const vocab = new Map(); for (let i = 0; i < 256; i++) vocab.set(i, [i]);
-  const counts = new Map(), where = new Map();
-  words.forEach((w, wi) => {
-    for (let i = 0; i + 1 < w.ids.length; i++) {
-      const k = K(w.ids[i], w.ids[i + 1]);
-      counts.set(k, (counts.get(k) || 0) + w.f);
-      if (!where.has(k)) where.set(k, new Set());
-      where.get(k).add(wi);
-    }
-  });
-  const heap = [...counts].map(([k, c]) => [-c, ...unK(k)]); heapify(heap);
-  const bytes = words.reduce((s, w) => s + w.ids.length * w.f, 0);
-  S = {words, vocab, counts, where, heap, merges: [], done: false, bytes, delta: new Map(), visited: new Set(), last: -1, stalePops: 0, pops: 0, log: []};
-  S.log.push(`<div class="s">${words.length} unique chunks, ${counts.size} distinct pairs, heap of ${heap.length}. Press "Next merge".</div>`);
-}
-function simStep() {
-  if (S.done) return false;
-  S.delta = new Map(); S.visited = new Set();
-  for (;;) {
-    if (!S.heap.length) { S.done = true; S.log.push(`<div class="h">Stop: the heap is empty. Every chunk is one token.</div>`); return false; }
-    const [neg, a, b] = hpop(S.heap); S.pops++;
-    const k = K(a, b), live = S.counts.get(k) || 0;
-    if (live !== -neg) {
-      S.stalePops++;
-      S.log.push(`<div class="s">pop (${-neg}, ${esc(show(S.vocab.get(a)))}+${esc(show(S.vocab.get(b)))}) · live count is ${live}, not ${-neg} → stale, throw away</div>`);
-      continue;
-    }
-    if (live < 2) { S.done = true; S.log.push(`<div class="h">Stop: the best pair occurs ${live} time. Nothing is worth merging.</div>`); return false; }
-    const id = 256 + S.merges.length;
-    S.vocab.set(id, S.vocab.get(a).concat(S.vocab.get(b)));
-    S.merges.push({a, b, id, count: live}); S.last = id;
-    const wis = [...(S.where.get(k) || [])];
-    for (const wi of wis) {
-      const w = S.words[wi], old = w.ids, nw = mergeIds(old, a, b, id);
-      w.ids = nw; S.visited.add(wi);
-      for (let i = 0; i + 1 < old.length; i++) { const q = K(old[i], old[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) - w.f); S.where.get(q)?.delete(wi); }
-      for (let i = 0; i + 1 < nw.length; i++) { const q = K(nw[i], nw[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) + w.f); if (!S.where.has(q)) S.where.set(q, new Set()); S.where.get(q).add(wi); }
-    }
-    const pushed = [];
-    for (const [q, d] of S.delta) {
-      if (!d) continue;
-      const c = (S.counts.get(q) || 0) + d; S.counts.set(q, c);
-      if (c > 0) { hpush(S.heap, [-c, ...unK(q)]); pushed.push(q); }
-    }
-    S.counts.delete(k); S.where.delete(k);
-    const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
-    S.log.push(`<div class="h">merge #${S.merges.length}: ${esc(show(S.vocab.get(a)))} + ${esc(show(S.vocab.get(b)))} → ${esc(show(S.vocab.get(id)))} (id ${id}, count ${live})</div>` +
-      `<div>visited ${wis.length} of ${S.words.length} chunks via where[pair] · pushed ${pushed.length} new counts · corpus now ${tokens} tokens</div>`);
-    return true;
-  }
-}
-function simRender() {
-  const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
-  $("simStat").innerHTML = `<b>${S.bytes}</b> bytes → <b>${tokens}</b> tokens · ${S.merges.length} merges · stale pops ${S.stalePops} of ${S.pops} · heap ${S.heap.length}`;
-  $("simVisited").textContent = S.visited.size ? `${S.visited.size} visited` : "";
-  $("simWords").innerHTML = S.words.map((w, wi) =>
-    `<div class="wrow${S.visited.has(wi) ? " hit" : ""}"><span class="f">×${w.f}</span><span class="toks" style="margin:0">${w.ids.map(i => span(S.vocab.get(i), i === S.last ? " new" : "")).join("")}</span></div>`).join("");
-  const rows = [...S.counts].filter(([k, c]) => c > 0 || S.delta.get(k));
-  rows.sort((x, y) => y[1] - x[1] || (unK(x[0])[0] - unK(y[0])[0]) || (unK(x[0])[1] - unK(y[0])[1]));
-  $("simCounts").innerHTML = rows.slice(0, 10).map(([k, c]) => {
-    const [a, b] = unK(k), d = S.delta.get(k) || 0;
-    return `<tr><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${c}</td><td class="r ${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" + d : d < 0 ? d : ""}</td></tr>`;
-  }).join("") || `<tr><td class="muted">no pairs left</td></tr>`;
-  const top = [...S.heap].sort((x, y) => less(x, y) ? -1 : less(y, x) ? 1 : 0).slice(0, 10);
-  $("simHeap").innerHTML = top.map(([neg, a, b]) => {
-    const live = S.counts.get(K(a, b)) || 0, stale = live !== -neg;
-    return `<tr class="${stale ? "stale" : ""}"><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${-neg}</td><td class="r">${stale ? "live " + live : "current"}</td></tr>`;
-  }).join("") || `<tr><td class="muted">empty</td></tr>`;
-  $("simMerges").innerHTML = S.merges.slice(-10).map(m =>
-    `<tr><td class="r">${m.id}</td><td>${span(S.vocab.get(m.a))} + ${span(S.vocab.get(m.b))}</td><td>→ ${span(S.vocab.get(m.id), m.id === S.last ? " new" : "")}</td></tr>`).join("") || `<tr><td class="muted">none yet: the vocabulary is the 256 bytes</td></tr>`;
-  $("simLog").innerHTML = S.log.slice(-40).join("");
-  $("simLog").scrollTop = $("simLog").scrollHeight;
-  encRender();
-}
-if ($("simText")) {
-$("simStep").onclick = () => { simStep(); simRender(); };
-$("simAll").onclick = () => { let n = 0; while (n++ < 500 && simStep()); simRender(); };
-$("simReset").onclick = () => { simInit(); simRender(); };
-$("simText").addEventListener("input", () => { simInit(); simRender(); });
-document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { $("simText").value = b.dataset.preset; $("simMode").value = b.dataset.mode; simInit(); simRender(); });
-$("simMode").addEventListener("change", () => { simInit(); simRender(); });
-
-/* ---------- Encoder: replay merges by rank ---------- */
-var encRender = function () {
-  const ranks = new Map(S.merges.map(m => [K(m.a, m.b), m.id]));
-  const out = [], log = [];
-  for (const c of simChunks($("encText").value)) {
-    let ids = [...enc.encode(c)];
-    const steps = [];
-    while (ids.length >= 2) {
-      let best = null, br = Infinity;
-      for (let i = 0; i + 1 < ids.length; i++) { const r = ranks.get(K(ids[i], ids[i + 1])); if (r !== undefined && r < br) { br = r; best = [ids[i], ids[i + 1]]; } }
-      if (!best) break;
-      ids = mergeIds(ids, best[0], best[1], br);
-      steps.push(`rank ${br - 256}: ${esc(show(S.vocab.get(br)))}`);
-    }
-    out.push(...ids);
-    log.push(`<div><b>${esc(c.replace(/ /g, "·"))}</b> <span class="s">${steps.length ? steps.join(" → ") : "no learned pair: stays bytes"}</span></div>`);
-  }
-  $("encOut").innerHTML = out.map(i => span(S.vocab.get(i))).join("");
-  const nb = enc.encode($("encText").value).length;
-  $("encStat").innerHTML = `<b>${nb}</b> bytes → <b>${out.length}</b> tokens with ${S.merges.length} learned merges`;
-  $("encLog").innerHTML = log.join("");
-};
-$("encText").addEventListener("input", encRender);
-simInit(); simRender();
-}
-
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
 const KEY = "pymk-week1-progress-v2";
-const ITEMS = [{"id": "r1", "dim": "dsa", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ml", "page": "index.html"}, {"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ai", "page": "index.html"}, {"id": "r8", "dim": "sys", "page": "index.html"}, {"id": "d1a", "dim": "dsa", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "ml", "page": "day_1.html"}, {"id": "d1g", "dim": "ml", "page": "day_1.html"}, {"id": "d1h", "dim": "del", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "ml", "page": "day_2.html"}, {"id": "d2d", "dim": "ml", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "ml", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "sys", "page": "day_3.html"}, {"id": "d3i", "dim": "del", "page": "day_3.html"}, {"id": "d4a", "dim": "ai", "page": "day_4.html"}, {"id": "d4b", "dim": "ml", "page": "day_4.html"}, {"id": "d4c", "dim": "ml", "page": "day_4.html"}, {"id": "d4d", "dim": "ml", "page": "day_4.html"}, {"id": "d4e", "dim": "ml", "page": "day_4.html"}, {"id": "d4f", "dim": "ml", "page": "day_4.html"}, {"id": "d4g", "dim": "ai", "page": "day_4.html"}, {"id": "d4h", "dim": "dsa", "page": "day_4.html"}, {"id": "d5a", "dim": "sys", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "d5f", "dim": "sys", "page": "day_5.html"}, {"id": "d5g", "dim": "sys", "page": "day_5.html"}, {"id": "d5h", "dim": "ml", "page": "day_5.html"}, {"id": "d5i", "dim": "ai", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "sys", "page": "worksheet.html"}, {"id": "w4", "dim": "ml", "page": "worksheet.html"}, {"id": "w5", "dim": "dsa", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "del", "page": "worksheet.html"}, {"id": "w8", "dim": "sys", "page": "worksheet.html"}, {"id": "c1", "dim": "dsa", "page": "worksheet.html"}, {"id": "c2", "dim": "dsa", "page": "worksheet.html"}, {"id": "c3", "dim": "ml", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "sys", "page": "worksheet.html"}, {"id": "c7", "dim": "ml", "page": "worksheet.html"}, {"id": "c8", "dim": "dsa", "page": "worksheet.html"}, {"id": "c9", "dim": "ml", "page": "worksheet.html"}, {"id": "c10", "dim": "ai", "page": "worksheet.html"}, {"id": "c11", "dim": "sys", "page": "worksheet.html"}, {"id": "c12", "dim": "sys", "page": "worksheet.html"}, {"id": "c13", "dim": "del", "page": "worksheet.html"}];
+const ITEMS = [{"id": "r1", "dim": "sys", "page": "index.html"}, {"id": "r2", "dim": "sys", "page": "index.html"}, {"id": "r3", "dim": "ml", "page": "index.html"}, {"id": "r4", "dim": "ml", "page": "index.html"}, {"id": "r5", "dim": "dsa", "page": "index.html"}, {"id": "r6", "dim": "dsa", "page": "index.html"}, {"id": "d1a", "dim": "dsa", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "sys", "page": "day_1.html"}, {"id": "d1h", "dim": "ml", "page": "day_1.html"}, {"id": "d1i", "dim": "sys", "page": "day_1.html"}, {"id": "d2a", "dim": "dsa", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "ml", "page": "day_2.html"}, {"id": "d2g", "dim": "ml", "page": "day_2.html"}, {"id": "d2h", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "dsa", "page": "day_3.html"}, {"id": "d3b", "dim": "dsa", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ml", "page": "day_3.html"}, {"id": "d3f", "dim": "ml", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "sys", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "ml", "page": "day_4.html"}, {"id": "d4c", "dim": "ml", "page": "day_4.html"}, {"id": "d4d", "dim": "ml", "page": "day_4.html"}, {"id": "d4e", "dim": "ml", "page": "day_4.html"}, {"id": "d4f", "dim": "ml", "page": "day_4.html"}, {"id": "d4g", "dim": "del", "page": "day_4.html"}, {"id": "d4h", "dim": "ml", "page": "day_4.html"}, {"id": "d4i", "dim": "ai", "page": "day_4.html"}, {"id": "d4j", "dim": "ai", "page": "day_4.html"}, {"id": "d5a", "dim": "sys", "page": "day_5.html"}, {"id": "d5b", "dim": "sys", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "sys", "page": "day_5.html"}, {"id": "d5g", "dim": "sys", "page": "day_5.html"}, {"id": "d5h", "dim": "ml", "page": "day_5.html"}, {"id": "d5i", "dim": "del", "page": "day_5.html"}, {"id": "d5j", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "sys", "page": "worksheet.html"}, {"id": "w4", "dim": "ml", "page": "worksheet.html"}, {"id": "w5", "dim": "dsa", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "del", "page": "worksheet.html"}, {"id": "w8", "dim": "sys", "page": "worksheet.html"}, {"id": "c1", "dim": "dsa", "page": "worksheet.html"}, {"id": "c2", "dim": "dsa", "page": "worksheet.html"}, {"id": "c3", "dim": "sys", "page": "worksheet.html"}, {"id": "c4", "dim": "ml", "page": "worksheet.html"}, {"id": "c5", "dim": "dsa", "page": "worksheet.html"}, {"id": "c6", "dim": "ml", "page": "worksheet.html"}, {"id": "c7", "dim": "sys", "page": "worksheet.html"}, {"id": "c8", "dim": "dsa", "page": "worksheet.html"}, {"id": "c9", "dim": "ml", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "ml", "page": "worksheet.html"}, {"id": "c12", "dim": "ml", "page": "worksheet.html"}, {"id": "c13", "dim": "del", "page": "worksheet.html"}, {"id": "c14", "dim": "ai", "page": "worksheet.html"}, {"id": "c15", "dim": "ai", "page": "worksheet.html"}, {"id": "c16", "dim": "sys", "page": "worksheet.html"}, {"id": "c17", "dim": "dsa", "page": "worksheet.html"}, {"id": "c18", "dim": "del", "page": "worksheet.html"}, {"id": "c19", "dim": "sys", "page": "worksheet.html"}, {"id": "c20", "dim": "ml", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

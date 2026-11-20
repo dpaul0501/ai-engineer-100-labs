@@ -1,0 +1,4 @@
+You vs Dev, 4000 orders: estimate 0.496 (true 0.5)
+ids 0-59 vs 30-89, 400 orders: estimate 0.320 (true 0.333)
+S-curve r=2 b=50: J=0.02: 0.020, J=0.05: 0.118, J=0.1: 0.395, J=0.15: 0.679, J=0.2: 0.870, J=0.3: 0.991
+tests passed

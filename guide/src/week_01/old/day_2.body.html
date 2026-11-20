@@ -1,0 +1,598 @@
+
+<section class="s" id="day2" data-sec="day2">
+  <div class="shead"><span class="sno">DAY 2 · POPULAR PEOPLE</span><span class="dims"><span class="dim ml">ML</span><span class="dim dsa">DSA</span></span></div>
+  <h2>A few popular people make it slow for everyone</h2>
+
+  <p><b>Where we are.</b> Day 1 ended with code that is exact and tested: for a person, walk to each of their friends, read each friend's friend list, count how often every stranger shows up, keep the top ten. Now run that same code for every one of the 10,000 people on the week's graph, and count how many list entries each call reads. The cheapest call reads 6 entries. The median call reads 1,023. The most expensive reads 51,806, more than 8,000 times the cheapest. Same code, same graph, same machine. Timed on one laptop, the median call took 0.23 ms and the slowest 1% took over 1.4 ms. Today is about why: who makes a request expensive, what that costs when we compute suggestions for everyone at once, and how to put a number on "slow" that you can trust.</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="v">73.8 vs 20</div><div class="l">friends a friend has, on average, against friends a person has</div></div>
+    <div class="metric"><div class="v">1% → 69%</div><div class="l">the 100 most popular people cause 69% of the work of computing everyone's suggestions</div></div>
+    <div class="metric"><div class="v">7.7×</div><div class="l">fewer checks to count triangles when you start from the least popular corner</div></div>
+    <div class="metric"><div class="v">4.9×</div><div class="l">the slowest 1% of requests (p99) cost almost five times the average</div></div>
+  </div>
+
+  <!-- ============================================================ ML: skew -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · most people have few friends, a few have very many</span></div>
+
+    <h4>The obvious estimate: 20 × 20</h4>
+    <p>The week's graph has 100,000 friendships among 10,000 people. Each friendship gives one friend to each of two people, so the average person has 2 × 100,000 / 10,000 = 20 friends. Day 1's code reads the friend list of each of your friends. So the natural estimate is: 20 friends, each with a list of about 20, makes 20 × 20 = 400 entries per request.</p>
+    <p>Measured over all 10,000 people, the average request reads <b>1,477</b> entries, 3.7 times the estimate. The arithmetic is fine. The mistake is the assumption that your friends are typical people. They are not, and the rest of this block shows why.</p>
+
+    <h4>Who has how many friends</h4>
+    <p>The number of friends a person has is their <b>degree</b> (Day 1). The question is how degrees are spread across people. Degrees here run from 1 to 1,480, so we group them in buckets that double in width. For each bucket the chart shows two shares: of people, and of <b>friend ends</b>. Every friendship has two ends, one at each person, so a person with 30 friends owns 30 of the 200,000 ends.</p>
+    <div class="chart"><div class="t">How many friends people have, on the week's graph</div>
+      <div class="sub">Share of people</div>
+      <div class="br"><span>1–3</span><span class="tr"><i style="width:1.1%"></i></span><span class="v">0.5%</span></div>
+      <div class="br"><span>4–7</span><span class="tr"><i style="width:15.1%"></i></span><span class="v">7.6%</span></div>
+      <div class="br"><span>8–15</span><span class="tr"><i style="width:86.5%"></i></span><span class="v">43.3%</span></div>
+      <div class="br"><span>16–31</span><span class="tr"><i style="width:77.9%"></i></span><span class="v">38.9%</span></div>
+      <div class="br"><span>32–63</span><span class="tr"><i style="width:14.7%"></i></span><span class="v">7.3%</span></div>
+      <div class="br"><span>64–127</span><span class="tr"><i style="width:3.5%"></i></span><span class="v">1.7%</span></div>
+      <div class="br"><span>128–255</span><span class="tr"><i style="width:0.9%"></i></span><span class="v">0.47%</span></div>
+      <div class="br"><span>256–511</span><span class="tr"><i style="width:0.3%"></i></span><span class="v">0.12%</span></div>
+      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:0.2%"></i></span><span class="v">0.07%</span></div>
+      <div class="sub">Share of friend ends: where you land if you pick a friendship at random and look at one end</div>
+      <div class="br"><span>1–3</span><span class="tr"><i style="width:0.2%;--c:var(--trace)"></i></span><span class="v">0.07%</span></div>
+      <div class="br"><span>4–7</span><span class="tr"><i style="width:4.5%;--c:var(--trace)"></i></span><span class="v">2.3%</span></div>
+      <div class="br"><span>8–15</span><span class="tr"><i style="width:50.6%;--c:var(--trace)"></i></span><span class="v">25.3%</span></div>
+      <div class="br"><span>16–31</span><span class="tr"><i style="width:81.4%;--c:var(--trace)"></i></span><span class="v">40.7%</span></div>
+      <div class="br"><span>32–63</span><span class="tr"><i style="width:30.3%;--c:var(--trace)"></i></span><span class="v">15.1%</span></div>
+      <div class="br"><span>64–127</span><span class="tr"><i style="width:14.6%;--c:var(--trace)"></i></span><span class="v">7.3%</span></div>
+      <div class="br"><span>128–255</span><span class="tr"><i style="width:7.9%;--c:var(--trace)"></i></span><span class="v">4.0%</span></div>
+      <div class="br"><span>256–511</span><span class="tr"><i style="width:3.8%;--c:var(--trace)"></i></span><span class="v">1.9%</span></div>
+      <div class="br"><span>512–1,480</span><span class="tr"><i style="width:6.7%;--c:var(--trace)"></i></span><span class="v">3.4%</span></div>
+      <div class="cap">The 7 people with 512 or more friends are 0.07% of people but own 3.4% of friend ends, 48 times their share. The top 1% (100 people) own 11.1% of ends; the top 10% own 32.1%.</div>
+    </div>
+    <p>Read the first half of the chart. Most people have between 8 and 31 friends. The <b>median</b>, the middle person, has 15. Then the bars shrink but never quite stop: 1% of people have 100 or more friends, and the most popular person has 1,480, 74 times the average. Because those few are so far out, they drag the average up: 69% of people have fewer friends than the average of 20.</p>
+    <p>A spread like this, where most values are modest and a few are enormous, is called a <b>heavy tail</b>. Real social networks have one (Ugander and others measured it on Facebook's graph, in the reading below). It is why "the average person" is a poor guide: the average describes almost nobody.</p>
+    <p class="idea"><b>In one line.</b> When the spread has a heavy tail, report the median and the top percentiles, not only the average; and expect the few largest values to decide every cost that grows faster than linearly.</p>
+
+    <details class="deep"><summary>The math, step by step: what "heavy-tailed" means, and why the tail sets the cost</summary><div>
+      <p><b>What we want to show.</b> That the friend counts here fall off like a power, and that for such a spread the average of the <em>squared</em> friend counts is set by the few largest ones. Squared counts are what requests cost, as the next sections show.</p>
+      <p><b>Step 1: a way to see the tail.</b> Instead of asking "what share has exactly <var>k</var> friends", ask "what share has <em>at least</em> <var>k</var> friends". Write it \(P(D \ge k)\), where <var>D</var> is the friend count of a person picked uniformly at random. On the week's graph:</p>
+      <div class="tablewrap"><table>
+        <tr><th class="num">k</th><th class="num">20</th><th class="num">50</th><th class="num">100</th><th class="num">200</th><th class="num">500</th><th class="num">1,000</th></tr>
+        <tr><td>\(P(D \ge k)\)</td><td class="num">30.7%</td><td class="num">3.68%</td><td class="num">1.01%</td><td class="num">0.27%</td><td class="num">0.07%</td><td class="num">0.04%</td></tr>
+      </table></div>
+      <p>The share falls, but slowly: from 100 friends to 1,000, ten times more, it drops from 1.01% to 0.04%, a factor of about 25. A share that falls by the same factor every time <var>k</var> is multiplied by ten (or doubled) is a <b>power law</b>: \(P(D \ge k) \approx c\,k^{-\alpha}\) for some constants <var>c</var> and <var>α</var>. Taking logarithms, \(\log P = \log c - \alpha \log k\), a straight line with slope −<var>α</var> on log-log axes. A least-squares line through the points for <var>k</var> from 20 to 480 has slope −1.90, so <var>α</var> ≈ 1.9. (This is a rough description; fitting power laws properly needs care, see Clauset, Shalizi and Newman below.) For contrast, an exponential tail \(P(D \ge k) \approx e^{-k/s}\) falls by a <em>growing</em> factor each time <var>k</var> is multiplied, which is why it has no giants.</p>
+      <p><b>Step 2: who contributes to the average of squares.</b> The average of squared friend counts is \(E[d^2] = \frac1n \sum_v \deg(v)^2\), with <var>n</var> people. Split people into the doubling buckets of the chart. The bucket around <var>k</var> holds about \(n\,c\,k^{-\alpha}\) people (the share with at least <var>k</var> friends, up to a constant factor), and each contributes about \(k^2\). So the bucket contributes about</p>
+      <div class="eq">\[ n\,c\,k^{-\alpha}\cdot k^2 \;=\; n\,c\,k^{\,2-\alpha}. \]</div>
+      <p>With <var>α</var> = 1.9, the exponent 2 − <var>α</var> = 0.1 is positive: each bucket contributes <em>more</em> than the one before. The last buckets, the giants, contribute the most. Check against the measurement: the 7 people with 512+ friends produce 48.5% of \(\sum_v \deg(v)^2\) on this graph.</p>
+      <p><b>What was shown.</b> Friend counts here follow roughly a power law with exponent near 2. For any such spread with <var>α</var> ≤ 2, the average of squares is set by the largest friend counts, and it keeps growing as the network grows and its biggest hub gets bigger.</p>
+    </div></details>
+
+    <h4>Where the popular people come from: the rich get richer</h4>
+    <p>If people made friends uniformly at random, would anyone end up with 74 times the average? Try it. Let 10,000 people join one at a time, each making 10 friendships with people already there, so the average is 20 friends as on the week's graph. Two rules for whom they pick:</p>
+    <ul>
+      <li><b>Uniform:</b> everyone already there is equally likely.</li>
+      <li><b>Rich get richer:</b> a person is picked with probability proportional to how many friends they already have. Someone with 40 friends is twice as likely to gain the next one as someone with 20. This is <b>preferential attachment</b> (the Barabási–Albert model).</li>
+    </ul>
+    <p>The code keeps a list with one entry per friend end, so a person with 40 friends appears 40 times. Picking a random entry picks a person in proportion to their friend count, in constant time.</p>
+    <div class="code"><div class="ch"><span>skew.py · rich get richer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def preferential_attachment(n, m, seed=0):
+    """Each new person befriends m existing people, picked with probability proportional to
+    how many friends they already have: the rich get richer."""
+    rng = random.Random(seed)
+    adj = [set() for _ in range(n)]
+    ends = []                                  # person v appears here once per friend
+    for u in range(m + 1):                     # start from a small group of mutual friends
+        for v in range(u):
+            adj[u].add(v); adj[v].add(u); ends += [u, v]
+    for u in range(m + 1, n):
+        while len(adj[u]) &lt; m:
+            v = rng.choice(ends)               # uniform over ends = proportional to friend count
+            if v not in adj[u]:
+                adj[u].add(v); adj[v].add(u)
+        ends += [x for v in adj[u] for x in (u, v)]
+    return adj</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>Rule (10,000 people, 10 new friendships each)</th><th class="num">median</th><th class="num">top 1% start at</th><th class="num">most popular</th></tr>
+      <tr><td>Uniform</td><td class="num">17</td><td class="num">58</td><td class="num">92</td></tr>
+      <tr class="hi"><td>Rich get richer</td><td class="num">14</td><td class="num">102</td><td class="num">475</td></tr>
+    </table></div>
+    <p>Same number of friendships, same average. Uniform picking gives nobody more than 92 friends. Rich-get-richer grows a person with 475, and the people who joined first are the ones who got there: they had the longest time to snowball.</p>
+    <p><b>Does the week's graph grow this way?</b> Use the order in which the week's friendships formed. Count each person's friends among the first 80% of friendships (their "past" friends), then the new friendships they make in the last 20%. If the rich get richer, new friendships should grow in proportion to past ones.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Past friends</th><th class="num">people</th><th class="num">new friends, on average</th><th class="num">new per past friend</th></tr>
+      <tr><td>1–3</td><td class="num">178</td><td class="num">1.79</td><td class="num">0.70</td></tr>
+      <tr><td>4–7</td><td class="num">1,620</td><td class="num">2.25</td><td class="num">0.39</td></tr>
+      <tr><td>8–15</td><td class="num">5,045</td><td class="num">2.91</td><td class="num">0.26</td></tr>
+      <tr><td>16–31</td><td class="num">2,553</td><td class="num">4.58</td><td class="num">0.22</td></tr>
+      <tr><td>32–63</td><td class="num">446</td><td class="num">9.91</td><td class="num">0.24</td></tr>
+      <tr><td>64–127</td><td class="num">111</td><td class="num">21.39</td><td class="num">0.25</td></tr>
+      <tr><td>128–255</td><td class="num">29</td><td class="num">41.90</td><td class="num">0.25</td></tr>
+      <tr><td>256+</td><td class="num">13</td><td class="num">125.85</td><td class="num">0.23</td></tr>
+    </table></div>
+    <p>From 16 past friends up, every past friend brings about 0.22–0.25 new ones: growth in proportion to what you have. Below 16 the rate is higher, as if everyone starts with a few "free" friends; that variant still produces a heavy tail. Part of the mechanism is Day 1's own: triadic closure. When people meet through a friend of a friend, a person with 1,000 friends can be reached through any of 1,000 friendships, so they are met far more often. Introductions through friends are rich-get-richer in disguise.</p>
+
+    <details class="deep"><summary>The math, step by step: why rich-get-richer gives a power law and uniform does not</summary><div>
+      <p><b>What we want to show.</b> Under preferential attachment, the share of people with at least <var>k</var> friends is \((m/k)^2\), a power law. Under uniform attachment it falls exponentially.</p>
+      <p><b>Setup.</b> People arrive one per time step; person number <var>t</var> arrives at time <var>t</var> and makes <var>m</var> friendships. Write \(k_i(t)\) for the friend count of person <var>i</var> at time <var>t</var>. After <var>t</var> steps there are about <var>mt</var> friendships, so friend counts add up to 2<var>mt</var>.</p>
+      <p><b>Step 1: how fast one person grows.</b> Each of the <var>m</var> new friendships lands on person <var>i</var> with probability \(k_i / 2mt\) (their share of all friend ends). So on average <var>i</var> gains \(m \cdot k_i/2mt = k_i/2t\) friends per step. Small numbers first: with <var>k</var> = 20 at <var>t</var> = 1,000, that is 20/2,000 = 0.01 friends per step. Treat <var>k</var> as a smooth quantity (the <b>mean-field</b> approximation):</p>
+      <div class="eq">\[ \frac{dk_i}{dt} = \frac{k_i}{2t}. \]</div>
+      <p><b>Step 2: solve it.</b> Move the <var>k</var> terms to one side and the <var>t</var> terms to the other, and integrate from the moment \(t_i\) when <var>i</var> arrived with <var>m</var> friends:</p>
+      <div class="eq">\[ \int_m^{k_i} \frac{dk}{k} = \int_{t_i}^{t} \frac{ds}{2s} \;\Rightarrow\; \ln\frac{k_i}{m} = \frac12 \ln\frac{t}{t_i} \;\Rightarrow\; k_i(t) = m\sqrt{t / t_i}. \]</div>
+      <p>An early arrival has small \(t_i\) and so a large \(t/t_i\): they grow the most. Person 100 at time 10,000 has \(10\sqrt{100} = 100\) friends; person 2,500 has \(10\sqrt{4} = 20\).</p>
+      <p><b>Step 3: turn growth into a share.</b> Arrival times are spread evenly over \([0, t]\), so the share of people who arrived before time <var>x</var> is <var>x</var>/<var>t</var>. A person has at least <var>k</var> friends exactly when \(m\sqrt{t/t_i} \ge k\), that is, when \(t_i \le m^2 t / k^2\). So</p>
+      <div class="eq">\[ P(k_i \ge k) = P\!\Big(t_i \le \frac{m^2 t}{k^2}\Big) = \frac{m^2 t / k^2}{t} = \frac{m^2}{k^2}. \]</div>
+      <p>With <var>m</var> = 10: 25% at <var>k</var> = 20, 6.25% at 40, 1.56% at 80. The simulation above gives 26.1%, 6.98% and 1.69%, and its log-log slope over 20–160 is −1.97 against the predicted −2.</p>
+      <p><b>Step 4: the uniform rule, for contrast.</b> Now each new friendship lands on <var>i</var> with probability 1/<var>t</var> (one of <var>t</var> people), so \(dk_i/dt = m/t\). Integrating the same way gives \(k_i(t) = m\,(1 + \ln(t/t_i))\). Having at least <var>k</var> friends means \(\ln(t/t_i) \ge (k-m)/m\), that is \(t_i \le t\,e^{-(k-m)/m}\), so \(P(k_i \ge k) = e^{-(k-m)/m}\). Each extra <var>m</var> friends cuts the share by a factor <var>e</var>: an exponential tail, with no giants.</p>
+      <p><b>What was shown.</b> Growth in proportion to what you have makes early arrivals grow like \(\sqrt{t}\) without limit, and the share with at least <var>k</var> friends falls like \(1/k^2\). Equal chances for everyone give a tail that falls exponentially.</p>
+    </div></details>
+
+    <h4>Your friends have more friends than you</h4>
+    <p>Back to the six people from the reading. You are friends with Ben and Chloe; Ben and Chloe are friends; Ben knows Dev and Esha; Chloe knows Esha and Farid. Count everyone's friends, and the average friend count of their friends:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Person</th><th>Friends</th><th class="num">friend count</th><th class="num">their friends' average</th></tr>
+      <tr class="hi"><td>You</td><td>Ben, Chloe</td><td class="num">2</td><td class="num">(4 + 4) / 2 = 4</td></tr>
+      <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td class="num">4</td><td class="num">(2 + 4 + 1 + 2) / 4 = 2.25</td></tr>
+      <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td class="num">4</td><td class="num">(2 + 4 + 2 + 1) / 4 = 2.25</td></tr>
+      <tr><td>Dev</td><td>Ben</td><td class="num">1</td><td class="num">4</td></tr>
+      <tr><td>Esha</td><td>Ben, Chloe</td><td class="num">2</td><td class="num">4</td></tr>
+      <tr><td>Farid</td><td>Chloe</td><td class="num">1</td><td class="num">4</td></tr>
+    </table></div>
+    <p>Four of the six people have fewer friends than their friends do on average. Only Ben and Chloe, the two most popular, do not. The reason is in the friend lists themselves. Ben appears in 4 lists, because 4 people count him as a friend. Dev appears in 1. So when you look at "a friend" of anyone, you are four times as likely to be looking at Ben as at Dev. Popular people are over-represented among friends, by exactly their popularity.</p>
+    <p>Put a number on it. The 7 friendships have 14 ends. The average person has 14 / 6 ≈ 2.33 friends. Now pick one of the 14 friend ends at random and ask how many friends that person has: Ben's 4 ends each say 4, Chloe's 4 ends say 4, the 2 ends at You say 2, Esha's 2 say 2, Dev's and Farid's single ends say 1. The average over ends is (16 + 16 + 4 + 4 + 1 + 1) / 14 = 42 / 14 = 3. A friend has 3 friends on average; a person has 2.33.</p>
+    <p>This is the <b>friendship paradox</b>: on average, your friends have more friends than you do (Feld, 1991). It holds in every network where friend counts differ at all. The code computes both versions: the average over friend ends, and the average over people of "my friends' average".</p>
+    <div class="code"><div class="ch"><span>skew.py · the friendship paradox</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def friend_degree_means(adj):
+    """Mean friend count, and two ways to ask 'how many friends do my friends have?'."""
+    deg = [len(a) for a in adj]
+    n, ends = len(adj), sum(deg)               # every friendship has two ends
+    mean_d = ends / n
+    # pick a random friendship, look at one end: user v is picked deg[v] times out of `ends`
+    friend_of_edge = sum(d * d for d in deg) / ends
+    # for each person, average their friends' counts; then average over people
+    users = [u for u in range(n) if deg[u]]
+    friend_of_user = sum(sum(deg[f] for f in adj[u]) / deg[u] for u in users) / len(users)
+    return mean_d, friend_of_edge, friend_of_user</code></pre></div>
+    <p>On the week's graph the average person has 20 friends, and the average friend has <b>73.8</b>. Averaged person by person, it is 76.2. Of the 10,000 people, 96.5% have fewer friends than their friends do on average, and 73.8% have fewer than even the <em>median</em> of their friends. The paradox is not a few hubs pulling an average up; it is how almost everyone sees the network.</p>
+    <p class="idea"><b>In one line.</b> Following a friendship lands you on a popular person more often than picking a person at random does, so "a friend" has far more friends than "a person": 73.8 against 20 here.</p>
+
+    <details class="deep"><summary>The math, step by step: the friendship paradox, in both forms</summary><div>
+      <p><b>What we want to show.</b> (1) The average friend count over friend ends equals \(E[d^2]/E[d]\), and it is at least the average friend count \(E[d]\). (2) The person-by-person version is also at least \(E[d]\).</p>
+      <p><b>Symbols.</b> <var>n</var> people, <var>m</var> friendships. \(\deg(v)\) is the number of friends of person <var>v</var>. The friend ends add up to \(\sum_v \deg(v) = 2m\), because each friendship adds 1 to two people's counts. \(E[d] = 2m/n\) is the average friend count, \(E[d^2] = \frac1n\sum_v \deg(v)^2\) the average of its square.</p>
+      <p><b>Step 1: the chance of landing on <var>v</var>.</b> Pick one of the 2<var>m</var> friend ends uniformly. Person <var>v</var> owns \(\deg(v)\) of them, so the end is <var>v</var>'s with probability \(\deg(v)/2m\). In the six-person example Ben owns 4 of 14 ends: probability 4/14.</p>
+      <p><b>Step 2: the average over ends.</b> Weight each person's friend count by that probability:</p>
+      <div class="eq">\[ \sum_v \deg(v)\cdot\frac{\deg(v)}{2m} = \frac{\sum_v \deg(v)^2}{\sum_v \deg(v)} = \frac{\tfrac1n\sum_v \deg(v)^2}{\tfrac1n\sum_v \deg(v)} = \frac{E[d^2]}{E[d]}. \]</div>
+      <p>Six people: \(\sum \deg^2 = 4 + 16 + 16 + 1 + 4 + 1 = 42\), \(\sum \deg = 14\), ratio 3, as counted by hand.</p>
+      <p><b>Step 3: compare with \(E[d]\).</b> The <b>variance</b> of the friend counts is \(\operatorname{Var}(d) = E[d^2] - E[d]^2\), the average squared distance from the mean. Substitute \(E[d^2] = E[d]^2 + \operatorname{Var}(d)\):</p>
+      <div class="eq">\[ \frac{E[d^2]}{E[d]} = \frac{E[d]^2 + \operatorname{Var}(d)}{E[d]} = E[d] + \frac{\operatorname{Var}(d)}{E[d]} \;\ge\; E[d]. \]</div>
+      <p>A variance is never negative, so the friend average is at least the person average, and the gap is \(\operatorname{Var}(d)/E[d]\). It is zero only when everyone has the same number of friends. On the week's graph \(E[d^2] = 1{,}476.8\), so \(\operatorname{Var}(d) = 1{,}476.8 - 400 = 1{,}076.8\) and \(20 + 1{,}076.8/20 = 73.84\).</p>
+      <p><b>Step 4: the person-by-person version.</b> Now each person averages their own friends' counts, and we average over people. Add up all those personal averages and regroup the sum by friendship. A friendship between <var>u</var> and <var>v</var> appears twice: in <var>u</var>'s average it contributes \(\deg(v)/\deg(u)\), and in <var>v</var>'s it contributes \(\deg(u)/\deg(v)\). So</p>
+      <div class="eq">\[ \sum_u \frac{1}{\deg u}\sum_{f\text{ friend of }u} \deg f \;=\; \sum_{\text{friendships } \{u,v\}}\Big(\frac{\deg v}{\deg u} + \frac{\deg u}{\deg v}\Big). \]</div>
+      <p><b>Step 5: each pair term is at least 2.</b> For positive <var>x</var> and <var>y</var>, \(x/y + y/x - 2 = (x - y)^2/(xy) \ge 0\). Check: 4/1 + 1/4 = 4.25 ≥ 2. So the whole sum is at least 2 per friendship, which is 2<var>m</var>. Divide by <var>n</var>: the average over people is at least \(2m/n = E[d]\). (If some people have no friends, average over the rest; the bound only gets stronger.) Six people: (4 + 2.25 + 2.25 + 4 + 4 + 4) / 6 ≈ 3.42 ≥ 2.33.</p>
+      <p><b>What was shown.</b> Both ways of asking "how many friends do my friends have" give at least the average friend count, with equality only when all counts are equal. The first gap is exactly the variance divided by the mean.</p>
+    </div></details>
+
+    <h4>So what does one request cost?</h4>
+    <p>Day 1's code reads the whole friend list of each of your friends. So the cost of your request, its <b>work</b>, is the sum of your friends' friend counts. For You in the six-person example: Ben has 4 friends and Chloe has 4, so the work is 8. Your own count (2) does not decide it; your friends' counts do.</p>
+    <div class="code"><div class="ch"><span>skew.py · work per request</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def work(adj, u):
+    """Entries Day 1's exact scan reads for user u: the sum of u's friends' friend counts."""
+    return sum(len(adj[f]) for f in adj[u])</code></pre></div>
+    <p>Now average the work over everyone. Each person's list is read once by each of their friends. Ben's list has 4 entries and is read by 4 people, so Ben adds 4 × 4 = 16 to the total. Every person <var>v</var> adds their friend count squared. So</p>
+    <div class="eq">\[ \text{average work} \;=\; \frac{1}{n}\sum_{v} \deg(v)^2 \;=\; E[d^2] \;=\; 1{,}477, \qquad\text{not}\qquad E[d]^2 = 20^2 = 400. \]</div>
+    <p>That is the whole story of the 400 estimate: it squared the average, when the cost is the average of the squares. The gap between the two is the variance, and the heavy tail makes the variance large. A person with <var>d</var> friends does roughly <var>d</var> × 73.8 work, because each of their friends is "a friend" with 73.8 friends on average:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Friend count</th><th class="num">people</th><th class="num">average work</th><th class="num">work per friend</th></tr>
+      <tr><td>4–7</td><td class="num">756</td><td class="num">403</td><td class="num">67.4</td></tr>
+      <tr><td>8–15</td><td class="num">4,325</td><td class="num">907</td><td class="num">77.5</td></tr>
+      <tr><td>16–31</td><td class="num">3,893</td><td class="num">1,633</td><td class="num">78.1</td></tr>
+      <tr><td>32–63</td><td class="num">733</td><td class="num">3,005</td><td class="num">72.7</td></tr>
+      <tr><td>64–127</td><td class="num">173</td><td class="num">5,808</td><td class="num">69.0</td></tr>
+      <tr><td>128–255</td><td class="num">47</td><td class="num">10,683</td><td class="num">63.2</td></tr>
+      <tr><td>256–511</td><td class="num">12</td><td class="num">17,000</td><td class="num">53.6</td></tr>
+      <tr class="hi"><td>512–1,480</td><td class="num">7</td><td class="num">37,461</td><td class="num">39.1</td></tr>
+    </table></div>
+    <p>For almost everyone the work per friend stays near 70–78. It falls for the most popular people, because there are only a handful of other giants to be friends with: the person with 1,480 friends is friends with all 6 other people who have more than 500, and the other 1,474 of their friends are ordinary. Still, their request is the most expensive one on the graph: 51,806 entries, 35 times the average. Because work is a sum of stored friend counts, a server can compute it before running a request, which is what lets later designs route or limit expensive requests.</p>
+    <p class="idea"><b>In one line.</b> A request's cost is the sum of your friends' friend counts; averaged over people it is the average of squared friend counts, 1,477 here, and the heavy tail is why that is 3.7 times the naive 400.</p>
+
+    <details class="deep"><summary>The math, step by step: average work is E[d²], and why hubs fall below d × 73.8</summary><div>
+      <p><b>What we want to show.</b> (1) The average work over people is exactly \(E[d^2]\). (2) Under a stated assumption, a person with <var>d</var> friends does \(d \cdot E[d^2]/E[d]\) work on average; and why the most popular people do less.</p>
+      <p><b>Step 1: write the total.</b> Let \(W(u) = \sum_{f \text{ friend of } u} \deg(f)\) be the work for person <var>u</var>. The total over everyone, \(\sum_u W(u)\), adds \(\deg(f)\) once for each pair (<var>u</var>, <var>f</var>) where <var>f</var> is a friend of <var>u</var>.</p>
+      <p><b>Step 2: count the same pairs the other way.</b> Fix <var>f</var>. How many pairs have <var>f</var> in the second place? One per friend of <var>f</var>: \(\deg(f)\) pairs. Each adds \(\deg(f)\). So <var>f</var> contributes \(\deg(f)^2\), and</p>
+      <div class="eq">\[ \sum_u W(u) = \sum_f \deg(f)^2 \quad\Rightarrow\quad \frac1n\sum_u W(u) = E[d^2]. \]</div>
+      <p>Six people: works 8, 9, 9, 4, 8, 4 add to 42, and squares 4, 16, 16, 1, 4, 1 add to 42. On the week's graph both totals are 14,768,324, and 14,768,324 / 10,000 = 1,476.8. This kind of argument, counting one set of pairs in two orders, is called <b>double counting</b>.</p>
+      <p><b>Step 3: work for a given friend count, under an assumption.</b> Assume the friends of a person behave like friend ends picked at random, regardless of how many friends that person has. Then each of the <var>d</var> friends has \(E[d^2]/E[d]\) friends on average (the paradox, Step 2 above), and the average of a sum is the sum of the averages:</p>
+      <div class="eq">\[ E[W(u) \mid \deg u = d] = d \cdot \frac{E[d^2]}{E[d]} \approx 73.8\,d. \]</div>
+      <p>The assumption says there is no <b>degree correlation</b>: popular people are not especially likely to befriend each other, nor to avoid each other. Measured as the correlation between the friend counts at the two ends of a friendship (the <b>assortativity</b>), the week's graph has −0.037, close to none. The table above fits 73.8 × <var>d</var> within 10% for friend counts 4–127, which is 98.8% of people.</p>
+      <p><b>Step 4: why the most popular people fall below.</b> Two effects. First, a person cannot be their own friend, but random friend ends include their own. Removing them gives \(d\,(\sum_v \deg(v)^2 - d^2)/(2m - d)\); for the person with 1,480 friends that lowers the prediction from 109,286 to 93,771. Second, there are only 7 people with more than 500 friends, and you can be friends with each at most once. Random friend ends would land on those 7 about 50 times out of 1,480; the most popular person can reach them at most 6 times, and does. Its true work is 51,806. This limit is called the <b>structural cutoff</b>: in a network without repeated friendships, giants are forced to connect to ordinary people.</p>
+      <p><b>What was shown.</b> The average work per request is exactly the average squared friend count. For typical people, work is about 73.8 times their friend count; for giants it is less, because there are not enough other giants to go around.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li>Compute the average friend count, the friend-end average and the person-by-person average on the past graph (first 80,000 friendships) and on the full graph. Does the gap grow as the network grows?</li>
+      <li>Run <code>preferential_attachment</code> and measure the share with at least 20, 40 and 80 friends; compare with \((m/k)^2\). Replace the pick with <code>rng.randrange(u)</code> for the uniform rule and compare with \(e^{-(k-m)/m}\).</li>
+      <li>Reproduce the work-by-friend-count table, and add a column with the self-excluded prediction from the deep block.</li>
+      <li>Prove that the friend-end average is at least 1 and at least \(E[d]\) when nobody is friendless.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Shuffle the graph while keeping everyone's friend count: repeatedly pick two friendships <var>a</var>–<var>b</var> and <var>c</var>–<var>d</var> and swap them to <var>a</var>–<var>d</var> and <var>c</var>–<var>b</var> when that creates no duplicate. Does the average work change? Does the table by friend count?</li>
+      <li>A follower network is directed. Which counts decide the cost of "people followed by the people you follow"?</li>
+      <li>A star: one person with <var>n</var> − 1 friends, everyone else with only that one friend. Compute all three averages as <var>n</var> grows.</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <p><b>Shuffle.</b> Friend counts are unchanged, so \(\sum_v \deg(v)^2\) and the average work are unchanged (it depends only on the counts, by the double-counting proof). The shuffle destroys any degree correlation, so the table moves toward 73.8 × <var>d</var>, except for the giants, which still hit the structural cutoff.</p>
+      <p><b>Directed.</b> The scan reads the "following" list of each person you follow. The total over everyone is \(\sum_v \text{in}(v)\cdot\text{out}(v)\): <var>v</var>'s list has out(<var>v</var>) entries and is read by its in(<var>v</var>) followers. A celebrity with many followers who follows few is cheap; one who follows many is expensive.</p>
+      <p><b>Star.</b> \(E[d] = 2(n-1)/n \to 2\). Friend-end average: \(((n-1)^2 + (n-1))/(2(n-1)) = n/2\). Person-by-person: the centre's friends have 1 each, each leaf's one friend has \(n-1\), so \((1 + (n-1)(n-1))/n \approx n\). Both grow without limit while the average stays at 2.</p>
+      <p><b>Bound.</b> \(E[d^2] \ge E[d]\) because \(d^2 \ge d\) for every whole number \(d \ge 1\); \(E[d^2] \ge E[d]^2\) because the variance is never negative. Divide both by \(E[d]\).</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Scott L. Feld, "Why Your Friends Have More Friends Than You Do", <em>American Journal of Sociology</em> 96(6), 1991; <a href="https://en.wikipedia.org/wiki/Friendship_paradox">Friendship paradox</a> (Wikipedia)</li>
+      <li>Albert-László Barabási, <a href="http://networksciencebook.com/"><em>Network Science</em></a>, chapters 4 (the scale-free property) and 5 (the Barabási–Albert model), free online</li>
+      <li>Barabási and Albert, "Emergence of Scaling in Random Networks", <em>Science</em> 286, 1999; <a href="https://en.wikipedia.org/wiki/Preferential_attachment">Preferential attachment</a> (Wikipedia)</li>
+      <li>Clauset, Shalizi and Newman, <a href="https://arxiv.org/abs/0706.1062">Power-law distributions in empirical data</a>, <em>SIAM Review</em>, 2009: how to fit and test a power law</li>
+      <li>Ugander, Karrer, Backstrom and Marlow, <a href="https://arxiv.org/abs/1111.4503">The Anatomy of the Facebook Social Graph</a>, 2011: friend counts, the friendship paradox and degree correlations measured on a real social network</li>
+      <li>M. E. J. Newman, <em>Networks</em>, 2nd ed., Oxford University Press, 2018: degree distributions and the configuration model</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ ALGORITHMS -->
+  <div class="blk alg">
+    <div class="bh"><span class="kind">Algorithms · suggestions for everyone at once, and who pays for them</span></div>
+
+    <h4>The situation: compute everyone's ten in one batch</h4>
+    <p>Instead of computing suggestions when someone opens the app, a common plan computes everyone's top ten in one batch job and stores them, so a request only looks up a list. The batch needs the mutual-friend count of every pair of non-friends who share at least one friend. How much work is that, and who causes it?</p>
+    <p><b>The obvious way:</b> take every pair of people and intersect their friend lists (Day 1). With 10,000 people that is 49,995,000 pairs. Only 11.9% of them share any friend at all, so almost all of the intersections return nothing. At a billion people the number of pairs is about 5 × 10<sup>17</sup>. The work has to come from pairs that actually share a friend.</p>
+
+    <h4>Count through the middle friend</h4>
+    <p>Turn the question around. Instead of asking each pair "who do you have in common?", let each person introduce every pair of their own friends. If Ben is friends with both You and Dev, then Ben is one mutual friend of You and Dev. Work it by hand on the six people:</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">Ben</span><span class="seq"><span class="nd">You</span><span class="nd">Chloe</span><span class="nd">Dev</span><span class="nd">Esha</span></span><span class="why">6 pairs. You–Chloe and Chloe–Esha are already friends. Adds 1 to <b>You–Dev, You–Esha, Chloe–Dev, Dev–Esha</b>.</span></div>
+      <div class="step"><span class="k">Chloe</span><span class="seq"><span class="nd">You</span><span class="nd">Ben</span><span class="nd">Esha</span><span class="nd">Farid</span></span><span class="why">6 pairs. You–Ben and Ben–Esha are already friends. Adds 1 to <b>You–Esha, You–Farid, Ben–Farid, Esha–Farid</b>.</span></div>
+      <div class="step"><span class="k">You, Esha</span><span class="seq"><span class="nd">Ben</span><span class="nd">Chloe</span></span><span class="why">One pair each, Ben–Chloe, already friends. Dev and Farid have one friend each: no pairs.</span></div>
+    </div><div class="cap">Result: You–Esha 2, every other pair 1. For You that is Esha (2), then Dev and Farid (1 each): Day 1's answer, found without asking any pair directly. Total: 14 pairs visited.</div></div>
+    <div class="code"><div class="ch"><span>batch.py · mutual counts for everyone, one middle friend at a time</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def all_pairs_mutual(adj):
+    """Mutual-friend counts for every non-friend pair u &lt; v that has one,
+    found by letting each person w introduce every pair of their own friends."""
+    m = Counter()
+    for w in range(len(adj)):
+        nb = sorted(adj[w])
+        for i, u in enumerate(nb):             # each pair of w's friends, once
+            for v in nb[i + 1:]:
+                if v not in adj[u]:
+                    m[u, v] += 1               # w is one mutual friend of u and v
+    return m</code></pre></div>
+    <p>Only pairs that share a friend are ever touched. On the week's graph the function finds 5,954,305 pairs of non-friends with at least one mutual friend.</p>
+
+    <h4>The bill: the sum of squared friend counts, and who pays it</h4>
+    <p>A person with <var>d</var> friends introduces every pair of them: about <var>d</var>²/2 pairs. Ben, with 4 friends, made 6; a person with 1,480 friends makes 1,094,460. The total work is the sum of squared friend counts, the same quantity as the average work per request, now for everyone at once. On the week's graph it is 14,768,324 entry reads if you run Day 1's code for each person, exactly 10,000 × 1,477; counting each unordered pair once, as the code above does, visits 7,284,162 pairs, about half. If all 10,000 people had exactly 20 friends, the same 100,000 friendships would cost 10,000 × 20² = 4,000,000. The spread of friend counts, not their number, makes the difference.</p>
+    <p>Who pays? Each person's share of the bill is their friend count squared. Compare their share of friendships with their share of the work:</p>
+    <div class="chart"><div class="t">Share of friend ends against share of the work, for the most popular people</div>
+      <div class="sub">Top 0.1% (10 people)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:3.9%;--c:var(--muted)"></i></span><span class="v">3.9%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:51.6%"></i></span><span class="v">51.6%</span></div>
+      <div class="sub">Top 1% (100 people)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:11.1%;--c:var(--muted)"></i></span><span class="v">11.1%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:69.1%"></i></span><span class="v">69.1%</span></div>
+      <div class="sub">Top 10% (1,000 people)</div>
+      <div class="br"><span>friend ends</span><span class="tr"><i style="width:32.1%;--c:var(--muted)"></i></span><span class="v">32.1%</span></div>
+      <div class="br"><span>work</span><span class="tr"><i style="width:83.9%"></i></span><span class="v">83.9%</span></div>
+      <div class="cap">The single most popular person (1,480 friends) causes 1,480² = 2,190,400 of the 14,768,324 units: 14.8% of all the work, alone.</div>
+    </div>
+    <p>Squaring turns a mild concentration of friendships into a severe concentration of work. It also breaks the obvious way to spread the batch over many machines. Split the job by middle friend, and the machine that gets the most popular person has 15% of the whole job by itself; everyone else waits for it. Suri and Vassilvitskii named this "the curse of the last reducer" (reading below).</p>
+    <p class="idea"><b>In one line.</b> Computing mutual counts for everyone costs the sum of squared friend counts, so the most popular 1% of people cause 69% of the work.</p>
+
+    <details class="deep"><summary>The math, step by step: the cost is Σ deg², counted two ways</summary><div>
+      <p><b>What we want to show.</b> Both natural orders of computing all mutual counts do work equal to the sum of squared friend counts (up to the small term 2<var>m</var>), so the cost is decided by the spread of friend counts.</p>
+      <p><b>Step 1: mutual counts as a matrix product.</b> Write the friendships as a table <var>A</var> with a row and a column per person: \(A_{uv} = 1\) if <var>u</var> and <var>v</var> are friends, 0 otherwise (the <b>adjacency matrix</b>, Day 1). Multiply <var>A</var> by itself. By the rule for matrix products, \((A^2)_{uv} = \sum_w A_{uw}A_{wv}\). A term is 1 exactly when <var>w</var> is a friend of both <var>u</var> and <var>v</var>, so the sum counts their mutual friends. All mutual counts are one matrix product.</p>
+      <p><b>Step 2: the middle-friend order.</b> Group the sum by <var>w</var>. Person <var>w</var> contributes 1 to \((A^2)_{uv}\) for every ordered pair (<var>u</var>, <var>v</var>) of distinct friends of <var>w</var>: \(\deg(w)(\deg(w) - 1)\) pairs. The total is</p>
+      <div class="eq">\[ \sum_w \deg(w)\big(\deg(w) - 1\big) = \sum_w \deg(w)^2 - \sum_w \deg(w) = \sum_w \deg(w)^2 - 2m. \]</div>
+      <p>The code visits unordered pairs, half of this: \(\sum_w \binom{\deg w}{2}\). Six people: \(\binom{2}{2} + \binom{4}{2} + \binom{4}{2} + \binom{2}{2} = 1 + 6 + 6 + 1 = 14\), the 14 pairs of the hand example.</p>
+      <p><b>Step 3: the row order.</b> Row <var>u</var> of \(A^2\) is the sum of the rows of <var>u</var>'s friends. Computing it reads each friend's list once, which is Day 1's <code>suggest(adj, u)</code>, with work \(W(u)\). Over all people, by double counting (the ML block), \(\sum_u W(u) = \sum_f \deg(f)^2\). This row-by-row order is <b>Gustavson's algorithm</b> for multiplying sparse matrices.</p>
+      <p><b>Step 4: what the sum depends on.</b> \(\sum_v \deg(v)^2 = n\,E[d^2] = n\,(E[d]^2 + \operatorname{Var}(d))\). Two networks with the same number of people and friendships have the same \(E[d]\), so they differ only by the variance. The week's graph: \(10{,}000 \times (400 + 1{,}076.8) = 14{,}768{,}000\) up to rounding, against 4,000,000 with no variance.</p>
+      <p><b>What was shown.</b> Whichever order you choose, computing all mutual counts costs about \(\sum_v \deg(v)^2\), and that is the number of friendships times the friend-end average, set by the variance of friend counts.</p>
+    </div></details>
+
+    <h4>Triangles, and starting from the least popular corner</h4>
+    <p>A <b>triangle</b> is three people who are all friends with each other: a friend of a friend who became a friend. Day 1's clustering coefficient is built from triangle counts, and counting them is the classic example of an algorithm whose cost depends on the spread of friend counts. LeetCode 1761 is the same loop with a different total.</p>
+    <p><b>The obvious way:</b> for each person, check every pair of their friends for a friendship. That is the middle-friend loop again, so it costs the same 7,284,162 checks on the week's graph, and 1,094,460 of them at the most popular person alone. It also finds each triangle three times, once from each corner.</p>
+    <p><b>The idea.</b> Count each triangle only at its <em>least popular</em> corner. Rank everyone by friend count (ties broken by id), and point every friendship from the less popular person to the more popular one. Each person then only looks upward: at friends ranked above them. The most popular person has nobody above them, so they do no work at all. On the six people, Chloe and Ben have 4 friends each (Chloe ranks higher, by id), You and Esha have 2, Dev and Farid 1:</p>
+    <div class="dg">
+      <svg viewBox="0 0 470 258" width="100%" style="max-width:32rem;display:block;margin:0 auto" role="img" aria-label="The six-person graph with every friendship pointing from the less popular person to the more popular one. Chloe, the most popular, has no arrows leaving her.">
+        <defs><marker id="d2arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+        <g style="stroke:var(--muted);stroke-width:1.6;fill:none" marker-end="url(#d2arr)">
+          <line x1="82" y1="153" x2="145" y2="94"/>
+          <line x1="85" y1="157" x2="283" y2="45"/>
+          <line x1="176" y1="75" x2="281" y2="41"/>
+          <line x1="151" y1="198" x2="159" y2="100"/>
+          <line x1="295" y1="143" x2="178" y2="88"/>
+          <line x1="309" y1="133" x2="302" y2="55"/>
+          <line x1="392" y1="200" x2="310" y2="52"/>
+        </g>
+        <g style="font:600 13px var(--f-mono);text-anchor:middle">
+          <circle cx="300" cy="35" r="17" style="fill:var(--accent);stroke:none"/><text x="300" y="40" style="fill:var(--panel)">C</text>
+          <circle cx="160" cy="80" r="17" style="fill:var(--accent-soft);stroke:var(--accent)"/><text x="160" y="85" style="fill:var(--ink)">B</text>
+          <circle cx="70" cy="165" r="17" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="70" y="170" style="fill:var(--ink)">You</text>
+          <circle cx="310" cy="150" r="17" style="fill:var(--accent-soft);stroke:var(--line)"/><text x="310" y="155" style="fill:var(--ink)">E</text>
+          <circle cx="150" cy="215" r="17" style="fill:var(--panel);stroke:var(--line)"/><text x="150" y="220" style="fill:var(--ink)">D</text>
+          <circle cx="400" cy="215" r="17" style="fill:var(--panel);stroke:var(--line)"/><text x="400" y="220" style="fill:var(--ink)">F</text>
+        </g>
+        <g style="font:12px var(--f-display);fill:var(--muted)">
+          <text x="325" y="30">Chloe · 4 friends · 0 up</text>
+          <text x="138" y="66" style="text-anchor:end">Ben · 4 friends · 1 up</text>
+          <text x="20" y="200">You · 2 · 2 up</text>
+          <text x="310" y="184" style="text-anchor:middle">Esha · 2 · 2 up</text>
+          <text x="175" y="228">Dev · 1 · 1 up</text>
+          <text x="400" y="250" style="text-anchor:middle">Farid · 1 · 1 up</text>
+        </g>
+      </svg>
+      <div class="cap">Every arrow points from fewer friends to more. Chloe receives four arrows and sends none, so she starts no work.</div>
+    </div>
+    <p>Now, for each arrow <var>u</var> → <var>v</var>, ask which people above <var>v</var> are also above <var>u</var>. You → Ben: above Ben is Chloe, and Chloe is above You too: triangle {You, Ben, Chloe}. Esha → Ben: Chloe is above Esha too: triangle {Esha, Ben, Chloe}. Dev → Ben: Chloe is not Dev's friend, no triangle. Every other arrow ends at Chloe, who has nobody above her. Total: 3 checks and 2 triangles, against 14 checks the obvious way.</p>
+    <div class="code"><div class="ch"><span>triangles.py · each triangle once, at its least popular corner</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def count_triangles(adj):
+    """Each triangle counted once, at its least popular corner."""
+    n = len(adj)
+    rank = [0] * n
+    for i, v in enumerate(sorted(range(n), key=lambda v: (len(adj[v]), v))):
+        rank[v] = i                            # fewer friends = lower rank; ties by id
+    up = [{w for w in adj[v] if rank[w] &gt; rank[v]} for v in range(n)]   # point edges upward
+    t = 0
+    for u in range(n):
+        for v in up[u]:                        # u ranks below v
+            t += sum(1 for w in up[v] if w in up[u])   # w ranks above both, and is u's friend
+    return t</code></pre></div>
+    <p>The week's graph has 71,976 triangles. Here is the work each method needs to find them:</p>
+    <div class="chart"><div class="t">Checks needed to count the 71,976 triangles</div>
+      <div class="br"><span>every pair of friends</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">7,284,162</span></div>
+      <div class="br"><span>point arrows by id only</span><span class="tr"><i style="width:33.4%;--c:var(--trace)"></i></span><span class="v">2,433,041</span></div>
+      <div class="br"><span>point arrows by friend count</span><span class="tr"><i style="width:13%"></i></span><span class="v">944,405</span></div>
+      <div class="cap">With arrows by friend count, nobody has more than 19 people above them, and the most popular person has 0. With arrows by id alone, one person still has 1,185 above them.</div>
+    </div>
+    <p>Pointing arrows by id also counts each triangle once, but a popular person with a small id keeps most of their friends "above" them and still does a lot of work. Ordering by friend count is what makes the guarantee: however skewed the network, the work grows no faster than <var>m</var><sup>1.5</sup> for <var>m</var> friendships, instead of with squared friend counts.</p>
+    <p class="idea"><b>In one line.</b> Point each friendship toward the more popular person and look only upward: every triangle is found once, popular people do almost no work, and the total is at most about <var>m</var><sup>1.5</sup>.</p>
+
+    <details class="deep"><summary>The math, step by step: each triangle counted once, and the O(m<sup>1.5</sup>) bound</summary><div>
+      <p><b>What we want to show.</b> (1) The upward loop counts every triangle exactly once. (2) Nobody has more than \(\sqrt{2m}\) people above them. (3) So the total work is at most \(m\sqrt{2m}\).</p>
+      <p><b>The order.</b> Write \(u \prec v\) ("<var>u</var> ranks below <var>v</var>") if <var>u</var> has fewer friends, or the same number and a smaller id. Any two different people are comparable and there are no ties. For person <var>v</var>, write \(d^+(v)\) for the number of friends ranked above them ("up") and \(d^-(v) = \deg(v) - d^+(v)\) for those below.</p>
+      <p><b>Step 1: every triangle is counted once.</b> Take a triangle and name its corners in rank order, \(a \prec b \prec c\). Its arrows are <var>a</var> → <var>b</var>, <var>a</var> → <var>c</var>, <var>b</var> → <var>c</var>. When the loop handles <var>a</var> → <var>b</var>, it finds <var>c</var> above <var>b</var> and above <var>a</var>: counted. Handling <var>a</var> → <var>c</var> would need <var>b</var> above <var>c</var>, but \(b \prec c\). Handling <var>b</var> → <var>c</var> would need <var>a</var> above <var>c</var>, but \(a \prec c\). So exactly once. And anything the loop counts is a triangle, since all three friendships exist.</p>
+      <p><b>Step 2: nobody has many people above them.</b> Small numbers first. Suppose some person had 500 people above them on the week's graph. Each of those ranks above them, so has at least as many friends: at least 500 each. That is at least 500 × 500 = 250,000 friend ends, more than the 200,000 that exist. Impossible. In symbols: let \(k = d^+(v)\). Each of the <var>k</var> people above <var>v</var> has \(\deg \ge \deg(v) \ge k\) friends, so together they own at least \(k^2\) friend ends. All friend ends add up to 2<var>m</var>, so \(k^2 \le 2m\) and \(k \le \sqrt{2m}\). On the week's graph \(\sqrt{200{,}000} \approx 447\); the measured maximum is 19.</p>
+      <p><b>Step 3: add up the work.</b> Handling an arrow <var>u</var> → <var>v</var> costs \(d^+(v)\) lookups (one per person above <var>v</var>). Person <var>v</var> is at the head of \(d^-(v)\) arrows. So the total is</p>
+      <div class="eq">\[ \sum_{\text{arrows } u \to v} d^+(v) \;=\; \sum_v d^-(v)\, d^+(v) \;\le\; \sqrt{2m}\sum_v d^-(v) \;=\; \sqrt{2m}\cdot m. \]</div>
+      <p>The inequality uses Step 2 for each \(d^+(v)\); the last step uses that every friendship is one arrow, so the \(d^-(v)\) add up to <var>m</var>. Add \(O(n \log n + m)\) to sort and point the arrows. The obvious loop's \(\sum_v \binom{\deg v}{2}\) can be as large as \(n^2/2\) for a star with only \(n - 1\) friendships; this bound holds for every network. On the week's graph the bound is 44.7 million and the measured work is 944,405, 2% of it.</p>
+      <p><b>What was shown.</b> Ranking by friend count and looking only upward counts each triangle once with at most \(m\sqrt{2m} = O(m^{1.5})\) checks, whatever the spread of friend counts. The result goes back to Chiba and Nishizeki (1985).</p>
+    </div></details>
+
+    <h4>Capping hubs, and what it costs in quality</h4>
+    <p>Back to a single request. The most expensive part of anyone's request is reading the lists of their most popular friends. The simplest fix: skip any friend with more than some number of friends, the <b>cap</b>. Then the work of a request is at most cap × (your own friend count), whatever the network looks like.</p>
+    <div class="code"><div class="ch"><span>capped.py · Day 1's scan, skipping hubs</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def suggest_capped(adj, u, k=10, cap=200):
+    """Day 1's exact scan, except a friend with more than `cap` friends is skipped."""
+    direct = adj[u]
+    count = Counter()
+    for f in direct:
+        if len(adj[f]) &gt; cap:
+            continue                           # a hub: its list costs the most and says the least
+        for v in adj[f]:
+            if v != u and v not in direct:
+                count[v] += 1
+    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), count</code></pre></div>
+    <p>What does it save, and what does it lose? Two quality measures. First, of the ten people Day 1's exact code suggests, how many does the capped version still suggest? (Day 3 turns this into a metric, recall against the exact answer.) Second, the real test: build suggestions on the past graph (the first 80% of friendships) and count how many of everyone's top ten became friends in the last 20%.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Cap</th><th class="num">people skipped</th><th class="num">average work</th><th class="num">p99 work</th><th class="num">largest work</th><th class="num">exact top 10 kept</th><th class="num">future friends found</th></tr>
+      <tr><td>none</td><td class="num">0</td><td class="num">1,477</td><td class="num">7,284</td><td class="num">51,806</td><td class="num">100%</td><td class="num">1,845</td></tr>
+      <tr><td>1,000</td><td class="num">4</td><td class="num">882</td><td class="num">4,366</td><td class="num">48,449</td><td class="num">87.7%</td><td class="num">1,866</td></tr>
+      <tr><td>500</td><td class="num">7</td><td class="num">760</td><td class="num">3,718</td><td class="num">46,571</td><td class="num">83.6%</td><td class="num">1,872</td></tr>
+      <tr class="hi"><td>200</td><td class="num">27</td><td class="num">597</td><td class="num">2,909</td><td class="num">41,558</td><td class="num">73.7%</td><td class="num">1,889</td></tr>
+      <tr><td>100</td><td class="num">100</td><td class="num">456</td><td class="num">2,338</td><td class="num">34,236</td><td class="num">61.4%</td><td class="num">1,845</td></tr>
+      <tr><td>50</td><td class="num">354</td><td class="num">334</td><td class="num">1,671</td><td class="num">26,317</td><td class="num">48.6%</td><td class="num">1,831</td></tr>
+    </table></div>
+    <p>Skipping just 27 people (0.27%) cuts the average work by 60% and the p99 by 60%. A quarter of the exact suggestions change, yet the suggestions predict future friendships slightly <em>better</em>: 1,889 against 1,845. The reason is the paradox again. A mutual friend with 1,000 friends is weak evidence that two of those 1,000 know each other; a mutual friend with 15 is strong evidence. The exact count treats them the same, so hubs add cost and noise. Day 4 turns this into a weight (Adamic–Adar). Cap too hard, at 50, and real evidence goes too: quality falls below the exact version.</p>
+    <p>Look at the largest-work column: it barely moves. The most expensive request belongs to the most popular person, and their 1,480 friends are mostly ordinary people, so a cap on friends' friend counts does not help them. Bounding that request needs a different idea: reading only some of your own friends.</p>
+    <p class="idea"><b>In one line.</b> Skipping the lists of a few hubs cuts most of the work and costs little or no quality, because hubs are the most expensive and least informative mutual friends; it does not fix the hub's own request.</p>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/find-the-town-judge/">997. Find the Town Judge</a>: friend counts in a directed graph.</li>
+      <li><a href="https://leetcode.com/problems/maximal-network-rank/">1615. Maximal Network Rank</a>: two friend counts and one shared friendship.</li>
+      <li><a href="https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/">1761. Minimum Degree of a Connected Trio in a Graph</a>: triangle listing with the upward trick.</li>
+      <li><a href="https://leetcode.com/problems/find-center-of-star-graph/">1791. Find Center of Star Graph</a>: the extreme hub.</li>
+      <li>Own: run <code>all_pairs_mutual</code> using only middle friends with at most 200 friends. What share of pairs lose all their mutual friends?</li>
+      <li>Own: prove that pointing arrows by id alone counts each triangle once, and build a network with <var>m</var> friendships on which it does about <var>m</var>² work.</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>List the triangles instead of counting them. Show the output alone can have about <var>m</var><sup>1.5</sup> triangles, so the upward loop is as fast as possible for listing.</li>
+      <li>1615 with a billion cities: only cities with the top two road counts can be in a best pair. Prove it, then count the pairs you must check.</li>
+      <li>For each friendship, count the triangles through it (how "embedded" it is) with the same upward loop.</li>
+      <li>The batch job is split by middle friend. Split each hub's pairs into chunks of at most 100,000 updates. How many chunks does the most popular person need?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>lc_997.py · Find the Town Judge, O(n + |trust|)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findJudge(n, trust):
+    score = [0] * (n + 1)
+    for a, b in trust:
+        score[a] -= 1                          # trusting someone disqualifies a
+        score[b] += 1                          # being trusted counts for b
+    for p in range(1, n + 1):
+        if score[p] == n - 1:                  # possible only if trusted by all and trusting none
+            return p
+    return -1</code></pre></div>
+      <p>The judge is trusted by <var>n</var> − 1 people and trusts nobody. Trusted-by is at most <var>n</var> − 1 and trusts is at least 0, so "trusted-by minus trusts = <var>n</var> − 1" happens only for the judge, and one score per person suffices.</p>
+      <div class="code"><div class="ch"><span>lc_1615.py · Maximal Network Rank, O(n² + m)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def maximalNetworkRank(n, roads):
+    deg = [0] * n
+    road = set()
+    for a, b in roads:
+        deg[a] += 1; deg[b] += 1
+        road.add((min(a, b), max(a, b)))
+    best = 0
+    for a in range(n):
+        for b in range(a + 1, n):
+            best = max(best, deg[a] + deg[b] - ((a, b) in road))   # a shared road counts once
+    return best</code></pre></div>
+      <p>The rank of a pair is the number of roads touching either city: the two road counts, minus 1 if the road between them was counted twice.</p>
+      <div class="code"><div class="ch"><span>lc_1761.py · Minimum Degree of a Connected Trio, O(m^1.5)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def minTrioDegree(n, edges):
+    adj = [set() for _ in range(n + 1)]
+    for a, b in edges:
+        adj[a].add(b); adj[b].add(a)
+    deg = [len(s) for s in adj]
+    up = [[w for w in adj[v] if (deg[w], w) &gt; (deg[v], v)] for v in range(n + 1)]
+    best = math.inf
+    for u in range(1, n + 1):
+        for v in up[u]:
+            for w in up[v]:
+                if w in adj[u]:                # u, v, w is a trio, found once
+                    best = min(best, deg[u] + deg[v] + deg[w] - 6)
+    return -1 if best == math.inf else best</code></pre></div>
+      <p>The same upward order as <code>count_triangles</code>, so each trio is found once. A trio's degree is the number of edges leaving it: the three counts minus the 6 ends of its own three edges.</p>
+      <div class="code"><div class="ch"><span>lc_1791.py · Find Center of Star Graph, O(1)</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def findCenter(edges):
+    (a, b), (c, d) = edges[0], edges[1]
+    return a if a in (c, d) else b             # the centre is on every edge, so on the first two</code></pre></div>
+      <p>The centre is on every edge, so it is the one endpoint the first two edges share.</p>
+      <p><b>Bad case for id order.</b> A star whose centre has id 0, plus friendships among the leaves: every leaf friendship makes the loop scan the centre's long upward list. <b>Hub chunks.</b> The most popular person has 1,480 × 1,479 = 2,188,920 ordered pairs, so 22 chunks of at most 100,000.</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Chiba and Nishizeki, "Arboricity and Subgraph Listing Algorithms", <em>SIAM Journal on Computing</em> 14(1), 1985</li>
+      <li>Schank and Wagner, "Finding, Counting and Listing All Triangles in Large Graphs, an Experimental Study", WEA 2005</li>
+      <li>Suri and Vassilvitskii, "Counting Triangles and the Curse of the Last Reducer", WWW 2011</li>
+      <li>Leskovec, Rajaraman and Ullman, <a href="http://www.mmds.org/"><em>Mining of Massive Datasets</em></a>, chapter 10 (counting triangles, also on many machines)</li>
+      <li>Gustavson, "Two Fast Algorithms for Sparse Matrices: Multiplication and Permuted Transposition", <em>ACM Transactions on Mathematical Software</em> 4(3), 1978</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ ML: percentiles -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · how slow is slow: percentiles and p99</span></div>
+
+    <h4>The situation: one number for "fast enough"</h4>
+    <p>We want to promise that suggestions are fast for nearly everyone. Which number do we watch? Try the obvious one, the average, on ten logged request costs: 310, 120, 950, 480, 205, 3,100, 640, 150, 820, 270. They add to 7,045, so the average is 704.5. But 7 of the 10 requests cost less than that, and one cost 3,100, more than four times as much. The average answers "how much work in total". It does not answer "how bad is a bad request".</p>
+
+    <h4>Percentiles, in plain words</h4>
+    <p>Sort the costs. The <b>p50</b> (the median) is the value halfway along: half the requests cost at most that. The <b>p95</b> is the value 95% of the way along, and the <b>p99</b> is 99% of the way: only the slowest 1% cost more. The simplest rule, <b>nearest rank</b>, takes the value at position ⌈<var>p</var> × <var>n</var>⌉ in the sorted list, counting from 1.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">p50</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd hot">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd">3100</span></span><span class="why">position ⌈0.5 × 10⌉ = <b>5</b> → 310.</span></div>
+      <div class="step"><span class="k">p90</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd hot">950</span><span class="nd">3100</span></span><span class="why">position ⌈0.9 × 10⌉ = <b>9</b> → 950.</span></div>
+      <div class="step"><span class="k">p99</span><span class="seq"><span class="nd">120</span><span class="nd">150</span><span class="nd">205</span><span class="nd">270</span><span class="nd">310</span><span class="nd">480</span><span class="nd">640</span><span class="nd">820</span><span class="nd">950</span><span class="nd hot">3100</span></span><span class="why">position ⌈9.9⌉ = <b>10</b>: with ten requests, "p99" is just the largest.</span></div>
+    </div><div class="cap">With ten requests the p99 is the maximum, so it says nothing about the slowest 1%. How many requests a p99 needs is the question of the next section.</div></div>
+    <div class="code"><div class="ch"><span>latency.py · nearest-rank percentile</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def percentile(xs, p):
+    """Nearest rank: sort, then take the value at position ceil(p * n), counting from 1.
+    p = 0.5 is the median (p50), p = 0.99 is p99."""
+    s = sorted(xs)
+    return s[max(1, math.ceil(p * len(s))) - 1]</code></pre></div>
+    <p>Now the week's graph. Take the work of all 10,000 requests, one per person:</p>
+    <div class="tablewrap"><table>
+      <tr><th></th><th class="num">average</th><th class="num">p50</th><th class="num">p90</th><th class="num">p95</th><th class="num">p99</th><th class="num">p99.9</th><th class="num">largest</th></tr>
+      <tr class="hi"><td>entries read per request</td><td class="num">1,477</td><td class="num">1,023</td><td class="num">3,015</td><td class="num">3,870</td><td class="num">7,284</td><td class="num">18,461</td><td class="num">51,806</td></tr>
+    </table></div>
+    <p>Only 38.7% of requests cost more than the average, and the p99 is 4.9 times the average. A budget set from the average would be broken by more than a third of requests. And here the slow requests are not bad luck: they belong to the same people every time, the ones with popular friends. The slowest 1% have a median of 151 friends, against 15 for everyone.</p>
+    <p>Why count entries instead of timing the code? Both were measured. Timed twice on one laptop, Day 1's code had a median of 0.23 ms per request both times, a p99 of 1.42 ms and then 1.48 ms, and a maximum of 6.6 ms and then 7.2 ms. Time tracks entries read closely (correlation 0.98 in the first run, 0.92 in the second), yet the slowest call belonged to a different person in each run: the one with 1,132 friends, then the one with 1,480. A clock also measures whatever else the machine was doing at that moment. Entries read are exact and identical on every run and every machine, so they make a clean stand-in for cost here; on a real server you record time, and everything below applies to it unchanged.</p>
+    <p class="idea"><b>In one line.</b> State a speed promise as a percentile ("p99 under budget"), because the average hides the tail and the tail is where the unhappy users are.</p>
+
+    <h4>How sure is a p99 from a sample?</h4>
+    <p>A real dashboard never sees every request; it sees a sample. Here we know the true p99 of all 10,000 requests, 7,284, so we can check how well a sample estimates it. Draw <var>n</var> requests at random and compute their p99. One draw gives one number. How far off might it be?</p>
+    <p><b>The idea of the bootstrap</b> (Efron, 1979): you cannot draw more samples from the real traffic, so treat your sample as if it were the whole traffic and draw from <em>it</em>. Pick <var>n</var> values from the sample with replacement (some repeat, some are left out), compute the p99, and repeat 2,000 times. The spread of those 2,000 p99s shows how much the estimate moves from sample to sample. The middle 95% of them is a 95% <b>confidence interval</b>.</p>
+    <div class="code"><div class="ch"><span>latency.py · bootstrap interval for p99</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def bootstrap_ci(xs, p=0.99, b=2000, level=0.95, seed=0):
+    """Resample the data with replacement b times, take each resample's p99,
+    and keep the middle 95% of those b values."""
+    rng = np.random.default_rng(seed)
+    x = np.asarray(xs)
+    n = len(x)
+    k = max(1, math.ceil(p * n)) - 1           # the nearest-rank position, 0-based
+    resamples = x[rng.integers(0, n, size=(b, n))]
+    reps = np.sort(resamples, axis=1)[:, k]
+    a = (1 - level) / 2
+    return np.quantile(reps, a), np.quantile(reps, 1 - a)</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th class="num">requests sampled</th><th class="num">sample p99</th><th class="num">bootstrap 95% interval</th><th class="num">contains the true 7,284?</th></tr>
+      <tr><td class="num">100</td><td class="num">5,240</td><td class="num">[4,286, 9,894]</td><td class="num">yes</td></tr>
+      <tr><td class="num">1,000</td><td class="num">9,891</td><td class="num">[6,469, 14,518]</td><td class="num">yes</td></tr>
+      <tr class="hi"><td class="num">10,000</td><td class="num">7,213</td><td class="num">[6,663, 8,143]</td><td class="num">yes</td></tr>
+    </table></div>
+    <p>A sample of 1,000 overshot by 36%: its p99 landed on one of a few sparse large values. Its interval still caught the truth. But does "95%" really mean 95%? Repeat the whole experiment 200 times at each size and count how often the interval contains 7,284:</p>
+    <div class="chart"><div class="t">How often a "95%" bootstrap interval for p99 contains the true p99 (200 repetitions each)</div>
+      <div class="br"><span>100 requests</span><span class="tr"><i style="width:62.5%;--c:var(--bad)"></i></span><span class="v">62.5%</span></div>
+      <div class="br"><span>300 requests</span><span class="tr"><i style="width:78%;--c:var(--trace)"></i></span><span class="v">78.0%</span></div>
+      <div class="br"><span>1,000 requests</span><span class="tr"><i style="width:94.5%"></i></span><span class="v">94.5%</span></div>
+      <div class="cap">At 100 requests the interval misses more than a third of the time. Its average width falls from 8,173 at 100 requests to 3,937 at 1,000.</div>
+    </div>
+    <p>Why does it fail at 100? A resample can only contain values that are in the sample, so no bootstrap p99 is larger than the sample's largest value. With 100 requests there is a 0.99<sup>100</sup> = 36.6% chance that none of them is in the true slowest 1%. Then the sample's largest value is below the true p99, every resampled p99 is too, and the interval must miss. The coverage can never beat 1 − 0.366 = 63.4%, and it measured 62.5%. The fix is more data: to say anything about p99 you need at least 299 requests per group you compare, and in practice many more; for p99.9, about 3,000.</p>
+    <p class="idea"><b>In one line.</b> A p99 from a sample needs an interval, and it needs hundreds of requests at the very least; the bootstrap gives the interval for any statistic, but it cannot see a tail the sample never reached.</p>
+
+    <details class="deep"><summary>The math, step by step: order statistics, an interval that needs no assumptions, and why p99 needs 299 samples</summary><div>
+      <p><b>What we want to show.</b> (1) Why nearest rank is the natural estimate. (2) An exact 95% interval for the true p99 that holds for any distribution. (3) Why no method can give a finite upper end with fewer than 299 samples. (4) Why tail percentiles are noisy.</p>
+      <p><b>Symbols.</b> Let <var>X</var> be the cost of a random request and \(F(x) = P(X \le x)\) the share of requests costing at most <var>x</var> (the <b>distribution function</b>). The true <var>p</var>-quantile is the smallest <var>x</var> with \(F(x) \ge p\); for <var>p</var> = 0.99 it is the p99, written \(q_{0.99}\). A sample is \(X_1, \dots, X_n\). Sorted, its <var>k</var>-th smallest value is written \(X_{(k)}\), the <var>k</var>-th <b>order statistic</b>.</p>
+      <p><b>Step 1: nearest rank.</b> In the sample, the share at or below \(X_{(k)}\) is at least <var>k</var>/<var>n</var>. The smallest <var>k</var> with \(k/n \ge p\) is \(k = \lceil pn \rceil\). So the sample's own p99 is \(X_{(\lceil 0.99 n \rceil)}\): the same definition, applied to the sample. Ten requests: ⌈9.9⌉ = 10.</p>
+      <p><b>Step 2: one count decides everything.</b> Fix a value <var>x</var>. Each sample is at most <var>x</var> with probability \(F(x)\), independently, so the number of samples at most <var>x</var>, call it \(B_x\), is a binomial count: <var>n</var> coin flips with success chance \(F(x)\). The <var>k</var>-th smallest value is at most <var>x</var> exactly when at least <var>k</var> samples are:</p>
+      <div class="eq">\[ X_{(k)} \le x \iff B_x \ge k. \]</div>
+      <p><b>Step 3: an interval with no assumptions.</b> Put <var>x</var> = \(q_{0.99}\). For a continuous distribution \(F(q_{0.99}) = 0.99\), so the count <var>B</var> of samples below the true p99 is Binomial(<var>n</var>, 0.99), whatever the distribution looks like. For ranks <var>j</var> &lt; <var>k</var>, the true p99 lies between \(X_{(j)}\) and \(X_{(k)}\) exactly when \(j \le B &lt; k\):</p>
+      <div class="eq">\[ P\big(X_{(j)} \le q_{0.99} &lt; X_{(k)}\big) = \sum_{i=j}^{k-1} \binom{n}{i}\, 0.99^i\, 0.01^{\,n-i}. \]</div>
+      <p>Choose the closest pair of ranks whose probability is at least 0.95, and \([X_{(j)}, X_{(k)}]\) is a 95% interval. This is the <b>order-statistic interval</b>. It never uses the shape of <var>F</var>.</p>
+      <div class="code"><div class="ch"><span>latency.py · the order-statistic interval</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def order_stat_ci(xs, p=0.99, level=0.95):
+    """Distribution-free interval [x_(j), x_(k)]: the narrowest pair of ranks with
+    P(j &lt;= B &lt; k) &gt;= level, where B ~ Binomial(n, p) counts samples below the true p99."""
+    s = sorted(xs)
+    n = len(s)
+    logpmf = [math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1)
+              + i * math.log(p) + (n - i) * math.log1p(-p) for i in range(n + 1)]
+    cdf = np.cumsum(np.exp(logpmf))            # cdf[i] = P(B &lt;= i)
+    best = None
+    for j in range(1, n + 1):                  # P(j &lt;= B &lt; k) = cdf[k-1] - cdf[j-1]
+        k = int(np.searchsorted(cdf, cdf[j - 1] + level - 1e-12)) + 1
+        k = min(k, n + 1)                      # k = n + 1: no sample value is high enough
+        if cdf[k - 1] - cdf[j - 1] &gt;= level - 1e-12 and (best is None or k - j &lt; best[1] - best[0]):
+            best = (j, k)
+    j, k = best
+    return s[j - 1], (s[k - 1] if k &lt;= n else math.inf)</code></pre></div>
+      <p>On the same samples as the table: 100 requests gives [4,872, ∞), 1,000 gives [7,124, 15,025], 10,000 gives [6,714, 8,228]. Over 200 repetitions it contained the truth 98.5%, 94.0% and 94.5% of the time at 100, 300 and 1,000 requests: close to its promise at every size, where the bootstrap fell to 62.5% and 78.0% at the two smaller sizes.</p>
+      <p><b>Step 4: why 299.</b> The highest rank is <var>n</var>, so the best possible upper end is the sample maximum \(X_{(n)}\). It fails when all <var>n</var> samples are below the true p99, which has probability \(0.99^n\). For a 95% upper end we need \(0.99^n \le 0.05\). Take logarithms (both sides negative, so the inequality flips when dividing):</p>
+      <div class="eq">\[ n \ln 0.99 \le \ln 0.05 \;\Rightarrow\; n \ge \frac{\ln 0.05}{\ln 0.99} = \frac{-2.996}{-0.01005} = 298.07. \]</div>
+      <p>So 299 samples at least. At 100 samples, \(0.99^{100} = 0.366\): that is why the order-statistic interval has no upper end there, and why the bootstrap, which cannot go above the sample maximum, covers at most 63.4%. For p99.9 the same step gives \(\ln 0.05/\ln 0.999 \approx 2{,}994\).</p>
+      <p><b>Step 5: why the tail is noisy.</b> Near the true p99, the share of the sample below <var>x</var> rises at a rate equal to the density \(f(q_{0.99})\): how many requests have costs close to the p99. The share below the true p99 has variance \(0.99 \times 0.01 / n\) (binomial). Turning a share error into a cost error divides by the density, so</p>
+      <div class="eq">\[ \operatorname{Var}(\hat q_{0.99}) \approx \frac{0.99 \times 0.01}{n\, f(q_{0.99})^2}. \]</div>
+      <p>In a heavy tail, few requests have costs near the p99, so the density is tiny and its square in the denominator makes the variance large. Compare the average, whose variance is \(\sigma^2/n\) with no density at all.</p>
+      <p><b>What was shown.</b> The sample p99 is the sorted value at rank ⌈0.99<var>n</var>⌉. A binomial count gives an exact interval around it that works for any distribution. No interval can bound p99 from above with fewer than 299 samples, and tail percentiles are noisy because so few requests live near them.</p>
+    </div></details>
+
+    <div class="part"><b>Practice</b><ul>
+      <li><a href="https://leetcode.com/problems/find-median-from-data-stream/">295. Find Median from Data Stream</a>: a running p50 with two heaps. Then change it to keep a running p99.</li>
+      <li>Find the smallest number of samples for which the order-statistic interval for p99.9 has a finite upper end; then for p50.</li>
+      <li>On the week's graph, sample 300 requests 200 times and measure the coverage of both intervals. Explain the result using 0.99<sup>300</sup>.</li>
+      <li>Bootstrap the <em>difference</em> of two p99s: requests with a cap of 200 against requests without, on the same sampled people. Why resample people, and not each version separately?</li>
+    </ul></div>
+    <div class="part"><b>Problem variations</b><ul>
+      <li>Costs arrive as a stream of billions of values and you cannot keep them all. Estimate p99 in bounded memory. (A histogram with buckets that grow by a fixed ratio bounds the relative error by the bucket width.)</li>
+      <li>Two servers each report their own p99. Can you combine two p99s into the p99 of all requests? Show that you cannot in general, and say what each server must send instead.</li>
+      <li>Requests are not independent: after a popular person posts, all their friends open the app at once. Which step of the binomial argument breaks?</li>
+    </ul></div>
+    <details class="sol"><summary>Solution</summary><div>
+      <div class="code"><div class="ch"><span>lc_295.py · Find Median from Data Stream, O(log n) per number</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">class MedianFinder:
+    """Two heaps: `lo` holds the smaller half (as negatives, a max-heap), `hi` the larger half."""
+
+    def __init__(self):
+        self.lo, self.hi = [], []
+
+    def addNum(self, num):
+        heapq.heappush(self.lo, -num)
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))   # move the largest of lo into hi
+        if len(self.hi) &gt; len(self.lo):
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))   # keep len(lo) &gt;= len(hi)
+
+    def findMedian(self):
+        if len(self.lo) &gt; len(self.hi):
+            return float(-self.lo[0])
+        return (-self.lo[0] + self.hi[0]) / 2</code></pre></div>
+      <p>The lower half sits in a max-heap (stored as negatives) and the upper half in a min-heap, with the lower half at most one larger. Every new number passes through the lower heap into the upper one, so the halves stay ordered. For a running p99, keep the heaps at a 99 : 1 size ratio instead of 1 : 1.</p>
+      <p><b>Smallest sample.</b> The upper end is finite only if \(1 - p^n \ge 0.95\), so \(n \ge \ln 0.05/\ln p\): 2,995 for p99.9 and 5 for p50 (a two-sided p50 interval needs \(2 \times 0.5^n \le 0.05\), so 6).</p>
+      <p><b>300 samples.</b> \(0.99^{300} = 0.049\), so the bootstrap's ceiling is about 95%; in practice it falls short (78.0% measured), because resamples rarely contain the few largest values in the right proportion. The order-statistic interval measured 94.0%.</p>
+      <p><b>Paired difference.</b> The same heavy people are heavy in both versions, so the two p99s move together. Resampling people and computing both versions on the same resample keeps that link, which makes the interval for the difference both correct and narrower.</p>
+      <p><b>Combining p99s.</b> Two situations with the same pair of server p99s but different overall p99s prove no formula can work. A: server 1 has 100 values of 1 (p99 = 1), server 2 has 100 values of 2 (p99 = 2); overall rank 198 of 200 is 2. B: server 1 as before, server 2 has 98 zeros and 2 twos (its 99th value is 2, so p99 = 2); overall the values are 98 zeros, 100 ones, 2 twos, and rank 198 is 1. Each server must send a summary that adds up, such as a histogram on shared bucket boundaries.</p>
+      <p><b>Dependence.</b> <var>B</var> is binomial only if samples are independent. Bursts of linked requests make <var>B</var> spread more than a binomial, so the true interval is wider than the formula says.</p>
+    </div></details>
+    <div class="part"><b>Further reading</b><ul>
+      <li>Bradley Efron and Robert Tibshirani, <em>An Introduction to the Bootstrap</em>, Chapman &amp; Hall, 1993</li>
+      <li>Larry Wasserman, <em>All of Statistics</em>, Springer, 2004: chapters 7 (the empirical distribution function) and 8 (the bootstrap)</li>
+      <li>H. A. David and H. N. Nagaraja, <em>Order Statistics</em>, 3rd ed., Wiley, 2003: distribution-free intervals for quantiles</li>
+      <li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)">Bootstrapping (statistics)</a> and <a href="https://en.wikipedia.org/wiki/Order_statistic">Order statistic</a> (Wikipedia)</li>
+      <li><a href="https://github.com/HdrHistogram/HdrHistogram">HdrHistogram</a>: a histogram built for recording latency with bounded relative error</li>
+    </ul></div>
+  </div>
+
+  <p><b>What breaks next.</b> Capping hubs cut the average work by 60%, but the most expensive request did not move: the most popular person still reads 1,480 friend lists, 41,558 entries even with the cap. And everything today still reads every list it touches; at a billion people with hundreds of friends each, that is far too much. The way out is to read less on purpose: look at only some of your friends, or a compact summary of each list, and still find almost the same people. Day 3 does that, and measures what it loses against the exact answers computed today.</p>
+
+  <div class="check" data-check="day2"><div class="ch"><b>Checkpoint · Day 2</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d2a" data-dim="ml"><span class="tx">Draw the friend-count distribution of the week's graph and explain why the average (20) describes almost nobody: give the median, the p99 and the largest count.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2b" data-dim="ml"><span class="tx">Explain rich-get-richer growth in words, simulate it against uniform growth, and derive that the share with at least k friends is (m/k)².</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2c" data-dim="ml"><span class="tx">Prove the friendship paradox in both forms, and reproduce 3 vs 2.33 on the six people and 73.8 vs 20 on the week's graph.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2d" data-dim="ml"><span class="tx">Show by double counting that the average request reads E[d²] = 1,477 entries, not 20 × 20 = 400.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2e" data-dim="dsa"><span class="tx">Compute everyone's mutual counts through the middle friend, derive the Σ deg² cost, and measure that the top 1% cause 69% of it.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2f" data-dim="dsa"><span class="tx">Count triangles from the least popular corner; prove each is counted once and the work is O(m<sup>1.5</sup>); solve 1761.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2g" data-dim="dsa"><span class="tx">Implement hub capping, measure the work it saves and the quality it keeps, and explain why the largest request does not shrink; solve 997 and 1615.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d2h" data-dim="ml"><span class="tx">Compute p50, p95 and p99 by nearest rank, bootstrap a 95% interval for p99, and explain why 100 samples cannot bound it (0.99<sup>100</sup> = 0.366).</span><span class="dim ml">ML</span></label>
+  </div>
+</section>

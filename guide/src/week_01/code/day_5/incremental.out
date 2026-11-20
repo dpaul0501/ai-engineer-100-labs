@@ -1,0 +1,7 @@
+replayed 20,000 new friendships on a graph of 80,000
+users touched per new friendship: mean 127.0, median 46, p99 1298, max 1747 of 10,000
+pairs whose count changes: mean 126.2, p99 1299, max 1836
+total pairs changed by all updates: 2,524,435; one batch join emits 9,519,454 rows
+recomputing every touched user's row instead: mean 363,387 reads per new friendship (2879x the incremental update)
+sampled users: 122,513 times a new friendship changed their counts, 3,633 of them changed their top 10 (0.030); rows and top 10s match a full recompute
+asserts passed

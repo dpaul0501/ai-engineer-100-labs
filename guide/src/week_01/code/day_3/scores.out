@@ -1,0 +1,19 @@
+past friendships 80000 future friendships 20000
+evaluated users 9357 (user, future friend) pairs 40000
+evaluated users with no past friend (always score 0): 5
+future friends per evaluated user: mean 4.27
+candidates per evaluated user: mean 829
+ceiling: future friends two steps away at the cut, mean per user 0.4841; best possible recall@10 0.4783
+recall@10 mutual       0.0524
+recall@10 jaccard      0.0287
+recall@10 adamic_adar  0.0638
+recall@10 resource     0.0616
+adamic_adar minus mutual: +0.0114 (paired standard error 0.0012); users better 579, worse 289
+resource minus mutual: +0.0092 (paired standard error 0.0016); users better 929, worse 712
+jaccard minus mutual: -0.0238 (paired standard error 0.0016); users better 470, worse 1266
+median past degree of suggested people, mutual       86
+median past degree of suggested people, jaccard      10
+median past degree of suggested people, adamic_adar  43
+median past degree of suggested people, resource     21
+future friendships: share a group 49.1%, same city 12.7%, no mutual friend at the cut 46.8%
+random non-friend pairs: share a group 15.5%, same city 12.4%, no mutual friend at the cut 92.0%

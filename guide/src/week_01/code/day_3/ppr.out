@@ -1,0 +1,13 @@
+directed entries per round 160000
+rounds  1: total error 9.35e-01, guaranteed at most 1.40e+00
+rounds  5: total error 2.95e-02, guaranteed at most 3.36e-01
+rounds 10: total error 1.76e-04, guaranteed at most 5.65e-02
+rounds 20: total error 9.51e-09, guaranteed at most 1.60e-03
+rounds 30: total error 1.02e-12, guaranteed at most 4.51e-05
+alpha 0.15: recall@10 0.0650; future friends found beyond two steps 70
+alpha 0.30: recall@10 0.0674; future friends found beyond two steps 13
+ppr(0.3) minus mutual: +0.0150 (paired standard error 0.0015)
+ppr(0.3) hits in top 10: 2292
+alpha 0.50: recall@10 0.0661; future friends found beyond two steps 0
+mutual recall@10 0.0524
+updates per user, 30 rounds: 4800000

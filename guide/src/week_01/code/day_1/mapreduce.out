@@ -1,0 +1,8 @@
+map You   -> [('Ben', 'Chloe')]
+map Ben   -> [('You', 'Chloe'), ('You', 'Dev'), ('You', 'Esha'), ('Chloe', 'Dev'), ('Chloe', 'Esha'), ('Dev', 'Esha')]
+map Chloe -> [('You', 'Ben'), ('You', 'Esha'), ('You', 'Farid'), ('Ben', 'Esha'), ('Ben', 'Farid'), ('Esha', 'Farid')]
+map Dev   -> []
+map Esha  -> [('Ben', 'Chloe')]
+map Farid -> []
+emitted 14 distinct pairs 12
+pairs not yet friends: {('You', 'Dev'): 1, ('You', 'Esha'): 2, ('You', 'Farid'): 1, ('Ben', 'Farid'): 1, ('Chloe', 'Dev'): 1, ('Dev', 'Esha'): 1, ('Esha', 'Farid'): 1}

@@ -1,0 +1,10 @@
+starts 1000 reached everyone from every start True
+within 1 steps: mean 20 other users, 0.20% of the others
+within 2 steps: mean 1215 other users, 12.15% of the others
+within 3 steps: mean 8581 other users, 85.82% of the others
+within 4 steps: mean 9995 other users, 99.96% of the others
+within 5 steps: mean 9999 other users, 100.00% of the others
+within 6 steps: mean 9999 other users, 100.00% of the others
+mean distance to others 3.02, largest seen 6
+user 8604 friends 15 friends of friends 904 routes walked 1018
+full BFS reads 200000 list entries

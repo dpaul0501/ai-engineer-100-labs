@@ -1,0 +1,9 @@
+friendships so far | islands (incl. users with no friend yet) | users with no friend yet | largest island
+1000 | 9006 | 8283 | 61
+5000 | 5410 | 4188 | 2159
+10000 | 2577 | 2034 | 6583
+20000 | 703 | 610 | 9190
+50000 | 40 | 37 | 9959
+80000 | 6 | 5 | 9995
+100000 | 1 | 0 | 10000
+friendships that joined two different islands 9999 ; inside an island already (they close a cycle) 90001

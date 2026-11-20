@@ -1,0 +1,742 @@
+
+<section class="s" id="day4" data-sec="day4">
+  <div class="shead"><span class="sno">DAY 4 · LEARN WHAT ENGAGEMENT MEANS</span><span class="dims"><span class="dim ml">ML</span><span class="dim ai">AI</span><span class="dim del">Delivery</span></span></div>
+  <h2>How would you design People You May Know?</h2>
+  <p class="lead">Start with mutual friends. End with a probability, a loss function, and a trap hidden in your own data.</p>
+
+  <p><b>Where we are.</b> Days 1 to 3 ranked friends of friends by a score we chose. First the number of mutual friends, then Adamic–Adar and personalised PageRank, which discount a mutual friend who knows everyone. Each score was a guess about what makes a good suggestion, and each was judged by one number on the time split: of a user's future friends, how many land in the ten slots (recall@10: 0.0524 for mutual friends, 0.0638 for Adamic–Adar). But a business does not want a score. It wants engagement, and engagement depends on many things at once: how much of a shared world two people have, how receptive each of them is, what each has done before. No hand-made formula weighs all of that well. Today we let the data decide.</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="v">0.0524 → 0.0718</div><div class="l">recall@10: mutual friends against a logistic regression trained on the past</div></div>
+    <div class="metric"><div class="v">0.83 vs 0.021</div><div class="l">ROC-AUC and PR-AUC of the same model, with 1 positive in 364 pairs</div></div>
+    <div class="metric"><div class="v">−28% vs +31%</div><div class="l">the new ranker judged on the old ranker's logs, and judged on the truth</div></div>
+    <div class="metric"><div class="v">64%</div><div class="l">share of the true lift a user-level A/B test sees when friendships cross the two arms</div></div>
+  </div>
+
+  <p class="muted small">This is a design reconstruction from first principles, the way you would build it in an ML system design interview or on a whiteboard, not a description of any company's internal system.</p>
+
+  <p>Every social app has the same quiet box: <b>People You May Know.</b></p>
+  <p>It looks trivial. A photo, a name, a button. Underneath it sits one of the cleanest ML problems in consumer tech, clean enough that if you can design this well, you can design almost any recommendation system.</p>
+  <p>Let's build it in the order you'd actually build it. Not model first. Business first.</p>
+
+  <!-- ============================================================ §1-§3 -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · what good means, and the function that says it</span></div>
+
+    <h4>1 · What does "good" even look like?</h4>
+    <p>A business doesn't want a model. It wants engagement.</p>
+    <p>But "engagement" is a foggy word until you pin it to an event you can count. In this box, the countable events are, in order:</p>
+    <ol>
+      <li>We <b>show</b> person <var>v</var> to person <var>u</var>: an impression.</li>
+      <li><var>u</var> <b>clicks</b> on <var>v</var>'s profile.</li>
+      <li><var>u</var> <b>sends a friend request</b>.</li>
+      <li><var>v</var> <b>accepts</b> it.</li>
+      <li>Weeks later, <var>u</var> and <var>v</var> actually <b>interact</b>: messages, comments, reactions.</li>
+    </ol>
+    <p>Each step is a different definition of success, and the choice changes everything you build afterwards.</p>
+    <p>Optimise for clicks, and you'll surface familiar, curious, click-bait-y faces: exes, celebrities, people <var>u</var> wants to look at but never befriend. Optimise for requests sent, and you'll favour people <var>u</var> adds impulsively. Optimise for requests <b>accepted</b>, and now you need <var>v</var> to want this too; it's a two-sided event. Optimise for interaction 30 days later, and you get the truest "good connection", but the label arrives a month late, and it's rare.</p>
+    <p>A sensible primary target, and the one we'll use:</p>
+    <p class="idea"><b>The target.</b> A request is sent after the impression, and accepted within a fixed window, say 7 days.</p>
+    <p>It's countable, it's two-sided, it arrives fast enough to learn from, and it's close to what the business actually means by engagement: a new, real connection, not a click.</p>
+    <p>Hold onto that sentence. Every design decision below is just that sentence, made mathematical.</p>
+    <p><b>On the week's graph.</b> The synthetic graph records friendships and the order in which they formed, nothing else. It has no impressions, clicks, requests or dismissals. So offline we use the closest event it does record: <b>the pair became friends after the cut</b>. That is "request sent and accepted", without knowing whether we caused it. Impressions, dismissals and exposure need the logs a real system writes; where this page needs them (§11), it simulates them and says so.</p>
+
+    <h4>2 · The whole problem, in one function</h4>
+    <p>Take two users, <var>u</var> (the viewer) and <var>v</var> (the candidate). We want a function:</p>
+    <div class="eq">\[ f(u, v) \;\rightarrow\; P(\text{request sent and accepted} \mid u \text{ is shown } v) \]</div>
+    <p>A probability. Not just a score.</p>
+    <p>Why insist on a probability when, for ranking, any score that orders people correctly would do? Four reasons:</p>
+    <ul>
+      <li><b>Calibration lets you compare across surfaces.</b> A 0.3 on the feed box and a 0.3 in search suggestions should mean the same thing if you're going to blend or budget them.</li>
+      <li><b>You can set thresholds.</b> "Never show anything below 0.02" is a product decision you can only make with real probabilities.</li>
+      <li><b>You can compute expected value.</b> Show the candidate with the highest expected <em>good</em> outcome, not just the highest rank; useful when a slot has a cost, like annoying the user.</li>
+      <li><b>You can debug it.</b> If the model says 0.8 and only 4 out of 10 such pairs connect, the model is <em>wrong in a measurable way</em>, not just "ranking badly".</li>
+    </ul>
+    <p>A score says <em>v₁ before v₂</em>. A probability says <em>how much, and how sure</em>. For a system that will make billions of these calls, the second is worth having. Section 9 checks the fourth reason on the week's graph, and finds a model that ranks well and is still wrong, measurably, about how much.</p>
+
+    <h4>3 · Who are <var>u</var> and <var>v</var>, exactly?</h4>
+    <p>A user is not an ID. For this function, each user is two things:</p>
+    <p><b>A profile</b>: relatively stable facts. Location, school, workplace, groups, pages followed, language, how long they've been on the platform, how many friends they already have.</p>
+    <p><b>A behavioural profile</b>: what they <em>do</em>. How often they log in, how often they send requests, how often they accept them, whose profiles they view, what they dismiss, how quickly they respond.</p>
+    <p>And here's the first real insight of the whole design:</p>
+    <p class="idea"><b>In one line.</b> The pair features matter more than either person's features.</p>
+    <p>Knowing <var>u</var> is active and <var>v</var> is popular tells you little. Knowing <var>u</var> and <var>v</var> went to the same school, in the same years, share 14 friends, and <var>u</var> viewed <var>v</var>'s profile twice last month: that tells you almost everything. Link prediction is a problem about the <em>space between</em> two people, not about either person alone.</p>
+    <p>So the question "given <var>u</var> and <var>v</var>, how likely is a connection?" is really: <em>how much evidence of a shared world do these two people carry, and how receptive is each of them, right now?</em></p>
+    <p><b>What the week's graph gives us.</b> For each person: their friends at the cut (so their friend count), a city, and one to three groups. For each pair: everything we can compute from those, which is mutual friends and their weighted versions from Day 3, shared groups, and same city. That is a thin profile and no behaviour at all, which is why the models below stay small.</p>
+  </div>
+
+  <!-- ============================================================ §4-§8 -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · from a rule to a model</span></div>
+
+    <h4>4 · Start dumb: the mutual-friends rule</h4>
+    <p>Before any ML, build the rule a smart person would write in an afternoon:</p>
+    <div class="eq">\[ \text{score}(u,v) = |\,\text{friends}(u) \cap \text{friends}(v)\,| \]</div>
+    <p>Rank candidates by how many mutual friends they share with <var>u</var>. Show the top few.</p>
+    <figure class="fig"><img src="img/mutual-friends.png" alt="u and v share three mutual friends, M1, M2 and M3; a dashed line between u and v is the friendship being predicted."><figcaption><var>u</var> and <var>v</var> share three mutual friends, M1, M2 and M3. The dashed edge is the one we're predicting.</figcaption></figure>
+    <p>This works embarrassingly well, because of a deep fact about social graphs, <b>triadic closure</b>: if <var>u</var> knows M and <var>v</var> knows M, <var>u</var> and <var>v</var> probably move in the same world and are far more likely to know, or want to know, each other than two strangers.</p>
+    <p>Ship this first. It's your baseline, your fallback, and, importantly, the thing every fancier model must <em>beat</em>, or you delete the fancier model. On the week's time split it puts 5.24% of a user's future friends in their top ten (recall@10 0.0524, Day 1's count ranked by Day 2's top-k).</p>
+    <p>But the rule has cracks, and naming them is how you discover your features:</p>
+    <ul>
+      <li><b>All mutual friends are not equal.</b> A mutual friend who knows everyone (the school celebrity with 4,000 friends) is weak evidence. A mutual friend with 30 friends who knows both of you is strong evidence. That's the idea behind <b>Adamic–Adar</b>: weight each mutual friend by 1 / log(their friend count). Day 3 measured it: 0.0638 against 0.0524.</li>
+      <li><b>It ignores receptiveness.</b> 40 mutual friends means nothing if <var>v</var> hasn't logged in for a year or never accepts requests.</li>
+      <li><b>It can't personalise.</b> It gives the same answer for a <var>u</var> who adds everyone and a <var>u</var> who adds nobody.</li>
+      <li><b>It dies on cold start.</b> A new user has no friends, so no mutuals, so no suggestions, exactly when suggestions matter most. Five of the week's test users had no friend at the cut: no candidates, recall 0, for every ranker on this page except the last section's.</li>
+    </ul>
+    <p>You can patch each crack with another hand-written rule: same school and overlapping years, same workplace, imported contacts, shared group. Do it. This "rules v1" is a genuinely useful system.</p>
+    <p>But notice what you're doing: hand-tuning weights ("is a shared school worth 3 mutual friends, or 5?") with no principled way to know if you're right. That discomfort is the doorway to ML.</p>
+
+    <h4>5 · Do we have history? Then it's supervised learning</h4>
+    <p>The question that decides your whole approach:</p>
+    <p><b>Have we shown suggestions before, and recorded what happened?</b></p>
+    <p>At the scale of a large social network, yes: billions of impressions, each with an outcome. That turns a guessing problem into a <b>supervised learning</b> problem:</p>
+    <ul>
+      <li><b>One row per impression</b>: the pair (<var>u</var>, <var>v</var>) that was shown, the features of that pair <em>at the moment it was shown</em>, and what happened next.</li>
+      <li><b>Label = 1</b> if a request was sent and accepted within the window. <b>Label = 0</b> otherwise.</li>
+      <li><b>Learn</b> a function that maps features → probability of label 1, in a way that generalises to pairs it has never seen.</li>
+    </ul>
+    <p>(If the answer were <em>no</em>, a brand-new product with no history, you'd stay with rules and exploration while you collect this data. The last section of this page shows what you can learn from behaviour alone.)</p>
+    <p>Two warnings belong here, because they quietly ruin real systems:</p>
+    <p><b>Point-in-time correctness.</b> Features must be what was true <em>at impression time</em>, not today. If you compute "mutual friends" using today's graph, you've leaked the future into training: <var>u</var> and <var>v</var> are friends <em>now partly because you suggested them</em>. Your offline numbers will look magical and your live system will not.</p>
+    <p><b>"Ignored" is not the same as "rejected".</b> A 0 can mean <var>v</var> was a bad suggestion, or that <var>u</var> never scrolled far enough to see it. Keep the strong signal separate: an explicit <b>dismiss / "remove" click</b> is a true negative. A passive non-click is a weak one. Good label design is half of good modelling.</p>
+
+    <p><b>The rows, on the week's graph.</b> With no impressions, one row is one <em>candidate pair</em>: a friend of a friend of <var>u</var> at the cut. Point-in-time correctness becomes two cuts in the order friendships formed. Features may only look at friendships before a cut; the label is whether the pair became friends in the 20,000 friendships after it.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">train</span><span class="seq"><span class="nd">edges 0–59,999 · look</span><span class="nd hot">60,000–79,999 · label</span><span class="nd" style="opacity:.45">80,000–99,999 · unseen</span></span><span class="why">fit the model</span></div>
+      <div class="step"><span class="k">test</span><span class="seq"><span class="nd">edges 0–79,999 · look</span><span class="nd hot">80,000–99,999 · label</span></span><span class="why">judge it, exactly as it would be served: Day 3's split</span></div>
+    </div><div class="cap">The test cut is the same one Days 1–3 used. The model never sees a label from the test window, and no feature uses a friendship from it.</div></div>
+    <ul>
+      <li><b>Training cut:</b> 4,541,304 candidate pairs, of which 18,322 became friends (0.4035%).</li>
+      <li><b>Test cut:</b> the 9,357 users who gain at least one friend among the last 20,000 friendships; 7,757,153 candidate pairs, 21,290 positives: 0.2745%, one in 364.</li>
+      <li><b>Misses before we start:</b> the 20,000 new friendships are 40,000 (user, future friend) pairs counted from both ends; only 53.2% of them were candidates at the cut. No ranker over friends of friends can recall more than 0.484 of a user's future friends on average (95% interval 0.478–0.491). That is the ceiling.</li>
+    </ul>
+    <p><b>Too many negatives.</b> Keep every positive and each negative with probability <var>r</var> = 0.05: 244,542 training rows, 7.5% of them positive, nineteen times fewer rows. The model will then believe friendships are far more common than they are; §9 shows the one-line fix. The features come out of the same scan that finds the candidates (Day 1's count, Day 3's weights):</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · two_hop, pair_features, sample_negatives</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def two_hop(self, u):
+    """Candidates of u (friends of friends, minus u and u's friends) with mutual, AA and RA counts."""
+    F = self.nbrs(u)
+    if len(F) == 0:
+        return np.empty(0, np.int64), np.empty(0), np.empty(0), np.empty(0)
+    reach = np.concatenate([self.nbrs(z) for z in F])
+    via = np.repeat(F, self.deg[F])
+    cn = np.bincount(reach, minlength=self.n).astype(float)
+    aa = np.bincount(reach, weights=self.w_aa[via], minlength=self.n)
+    ra = np.bincount(reach, weights=self.w_ra[via], minlength=self.n)
+    cn[u] = 0; cn[F] = 0
+    c = np.flatnonzero(cn)                       # sorted ids
+    return c, cn[c], aa[c], ra[c]
+
+def pair_features(g, city, G, u, c, cn, aa, ra):
+    du, dv = g.deg[u], g.deg[c]
+    X = np.empty((len(c), len(FEATURES)), np.float32)
+    X[:, 0] = np.log1p(cn)
+    X[:, 1] = cn / (du + dv - cn)                    # |N(u) ∪ N(v)| = du + dv - cn
+    X[:, 2] = np.log1p(aa)
+    X[:, 3] = np.log1p(ra)
+    X[:, 4] = G[c] @ G[u]
+    X[:, 5] = city[c] == city[u]
+    X[:, 6] = np.log1p(du)
+    X[:, 7] = np.log1p(dv)
+    return X
+
+def sample_negatives(D, r=0.05, seed=0):
+    """Keep every positive and each negative with probability r."""
+    keep = D["y"] | (np.random.default_rng(seed).random(len(D["y"])) &lt; r)
+    return D["X"][keep], D["y"][keep].astype(float)</code></pre></div>
+    <p>On the six people of the running example, <code>two_hop</code> for You returns Dev, Esha and Farid with 1, 2 and 1 mutual friends, and Esha's Adamic–Adar is 2 / ln 4 = 1.44; <code>common.py</code> asserts both.</p>
+
+    <h4>6 · Error and loss: what does "wrong" mean?</h4>
+    <p>A model outputs a probability <var>p</var>. Reality outputs 0 or 1. The gap between them is <b>error</b>, and to train anything, you need one number that says how wrong, overall, the model was. That's the <b>loss function</b>.</p>
+    <p>For this problem, the standard choice is <b>log loss</b> (binary cross-entropy):</p>
+    <div class="eq">\[ \text{loss} = -\big[\, y \log p + (1-y)\log(1-p) \,\big] \]</div>
+    <p>Read it in plain English:</p>
+    <ul>
+      <li>If the connection happened (<var>y</var> = 1) and you predicted <var>p</var> = 0.9, loss is small: −log(0.9) ≈ <b>0.11</b>.</li>
+      <li>If it happened and you predicted <var>p</var> = 0.1 (you were confidently wrong), loss is −log(0.1) = <b>2.30</b>. About twenty times worse.</li>
+      <li>If it didn't happen (<var>y</var> = 0) and you predicted <var>p</var> = 0.9, same punishment in mirror image: 2.30.</li>
+    </ul>
+    <p>Log loss has exactly the personality this problem needs:</p>
+    <ol>
+      <li><b>It punishes confident wrongness brutally</b>, which is what makes the outputs behave like real probabilities, not just ranks.</li>
+      <li><b>It's smooth and differentiable</b>, so a model can climb down it by gradient descent. "Accuracy" can't be trained on directly: it's a staircase, flat almost everywhere, with no signal about <em>which way</em> to move. Four predictions (0.40, 0.30, 0.20, 0.80) for labels (1, 0, 0, 1) have accuracy 0.75. Move the first from 0.40 to 0.49, a step in the right direction: accuracy stays 0.75, log loss falls from 0.4298 to 0.3791.</li>
+      <li><b>It rewards honesty.</b> The best strategy under log loss is to say what you truly believe. If pairs like this connect 20% of the time, reporting 0.1, 0.2 or 0.3 costs 0.5448, 0.5004 and 0.5261 on average: the truth wins. Score the same pairs by absolute error |<var>y</var> − <var>p</var>| instead, and the best report is 0, a lie. A model gaming log loss only hurts itself.</li>
+    </ol>
+    <p>Train by minimising average log loss over millions of historical impressions. That one sentence <em>is</em> the learning algorithm's job description; everything else is machinery.</p>
+    <p><b>The machinery, in NumPy.</b> For logistic regression (next section) the gradient of the average log loss is the average of error × features, so training is a loop of "predict, compare, nudge":</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · sigmoid, loss_grad, train_logreg</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def sigmoid(z):
+    return 0.5 * (1.0 + np.tanh(0.5 * z))           # = 1/(1+e^-z), no overflow
+
+def loss_grad(w, X, y, lam):
+    """Mean log loss + (lam/2)|w|^2 (bias excluded) and its gradient. X has a leading column of 1s."""
+    p = sigmoid(X @ w)
+    reg = np.r_[0.0, w[1:]]
+    return log_loss(p, y) + 0.5 * lam * reg @ reg, X.T @ (p - y) / len(y) + lam * reg
+
+def train_logreg(X, y, lam=1e-3, iters=3000):
+    """Full-batch gradient descent, step 1/L with L = ||X||^2/(4n) + lam: every step goes downhill."""
+    X = np.c_[np.ones(len(X)), X]
+    L = np.linalg.norm(X, 2) ** 2 / (4 * len(y)) + lam
+    w = np.zeros(X.shape[1])
+    for _ in range(iters):
+        w -= loss_grad(w, X, y, lam)[1] / L
+    return w</code></pre></div>
+    <p><code>common.py</code> checks the gradient against finite differences. On the training rows, 3,000 full-batch steps take about half a minute on one laptop core. On all 7,757,153 test pairs, after the correction of §9, the model's log loss is 0.0173; always predicting the base rate scores 0.0189. That gap looks small, and it is the whole of what the model knows; with one positive in 364, almost every pair is an easy zero.</p>
+    <details class="deep"><summary>The math, step by step: likelihood → log loss → gradient → one valley → a step size that always goes down</summary><div>
+      <p><b>What we will do.</b> Turn "make the observed outcomes likely" into a loss, differentiate it, show it has a single valley, and pick a step that is guaranteed to go downhill.</p>
+      <p><b>Notation.</b> Training pair <var>i</var> has a feature vector \(x_i\) (with a leading 1, so the baseline is just another weight) and a label \(y_i \in \{0, 1\}\). The weights are <var>w</var>, the total is \(z_i = w\cdot x_i\), the prediction \(p_i = \sigma(z_i) = 1/(1+e^{-z_i})\). Stack the rows into a matrix <var>X</var> with <var>n</var> rows.</p>
+      <p><b>Why the sigmoid.</b> The odds of probability <var>p</var> are \(p/(1-p)\): 0.5 gives 1, 0.9 gives 9. Their log can be any real number. Logistic regression says the log-odds equal the total, \(\log\frac{p}{1-p} = z\); solving for <var>p</var> gives \(p = 1/(1+e^{-z})\). Raising a feature by 1 multiplies the odds by \(e^{w_j}\).</p>
+      <p><b>Step 1, the likelihood.</b> Treat each label as a coin that lands 1 with probability \(p_i\). The probability of the observed label is \(p_i^{y_i}(1-p_i)^{1-y_i}\): \(p_i\) if \(y_i = 1\), \(1-p_i\) if \(y_i = 0\). For independent pairs, multiply. We want weights that make the product large.</p>
+      <p><b>Step 2, the log loss.</b> The log turns the product into a sum without moving its maximum. Maximising it is minimising its negative; dividing by <var>n</var> makes an average:</p>
+      <div class="eq">\[ \ell(w) = -\frac1n\sum_{i=1}^{n}\Big[\,y_i \log p_i + (1-y_i)\log(1-p_i)\,\Big]. \]</div>
+      <p><b>Step 3, the sigmoid's slope.</b> \(\sigma'(z) = \frac{e^{-z}}{(1+e^{-z})^2} = \frac{1}{1+e^{-z}}\cdot\frac{e^{-z}}{1+e^{-z}} = \sigma(z)\,\big(1-\sigma(z)\big)\).</p>
+      <p><b>Step 4, the gradient for one pair.</b> Using \(\frac{d}{dz}\log\sigma = 1-\sigma\) and \(\frac{d}{dz}\log(1-\sigma) = -\sigma\):</p>
+      <div class="eq">\[ \frac{\partial}{\partial z}\Big[-y\log p - (1-y)\log(1-p)\Big] = -y(1-p) + (1-y)\,p = p - y . \]</div>
+      <p>The error, exactly. Since \(z = w\cdot x\), the chain rule multiplies by <var>x</var>: one pair contributes \((p_i - y_i)\,x_i\), and the average is \(\nabla\ell = \frac1n X^\top(p - y)\). That is the line <code>X.T @ (p - y) / len(y)</code>.</p>
+      <p><b>Step 5, one valley.</b> Differentiate again: the matrix of second derivatives is \(H = \frac1n\sum_i p_i(1-p_i)\,x_i x_i^\top\). For any direction <var>d</var>, \(d^\top H d = \frac1n\sum_i p_i(1-p_i)(x_i\cdot d)^2 \ge 0\). Curvature never negative in any direction means <b>convex</b>: every low point is the lowest point, and gradient descent cannot get stuck. Adding \(\frac{\lambda}{2}\|w\|^2\) (the code uses λ = 0.001, baseline excluded) adds λ to the curvature, making the minimum unique even when features are near-copies of each other, as mutual friends, Adamic–Adar and resource allocation are.</p>
+      <p><b>Step 6, a step that always goes down.</b> \(p(1-p) \le \tfrac14\), so the curvature is at most \(L = \|X\|_2^2/(4n) + \lambda\), where \(\|X\|_2\) is the largest singular value of <var>X</var>. With that worst-case curvature, a Taylor bound for the step \(w' = w - g/L\), \(g = \nabla\ell(w)\), gives</p>
+      <div class="eq">\[ \ell(w') \;\le\; \ell(w) - \frac1L\|g\|^2 + \frac{L}{2}\cdot\frac{\|g\|^2}{L^2} \;=\; \ell(w) - \frac{1}{2L}\|g\|^2 . \]</div>
+      <p>Every step lowers the loss unless the gradient is already zero; nothing needs tuning. That is <code>L</code> in <code>train_logreg</code>.</p>
+      <p><b>What we showed.</b> Log loss is the negative log-likelihood of the labels; its gradient is the average of error × features; it is convex; and the step 1/<var>L</var> descends every time to the single best set of weights.</p>
+    </div></details>
+    <details class="deep"><summary>The math, step by step: why log loss rewards the honest probability (a proper scoring rule)</summary><div>
+      <p><b>What we will do.</b> Fix a kind of pair that truly connects with probability <var>p</var>. Ask which reported number <var>q</var> has the lowest expected loss, under log loss and under absolute error.</p>
+      <p><b>Numbers first.</b> <var>p</var> = 0.2. Reporting <var>q</var> = 0.2 costs on average \(-[0.2\log 0.2 + 0.8\log 0.8] = 0.5004\); <var>q</var> = 0.1 costs 0.5448; <var>q</var> = 0.3 costs 0.5261 (<code>loss_by_hand.py</code>).</p>
+      <p><b>Step 1, the expected loss.</b> The label is 1 with probability <var>p</var>, so</p>
+      <div class="eq">\[ L(q) = -\big[\,p\log q + (1-p)\log(1-q)\,\big]. \]</div>
+      <p><b>Step 2, its minimum.</b> \(L'(q) = -\frac{p}{q} + \frac{1-p}{1-q}\). Setting it to zero: \(p(1-q) = q(1-p)\), so \(q = p\). And \(L''(q) = \frac{p}{q^2} + \frac{1-p}{(1-q)^2} > 0\), so it is a minimum, the only one.</p>
+      <p><b>Step 3, how much a lie costs.</b> \(L(q) - L(p) = p\log\frac{p}{q} + (1-p)\log\frac{1-p}{1-q}\), the Kullback–Leibler divergence between the true coin and the reported one: zero only when \(q = p\), positive otherwise.</p>
+      <p><b>Step 4, absolute error is not proper.</b> Expected |<var>y</var> − <var>q</var>| is \(p(1-q) + (1-p)q = p + q(1-2p)\), a straight line in <var>q</var>. For <var>p</var> &lt; 0.5 its slope is positive, so the best report is <var>q</var> = 0, whatever <var>p</var> is. It rewards rounding, not honesty.</p>
+      <p><b>What we showed.</b> Under log loss the expected loss is lowest exactly at the true probability (a <b>proper scoring rule</b>); the squared error \((y-q)^2\), the Brier score, is proper too, and absolute error is not.</p>
+    </div></details>
+
+    <h4>7 · The predictor: models, in the order you'd try them</h4>
+    <p><b>v1, logistic regression</b> on a handful of pair features. It's linear, fast, interpretable ("same school adds this much, each Adamic–Adar point adds that much"), and its probabilities are naturally well-calibrated. You will be surprised how far this gets. This is also the model you can <em>explain</em> when product asks why someone was suggested.</p>
+    <p>On the week's graph, with every feature standardised (mean 0, spread 1, using the training rows' values, reused unchanged at serving time):</p>
+    <div class="tablewrap"><table>
+      <tr><th>feature</th><th class="num">weight</th><th>reading</th></tr>
+      <tr class="hi"><td>Adamic–Adar (log)</td><td class="num">+1.573</td><td>the strongest signal</td></tr>
+      <tr><td>mutual friends (log)</td><td class="num">−0.813</td><td>with Adamic–Adar held fixed, more mutual friends means they are bigger hubs, so each is weaker evidence</td></tr>
+      <tr><td>resource allocation (log)</td><td class="num">−0.257</td><td>overlaps with Adamic–Adar; the two share the credit</td></tr>
+      <tr><td>Jaccard</td><td class="num">+0.200</td><td>small once friend counts are in the model</td></tr>
+      <tr><td>shared groups</td><td class="num">+0.260</td><td>a shared world the friendship graph cannot see</td></tr>
+      <tr><td>same city</td><td class="num">−0.005</td><td>nothing: the generator ignores city, and the model found that out</td></tr>
+      <tr><td>friend count of <var>u</var>, of <var>v</var> (log)</td><td class="num">+0.349, +0.366</td><td>receptiveness: sociable people make more friends</td></tr>
+      <tr><td>baseline</td><td class="num">−2.999</td><td>before the correction of §9</td></tr>
+    </table></div>
+    <p>A negative weight on mutual friends does not mean mutual friends are bad. The model uses the difference between the count and Adamic–Adar to discount hubs more steeply than 1/log does. Nobody would have hand-tuned that sign. This is the reason to learn weights rather than choose them.</p>
+    <p><b>v2, gradient-boosted trees.</b> Real life has interactions a line can't express: <em>mutual friends matter a lot, but only if v is active; same city matters, but only for users with few friends so far.</em> Trees find these bends without you hand-specifying them. In practice, this class of model carried most large-scale ranking systems for a decade, for good reason.</p>
+    <p>Boosting fits a sequence of small trees, each to the errors of the ones before. Each tree is chosen greedily: bucket every feature into 32 bins, sum the loss's slope and curvature per bin, and split where the gain is largest. With NumPy that is a few <code>bincount</code> calls per level:</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · train_gbdt</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def train_gbdt(B, y, n_trees=200, depth=3, lr=0.1, lam=1.0, nb=33, min_h=10.0):
+    """Gradient boosting on log loss with Newton leaves. B: binned features. Returns (base, trees).
+    A tree is (feat, thr, leaf): level-order split arrays and 2**depth leaf values."""
+    n, d = B.shape
+    base = math.log(y.mean() / (1 - y.mean()))
+    F = np.full(n, base)
+    trees = []
+    for _ in range(n_trees):
+        p = sigmoid(F); gr, he = p - y, p * (1 - p)
+        node = np.zeros(n, np.int64)
+        feat, thr = [], []
+        for lev in range(depth):
+            m = 2 ** lev
+            bf, bt = np.zeros(m, np.int64), np.full(m, nb)       # thr = nb: everything goes left
+            best = np.zeros(m)
+            for j in range(d):
+                key = node * nb + B[:, j]
+                Gh = np.bincount(key, gr, m * nb).reshape(m, nb).cumsum(1)
+                Hh = np.bincount(key, he, m * nb).reshape(m, nb).cumsum(1)
+                Gt, Ht = Gh[:, -1:], Hh[:, -1:]
+                GR, HR = Gt - Gh, Ht - Hh
+                gain = Gh ** 2 / (Hh + lam) + GR ** 2 / (HR + lam) - Gt ** 2 / (Ht + lam)
+                gain[(Hh &lt; min_h) | (HR &lt; min_h)] = 0
+                k = gain.argmax(1); gk = gain[np.arange(m), k]
+                better = gk &gt; best
+                best[better], bf[better], bt[better] = gk[better], j, k[better]
+            feat.append(bf); thr.append(bt)
+            node = 2 * node + (B[np.arange(n), bf[node]] &gt; bt[node])
+        L = 2 ** depth
+        leaf = -lr * np.bincount(node, gr, L) / (np.bincount(node, he, L) + lam)
+        F += leaf[node]
+        trees.append((feat, thr, leaf))
+    return base, trees</code></pre></div>
+    <p><code>common.py</code> checks it learns an XOR of two features, which no line can. On the week's graph, 200 trees of depth 3 train in under half a minute on one laptop core. The cheaper alternative is to hand the line its bends as <b>feature crosses</b>: products such as mutual friends × <var>v</var>'s friend count, Adamic–Adar × shared groups, and squares, eight extra columns.</p>
+    <div class="tablewrap"><table>
+      <tr><th>ranker</th><th class="num">recall@10</th><th class="num">vs logistic regression (paired, 95%)</th><th class="num">log loss</th></tr>
+      <tr class="hi"><td>logistic regression, 8 features</td><td class="num">0.0718</td><td class="num">–</td><td class="num">0.0173</td></tr>
+      <tr><td>logistic regression + 8 crosses</td><td class="num">0.0714</td><td class="num">−0.0004 [−0.0019, +0.0013]</td><td class="num">–</td></tr>
+      <tr><td>boosted trees, 200 × depth 3</td><td class="num">0.0729</td><td class="num">+0.0011 [−0.0013, +0.0033]</td><td class="num">0.0166</td></tr>
+    </table></div>
+    <p>Neither beats the line on the top ten by more than noise. The trees' probabilities are a little sharper (log loss 0.0166 against 0.0173), and they gain most for users with one to five friends (0.1023 against 0.0955), but that difference, +0.0068 [−0.0034, +0.0167] over 641 users, is not established either. The week's generator has few bends for trees to find, and the log transforms already straightened the biggest one. With receptiveness, behaviour and context features, a real system has many more.</p>
+    <p><b>v3, learned representations.</b> Two-tower / embedding models learn a vector per user such that likely connections sit near each other; graph neural networks go further and learn from the structure of the friend graph itself. These shine at <b>candidate generation</b>, finding plausible <var>v</var>'s among billions, and at cold start, where hand features are empty but behaviour still leaves a trace. The last section of this page builds the simplest one and measures it.</p>
+    <p>And split the system in two while you're at it, because no model scores <em>every</em> pair:</p>
+    <div class="dg"><div class="seq"><span class="nd">candidates · thousands</span><span class="lk">→</span><span class="nd hot">ranking f(u, v)</span><span class="lk">→</span><span class="nd">top K shown</span><span class="lk">→</span><span class="nd">outcomes</span><span class="lk">→</span><span class="nd new">tomorrow's training data</span></div>
+      <div class="cap">Candidates first, then ranking, then a few shown slots, then outcomes that become tomorrow's data. On the week's graph: 829 friends of friends per test user on average (7,757,153 / 9,357), ten shown.</div></div>
+    <p><b>Candidate generation</b> (cheap, high-recall): friends-of-friends, same school/work/city, contact imports, embedding neighbours. Thousands in, no one good lost. <b>Ranking</b> (expensive, high-precision): the <var>f</var>(<var>u</var>, <var>v</var>) above, applied to those thousands, top-K shown.</p>
+    <p>The rule for moving from v1 → v2 → v3 is not fashion. It's: <em>the new model must beat the old one offline, then online, by enough to pay for its complexity.</em> Otherwise the dumb rule from §4 is still your production system, and there's no shame in that. There's shame in the opposite. Here, logistic regression clears the bar against Adamic–Adar (+0.0080 [+0.0053, +0.0108] recall@10) and the trees do not clear it against logistic regression.</p>
+
+    <h4>8 · Features: where the wins actually come from</h4>
+    <p>Models are interchangeable. Features are the product. The groups that matter:</p>
+    <p><b>Graph features (the pair).</b> Mutual-friend count · Jaccard similarity of friend sets · Adamic–Adar score · mutual friends weighted by how strongly <var>u</var> actually interacts with them · shortest path between <var>u</var> and <var>v</var> · time since the newest mutual connection formed.</p>
+    <p><b>Shared-world features (the pair).</b> Same school / workplace, and did the years overlap? · same city · shared groups, events, pages · contact-book overlap, if the user granted it.</p>
+    <p><b>Receptiveness features (each person).</b> <var>v</var>'s historical acceptance rate · <var>v</var>'s recent activity · <var>u</var>'s historical sending rate · <var>u</var>'s friend count (a user at 4,900 friends needs nobody) · account age.</p>
+    <p><b>Behavioural / affinity features (the pair, handled with care).</b> <var>u</var> viewed <var>v</var>'s profile · <var>u</var> searched <var>v</var>'s name · past interactions in comments or groups. These are powerful, and exactly where you must be strict about consent, product policy, and leakage.</p>
+    <p><b>Negative features (often the strongest of all).</b> <var>u</var> dismissed <var>v</var> before · <var>u</var> dismissed people <em>like v</em> before · <var>v</var> was shown to <var>u</var> repeatedly with no action. A system that re-suggests a dismissed person isn't dumb; it's rude, and users remember it.</p>
+    <p><b>Context features.</b> Which surface, what position in the list, time of day, device. Position matters more than you'd like: things shown first get clicked more <em>because they were shown first</em>. Remember that when we get to evaluation.</p>
+    <p><b>Which of these the week's graph has.</b> Four graph features (mutual friends, Jaccard, Adamic–Adar, resource allocation), two shared-world features (shared groups, same city) and one receptiveness stand-in (each person's friend count). No behaviour, no negatives, no context: those need logs. The weights above already say which mattered: Adamic–Adar most, shared groups clearly, city not at all. The shared world is where most of the learned gain comes from: the same regression on the six graph features alone scores 0.0661 recall@10, only +0.0023 [−0.0002, +0.0047] over Adamic–Adar; adding shared groups and city adds +0.0058 [+0.0037, +0.0079]. The graph cannot see that two people joined the same club.</p>
+  </div>
+
+  <!-- ============================================================ §9 -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · offline evaluation</span></div>
+
+    <h4>9 · Offline evaluation: why accuracy is a lie here</h4>
+    <p>Now: how do you know the function is <em>good enough</em>, before it touches a real user?</p>
+    <p>First, kill the metric everyone reaches for. <b>Accuracy.</b></p>
+    <p>Suppose 10,000 impressions produce 100 accepted connections, a 1% positive rate, realistic for this problem. A "model" that predicts <b>no, for everyone</b>, scores:</p>
+    <p><b>99% accuracy. And it is completely useless.</b> It suggests nobody, ranks nobody, learns nothing. On the week's test pairs, where one in 364 connects, it scores 99.73%.</p>
+    <p>Accuracy fails because the classes are wildly imbalanced and because we don't actually make yes/no decisions; we <em>rank</em>. So use metrics that measure ranking:</p>
+    <p><b>ROC-AUC.</b> Pick one random positive pair and one random negative pair. What's the probability your model scored the positive one higher? That's AUC. 0.5 is coin-flipping; 1.0 is perfect separation. It's a good, stable, threshold-free summary. By hand: scores (3, 2, 2, 1) for labels (1, 1, 0, 0). The four positive–negative comparisons are a win, a win, a tie (half) and a win: AUC = 3.5 / 4 = 0.875. Comparing every pair of the test set would take 21,290 × 7,735,863 ≈ 1.6 × 10¹¹ comparisons; one sort gives the same number:</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · roc_auc, average_precision</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def roc_auc(scores, labels):
+    """P(random positive outranks random negative), ties count 1/2. One sort (Mann-Whitney)."""
+    s, y = np.asarray(scores, float), np.asarray(labels, bool)
+    order = np.argsort(s, kind="mergesort")
+    s, y = s[order], y[order]
+    starts = np.r_[0, np.flatnonzero(np.diff(s)) + 1]
+    pos = np.add.reduceat(y.astype(float), starts)
+    neg = np.add.reduceat((~y).astype(float), starts)
+    neg_below = np.cumsum(neg) - neg
+    return float((pos * (neg_below + 0.5 * neg)).sum() / (pos.sum() * neg.sum()))
+
+def average_precision(scores, labels):
+    """PR-AUC as average precision: the mean, over positives, of precision at that positive's rank."""
+    y = np.asarray(labels, bool)[np.argsort(-np.asarray(scores, float), kind="stable")]
+    hits = np.cumsum(y)
+    return float((hits[y] / (np.flatnonzero(y) + 1)).mean())</code></pre></div>
+    <details class="deep"><summary>The math, step by step: AUC is a rank statistic (Mann–Whitney), so one sort computes it</summary><div>
+      <p><b>What we will do.</b> Show that the rank sum of the positives counts how many (positive, negative) pairs the positive wins.</p>
+      <p><b>Notation.</b> \(n_+\) positives, \(n_-\) negatives. Rank all scores 1 (lowest) to \(n_+ + n_-\), no ties for now. \(R_+\) is the sum of the positives' ranks; <var>U</var> is the number of (positive, negative) pairs in which the positive scores higher, the <b>Mann–Whitney U</b>. By definition AUC = \(U/(n_+n_-)\).</p>
+      <p><b>Numbers first.</b> Scores (4, 3, 2, 1) with labels (1, 0, 1, 0): ranks 4, 3, 2, 1, so \(R_+ = 4 + 2 = 6\). Wins: the 4 beats both negatives, the 2 beats the 1, so <var>U</var> = 3. And \(6 - 2\cdot 3/2 = 3\).</p>
+      <p><b>Step 1.</b> A positive's rank is 1 + (positives below it) + (negatives below it).</p>
+      <p><b>Step 2.</b> Sum over the positives. The "1 + positives below" parts are the positives' ranks among themselves, 1, 2, …, \(n_+\), adding to \(n_+(n_++1)/2\). The "negatives below" parts add to <var>U</var>. So</p>
+      <div class="eq">\[ R_+ = \frac{n_+(n_++1)}{2} + U \quad\Longrightarrow\quad \text{AUC} = \frac{R_+ - n_+(n_++1)/2}{n_+\, n_-}. \]</div>
+      <p><b>Step 3, ties.</b> Give tied scores the average of the ranks they span; a positive tied with <var>t</var> negatives then gains <var>t</var>/2, the half per tie in the definition. The code does the same thing group by group: each tied group's positives win against all negatives strictly below and half of those in the group.</p>
+      <p><b>Cost.</b> O(<var>n</var> log <var>n</var>) for the sort instead of \(n_+n_-\) comparisons. <b>What we showed.</b> AUC depends only on the order of the scores, which is why the log r correction below cannot change it.</p>
+    </div></details>
+    <p><b>PR-AUC (average precision).</b> Same ranking, judged through precision and recall instead, and when positives are rare, this is the honest one. Its random baseline isn't 0.5; it's the prevalence itself. Average precision walks down the ranked list and, at each positive, asks what share of the list so far was positive: for scores (4, 3, 2, 1) with labels (1, 0, 1, 0) that is (1/1 + 2/3) / 2 = 0.833. On the week's test pairs, logistic regression posts a proud ROC-AUC of 0.832 while its PR-AUC is 0.0214, against a random baseline of 0.0027. That second number is the one that tells you what the top of your list actually looks like: among the 100 pairs it is most sure of, 28 connected; among the top 1,000, 16.9%; among the top 10,000, 7.7%.</p>
+    <figure class="fig"><img src="img/roc-vs-pr.png" alt="Two panels for the same logistic regression on 7.76 million test pairs. Left, the ROC curve bows far above the diagonal, AUC 0.83. Right, the precision-recall curve starts high for the first few pairs and drops below 0.05 by a recall of 0.1, ending near the prevalence line at 0.0027; PR-AUC 0.021."><figcaption>The same model can look excellent on ROC-AUC and weak on PR-AUC. With rare positives, believe the second. Measured on the week's test pairs (<code>rank_and_evaluate.py</code>).</figcaption></figure>
+    <p>The two can even disagree about which model is better. The crossed regression and the trees beat plain logistic regression on ROC-AUC (0.835 and 0.837 against 0.832) and lose to it on PR-AUC (0.0193 and 0.0192 against 0.0214): they order the vast middle of the list a little better and the very top a little worse.</p>
+    <p><b>Precision@K / Recall@K.</b> You only have K slots, often fewer than ten. What fraction of your top-K were real connections? Of all the connections you could have made, how many were in your top-K? This is the offline metric closest to the user's actual experience. Recall@10 is the number Days 1–3 reported; future friends who were never candidates count as misses.</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · top_k_per_user, per_user_recall</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def top_k_per_user(D, scores, k=10):
+    """For each user, the k best candidates; ties go to the smaller id (candidates are sorted by id)."""
+    out = {}
+    bounds = np.r_[0, np.flatnonzero(np.diff(D["u"])) + 1, len(D["u"])]
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        order = np.argsort(-scores[a:b], kind="stable")[:k]
+        out[int(D["u"][a])] = D["v"][a:b][order]
+    return out
+
+def per_user_recall(D, scores, k=10):
+    """recall@k for every evaluated user (in D['users'] order); future friends who were never
+    candidates count as misses. Also hits per user (for precision@k = hits / k)."""
+    top = top_k_per_user(D, scores, k)
+    rec, hits = np.zeros(len(D["users"])), np.zeros(len(D["users"]))
+    for i, u in enumerate(D["users"]):
+        fut = D["truth"][int(u)]
+        h = len(fut.intersection(top.get(int(u), np.empty(0)).tolist()))
+        rec[i], hits[i] = h / len(fut), h
+    return rec, hits</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>ranker</th><th class="num">ROC-AUC</th><th class="num">PR-AUC</th><th class="num">recall@10 [95%]</th><th class="num">precision@10</th></tr>
+      <tr><td>random order</td><td class="num">0.500</td><td class="num">0.0027</td><td class="num">–</td><td class="num">–</td></tr>
+      <tr><td>mutual friends (the rule)</td><td class="num">0.620</td><td class="num">0.0125</td><td class="num">0.0524 [0.0496, 0.0554]</td><td class="num">0.0197</td></tr>
+      <tr><td>Adamic–Adar (Day 3)</td><td class="num">0.805</td><td class="num">0.0190</td><td class="num">0.0638 [0.0609, 0.0670]</td><td class="num">0.0230</td></tr>
+      <tr class="hi"><td>logistic regression</td><td class="num">0.832</td><td class="num">0.0214</td><td class="num">0.0718 [0.0686, 0.0753]</td><td class="num">0.0258</td></tr>
+      <tr><td>logistic regression, graph features only</td><td class="num">0.821</td><td class="num">0.0205</td><td class="num">0.0661 [0.0630, 0.0693]</td><td class="num">0.0243</td></tr>
+      <tr><td>logistic regression + crosses</td><td class="num">0.835</td><td class="num">0.0193</td><td class="num">0.0714 [0.0682, 0.0751]</td><td class="num">0.0254</td></tr>
+      <tr><td>boosted trees</td><td class="num">0.837</td><td class="num">0.0192</td><td class="num">0.0729 [0.0695, 0.0763]</td><td class="num">0.0256</td></tr>
+      <tr><td>reach ceiling: every candidate who connected, with no limit of 10 (Day 3's recall@10 ceiling is 0.478)</td><td class="num">–</td><td class="num">–</td><td class="num">0.484 [0.478, 0.491]</td><td class="num">–</td></tr>
+    </table></div>
+    <p class="small muted">All on the test cut: 9,357 users, 7,757,153 candidate pairs. Intervals resample users (next block). Paired differences in recall@10: Adamic–Adar over mutual friends +0.0114 [+0.0092, +0.0137]; logistic regression over Adamic–Adar +0.0080 [+0.0053, +0.0108]; logistic regression over mutual friends +0.0194 [+0.0166, +0.0227], a 37% relative gain.</p>
+    <p>Why do the numbers look small? A user makes 4.3 new friends in the test window on average (40,000 / 9,357), nearly half of them out of reach, among 829 candidates. The best ranker puts 0.258 of them in ten slots (precision 2.58%), and nearly half of the misses were decided before ranking started.</p>
+
+    <p><b>Calibration.</b> Bucket predictions: of all pairs scored ≈0.2, did ≈20% connect? If not, your "probabilities" are just scores wearing a costume; go back to §2 and fix it.</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · reliability</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def reliability(p, y, bins=10):
+    """Equal-count bins by predicted probability: (mean predicted, observed rate, n); and the ECE."""
+    order = np.argsort(p)
+    rows = [(p[c].mean(), y[c].mean(), len(c)) for c in np.array_split(order, bins)]
+    return rows, sum(n * abs(a - b) for a, b, n in rows) / len(p)</code></pre></div>
+    <p>The first thing to fix is ours. We trained on 7.5% positives, so the model predicts as if 7.5% of pairs connected. Keeping each negative with probability <var>r</var> multiplies every pair's odds by the same 1/<var>r</var>, so only the baseline is off, by exactly log <var>r</var>: add log 0.05 = −3.00 to every total. The order, and so AUC and recall, cannot change.</p>
+    <div class="tablewrap"><table>
+      <tr><th>bin (low → high)</th><th class="num">predicted, as trained</th><th class="num">predicted, + log r</th><th class="num">observed</th></tr>
+      <tr><td>1</td><td class="num">1.617%</td><td class="num">0.082%</td><td class="num">0.018%</td></tr>
+      <tr><td>2</td><td class="num">1.889%</td><td class="num">0.096%</td><td class="num">0.022%</td></tr>
+      <tr><td>3</td><td class="num">2.182%</td><td class="num">0.111%</td><td class="num">0.029%</td></tr>
+      <tr><td>4</td><td class="num">2.600%</td><td class="num">0.133%</td><td class="num">0.048%</td></tr>
+      <tr><td>5</td><td class="num">3.113%</td><td class="num">0.160%</td><td class="num">0.086%</td></tr>
+      <tr><td>6</td><td class="num">3.768%</td><td class="num">0.195%</td><td class="num">0.114%</td></tr>
+      <tr><td>7</td><td class="num">4.852%</td><td class="num">0.254%</td><td class="num">0.198%</td></tr>
+      <tr><td>8</td><td class="num">6.856%</td><td class="num">0.367%</td><td class="num">0.322%</td></tr>
+      <tr><td>9</td><td class="num">10.637%</td><td class="num">0.593%</td><td class="num">0.565%</td></tr>
+      <tr><td>10</td><td class="num">24.315%</td><td class="num">2.121%</td><td class="num">1.344%</td></tr>
+      <tr class="hi"><td>expected calibration error</td><td class="num">0.05908</td><td class="num">0.00137</td><td class="num">–</td></tr>
+    </table></div>
+    <p class="small muted">Ten equal-count bins of 775,715 or 775,716 test pairs each; logistic regression. The calibration error is the bin-size-weighted average gap between the predicted and observed columns.</p>
+    <p>The correction cuts the calibration error 43-fold, and moves log loss from 0.0743 to 0.0173. What it cannot fix is <b>drift</b>. Corrected, the model still predicts 0.411% on average against 0.274% observed: the training window's base rate was 0.403%. Both windows add 20,000 friendships, but the graph grew in between, so the same number of new friendships is spread over more candidate pairs (4.5 million then, 7.8 million now). A model's probabilities belong to the period it was trained on. That is why rankers are recalibrated on recent data more often than they are retrained: fit a one-feature logistic regression on the score (Platt scaling) or a monotone step function (isotonic regression).</p>
+    <details class="deep"><summary>The math, step by step: why sampling negatives shifts the log-odds by exactly log r</summary><div>
+      <p><b>Numbers first.</b> Among pairs with some features, 2 connect and 998 do not: odds 2/998 = 0.00200. Keep every positive and each negative with probability 0.05: about 2 positives and 49.9 negatives remain, odds 0.04008, twenty times higher, whatever the features were.</p>
+      <p><b>In symbols.</b> Positives are always kept, negatives with probability <var>r</var>. By Bayes' rule, among kept pairs with features <var>x</var>:</p>
+      <div class="eq">\[ \frac{P(y=1\mid x,\text{kept})}{P(y=0\mid x,\text{kept})} = \frac{P(y=1\mid x)\cdot 1}{P(y=0\mid x)\cdot r}. \]</div>
+      <p>Take logs: \(\text{logit}_{\text{sampled}}(x) = \text{logit}_{\text{true}}(x) - \log r\). The shift is the same for every <var>x</var>, so a model that fits the sampled data absorbs it into its baseline; add \(\log r\) back to recover the true scale. With <var>r</var> = 0.05, \(\log r = -3.00\), and the trained baseline above is −2.999.</p>
+      <p><b>What we showed.</b> Downsampling negatives moves only the baseline; it is undone exactly for the period you sampled from, and not at all for a different period.</p>
+    </div></details>
+    <p>Three evaluation disciplines matter as much as the metric choice:</p>
+    <ul>
+      <li><b>Split by time, not randomly.</b> Train on last month, test on this month. A random split leaks the future and flatters you. Every number above uses the two cuts of §5.</li>
+      <li><b>Slice everything.</b> New users, low-friend users, different countries and languages, dismissed-rate by slice. An average can improve while the experience for new users, the ones who need this most, quietly gets worse. On the week's graph the slices tell different stories:</li>
+      <li><b>Compare against the rule.</b> Every offline report starts with: mutual-friends baseline, then your model. No baseline, no claim.</li>
+    </ul>
+    <div class="tablewrap"><table>
+      <tr><th>users with this many friends at the cut</th><th class="num">users</th><th class="num">mutual friends</th><th class="num">logistic regression</th><th class="num">boosted trees</th></tr>
+      <tr><td>0</td><td class="num">5</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="hi"><td>1–5</td><td class="num">641</td><td class="num">0.0526</td><td class="num">0.0955</td><td class="num">0.1023</td></tr>
+      <tr><td>6–20</td><td class="num">7,061</td><td class="num">0.0551</td><td class="num">0.0752</td><td class="num">0.0761</td></tr>
+      <tr><td>21 or more</td><td class="num">1,650</td><td class="num">0.0410</td><td class="num">0.0482</td><td class="num">0.0483</td></tr>
+    </table></div>
+    <p>The learned ranker helps users with few friends most: +0.0429 [+0.0272, +0.0600] over mutual friends for the 641 with one to five, nearly double. With one friend, every candidate has exactly one mutual friend, so the count cannot rank them at all; groups and friend counts can. Nobody with zero friends gets anything.</p>
+  </div>
+
+  <!-- ============================================================ §10 + data science -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · online evaluation</span></div>
+
+    <h4>10 · Online evaluation: the A/B test is the real exam</h4>
+    <p>Offline metrics are a rehearsal. The performance is an <b>A/B test</b>:</p>
+    <ul>
+      <li>Randomly assign <b>users</b> (not impressions: the same person must live in one world) to control (old system) or treatment (new model).</li>
+      <li><b>Primary metric:</b> accepted connections per user, the business sentence from §1, counted live.</li>
+      <li><b>Guardrail metrics:</b> dismissals per impression, reports/blocks, session time, overall retention. A model that grows connections by spamming suggestions will show it here first.</li>
+      <li>Run it long enough to outlast the <b>novelty effect</b>: anything new gets clicked for a week.</li>
+    </ul>
+    <p>One subtlety specific to this problem: <b>network interference.</b> If <var>u</var> is in treatment and <var>v</var> is in control, <var>u</var>'s new suggestion can change <var>v</var>'s experience too. Your two worlds leak into each other, which dilutes the measured effect. The clean fix, randomising whole clusters of the graph, is expensive; the pragmatic fix is knowing the bias exists and reading your lift as a lower bound.</p>
+    <p>Ship rule: offline win + online win on the primary metric + no guardrail regression. All three, or it doesn't ship.</p>
+  </div>
+
+  <div class="blk ml">
+    <div class="bh"><span class="kind">Data science · how sure is a number, and did it work live</span></div>
+
+    <h4>1 · Percentiles and the bootstrap: an interval for recall@10</h4>
+    <p><b>The situation.</b> Logistic regression scored 0.0718 recall@10 and Adamic–Adar 0.0638. Is that difference real, or the luck of which 9,357 users happened to make friends?</p>
+    <p><b>Look at the spread first.</b> Per user, recall@10 is a lumpy number. With Day 2's nearest-rank percentiles: p50 = 0, p75 = 0, p90 = 0.25, p99 = 1. 77.3% of users find none of their future friends in their ten; a few find all of them. The mean, 0.0718, is the right summary for "how many future friends does the box surface", and the percentiles say that it comes from a minority of users.</p>
+    <p><b>The bootstrap</b> (it works the same for any statistic: a mean, a recall, a p99 latency). Treat the users you have as the population and draw new samples from them: pick 9,357 users with replacement, recompute the mean, repeat, and keep the middle 95% of the means. Resample <em>users</em>, not pairs: one user's 829 candidates share that user's friends and habits, so they are not 829 independent pieces of evidence.</p>
+    <div class="code"><div class="ch"><span>code/day_4/common.py · bootstrap_ci, paired_ci</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def bootstrap_ci(x, B=1000, seed=0, alpha=0.05):
+    """Mean of a per-user metric and a percentile interval from resampling users with replacement."""
+    rng = np.random.default_rng(seed)
+    x = np.asarray(x, float)
+    means = np.array([x[rng.integers(0, len(x), len(x))].mean() for _ in range(B)])
+    return x.mean(), np.quantile(means, alpha / 2), np.quantile(means, 1 - alpha / 2)
+
+def paired_ci(a, b, B=1000, seed=0):
+    """Interval for mean(a - b), resampling the same users for both rankers."""
+    return bootstrap_ci(np.asarray(a) - np.asarray(b), B, seed)</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>resamples</th><th class="num">200</th><th class="num">1,000</th><th class="num">5,000</th><th class="num">normal approximation</th></tr>
+      <tr><td>95% interval for recall@10, logistic regression</td><td class="num">[0.0687, 0.0745]</td><td class="num">[0.0686, 0.0753]</td><td class="num">[0.0685, 0.0752]</td><td class="num">0.0718 ± 0.0035</td></tr>
+    </table></div>
+    <p>A thousand resamples is plenty; for a mean over thousands of users the bootstrap and the normal approximation agree. The bootstrap earns its keep where formulas run out: a p99, a median, a ratio, a difference of two rankers on the same users. For that last one, resample the <em>same</em> users for both and look at the difference: a user who is easy for one ranker is easy for the other, and pairing cancels that shared luck. Logistic regression over Adamic–Adar: +0.0080 [+0.0053, +0.0108]. The interval excludes zero, so the gain is not the luck of the users.</p>
+
+    <h4>2 · The A/B test as a hypothesis test</h4>
+    <p><b>A simulated experiment on the week's graph.</b> Control shows each test user their top ten by mutual friends; treatment shows their top ten by logistic regression. A user <b>converts</b> if at least one of their ten became their friend in the test window, the offline stand-in for "accepted a suggestion". Because the graph knows every outcome, we can compute the truth no real test ever sees: if everyone saw control, 17.51% would convert; if everyone saw treatment, 22.68%, a lift of 5.17 points. Now run the experiment as you would for real: flip a coin per user, and look only at each user's own arm.</p>
+    <div class="tablewrap"><table>
+      <tr><th>arm</th><th class="num">users</th><th class="num">converted</th><th class="num">rate</th></tr>
+      <tr><td>control (mutual friends)</td><td class="num">4,689</td><td class="num">853</td><td class="num">0.1819</td></tr>
+      <tr class="hi"><td>treatment (logistic regression)</td><td class="num">4,668</td><td class="num">1,050</td><td class="num">0.2249</td></tr>
+    </table></div>
+    <p><b>The question, as a test.</b> Suppose the new ranker did nothing (the <b>null hypothesis</b>). How surprising would a gap this large be? By hand:</p>
+    <ol>
+      <li>Pool the arms, since under the null they share one rate: (853 + 1,050) / (4,689 + 4,668) = 1,903 / 9,357 = 0.2034.</li>
+      <li>The standard error of a difference of two rates: \(\sqrt{0.2034 \times 0.7966 \times (1/4689 + 1/4668)} = 0.00832\).</li>
+      <li>The gap in standard errors: <var>z</var> = (0.2249 − 0.1819) / 0.00832 = 5.17.</li>
+      <li>A standard normal lands 5.17 or further from 0, in either direction, with probability 2.3 × 10⁻⁷. That is the <b>p-value</b>.</li>
+    </ol>
+    <p><b>The p-value in plain words.</b> If the new ranker truly changed nothing, a split this lopsided would happen about twice in ten million experiments. It is <em>not</em> the probability that the ranker is useless, and it says nothing about how big the lift is. For size, report the interval: +0.0430, 95% interval [+0.0267, +0.0593]. It contains the true 5.17 points; the estimate from one random split landed below it, which is what intervals are for.</p>
+    <div class="code"><div class="ch"><span>code/day_4/ab_test.py · two_proportion_z, arm</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def two_proportion_z(x1, n1, x2, n2):
+    """z and two-sided p-value for H0: both arms have the same rate (pooled standard error)."""
+    p1, p2, p = x1 / n1, x2 / n2, (x1 + x2) / (n1 + n2)
+    se = math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2))
+    z = (p2 - p1) / se
+    return z, 2 * (1 - Z.cdf(abs(z))), se
+
+def arm(user_id, experiment, treatment_share=0.5):
+    """Sticky assignment: the same user and experiment always give the same arm, on every request
+    and device; different experiments hash independently."""
+    h = hashlib.blake2b(f"{experiment}:{user_id}".encode(), digest_size=8).digest()
+    return "treatment" if int.from_bytes(h, "big") &lt; treatment_share * 2 ** 64 else "control"</code></pre></div>
+    <p><b>Randomise by a sticky hash.</b> Assign by a hash of (experiment, user id) so the same person sees the same arm on every request and every device, and two experiments split independently. Of 100,000 user ids, 50,283 land in treatment, and 25,005 land in treatment for both of two experiments, the 25% independence predicts. Decide before starting: one primary metric, the guardrails, the sample size, and the decision rule. A test you design after seeing the data is a story, not a test.</p>
+
+    <h4>3 · Power, sample size and the minimum detectable effect</h4>
+    <p>The week's test had 9,357 users and a 30% relative lift, so it was easy. Real lifts are a percent or two, and a small lift hides in noise unless the arms are large. Two error rates set the size: the false-alarm rate α (declare a lift that is not there; 5% by convention) and the <b>power</b> 1 − β (catch a lift that is there; 80% by convention).</p>
+    <div class="code"><div class="ch"><span>code/day_4/ab_test.py · users_per_arm, mde</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def users_per_arm(p, q, alpha=0.05, power=0.8):
+    """Users per arm to detect a change from rate p to rate q (two-sided two-proportion z-test)."""
+    za, zb = Z.inv_cdf(1 - alpha / 2), Z.inv_cdf(power)
+    pbar = (p + q) / 2
+    n = (za * math.sqrt(2 * pbar * (1 - pbar)) + zb * math.sqrt(p * (1 - p) + q * (1 - q))) ** 2 / (q - p) ** 2
+    return math.ceil(n)
+
+def mde(p, n, alpha=0.05, power=0.8):
+    """Smallest absolute lift detectable with n users per arm (normal approximation)."""
+    return (Z.inv_cdf(1 - alpha / 2) + Z.inv_cdf(power)) * math.sqrt(2 * p * (1 - p) / n)</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>baseline 17.51% of users convert; lift to detect</th><th class="num">users per arm</th></tr>
+      <tr><td>the true lift here, to 22.68% (+29.5%)</td><td class="num">941</td></tr>
+      <tr><td>+10% relative</td><td class="num">7,684</td></tr>
+      <tr><td>+5% relative</td><td class="num">30,168</td></tr>
+      <tr class="hi"><td>+2% relative</td><td class="num">186,390</td></tr>
+    </table></div>
+    <p>Halve the lift and you need about four times the users: the count grows like one over the square of the difference. Turned around, the arms you have fix the smallest lift you can reliably see, the <b>minimum detectable effect</b>. With 4,689 users per arm at a 17.51% baseline, it is 2.20 points absolute, 12.6% relative. A ranker that is truly 5% better would usually look like "no significant difference" in a test this size. "Not significant" from an underpowered test means "too small to see", not "no effect".</p>
+    <details class="deep"><summary>The math, step by step: the users-per-arm formula, and a worked example</summary><div>
+      <p><b>What we will do.</b> Find the <var>n</var> per arm at which a real change from rate <var>p</var> to rate <var>q</var> crosses the alarm threshold 80% of the time.</p>
+      <p><b>Step 1, the noise.</b> An arm of <var>n</var> users with true rate <var>p</var> has an observed rate that wobbles with standard deviation \(\sqrt{p(1-p)/n}\). Variances of independent arms add, so the difference wobbles with \(\sqrt{(p(1-p)+q(1-q))/n}\).</p>
+      <p><b>Step 2, the alarm.</b> Under the null both arms have about the average rate \(\bar p = (p+q)/2\), and the difference has standard deviation \(\sqrt{2\bar p(1-\bar p)/n}\). We raise the alarm when the observed difference exceeds \(z_{1-\alpha/2}\) of these; \(z_{0.975} = 1.96\) gives a 5% false-alarm rate, split over both directions.</p>
+      <p><b>Step 3, catching a real effect.</b> If the true difference is \(q-p\), the observed difference is centred there. For it to clear the threshold 80% of the time, the threshold must sit \(z_{0.8} = 0.84\) true standard deviations below \(q-p\):</p>
+      <div class="eq">\[ q - p = \frac{z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}}{\sqrt n}. \]</div>
+      <p><b>Step 4, solve for <var>n</var>.</b> Square both sides:</p>
+      <div class="eq">\[ n = \frac{\Big(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p(1-p)+q(1-q)}\Big)^2}{(q-p)^2}. \]</div>
+      <p><b>Worked example.</b> <var>p</var> = 0.10, a 2% relative lift so <var>q</var> = 0.102, \(\bar p = 0.101\). Then \(2\bar p(1-\bar p) = 0.18160\) and \(p(1-p) + q(1-q) = 0.09 + 0.09160 = 0.18160\) too. The numerator is \((1.96 + 0.8416)^2 \times 0.18160 \approx 1.4253\); the denominator \(0.002^2 = 4\times10^{-6}\). So <var>n</var> ≈ 356,000 per arm; without rounding, 356,335, which the script asserts.</p>
+      <p><b>The minimum detectable effect</b> is the same equation solved for \(q - p\) with <var>n</var> fixed, approximating both square roots by \(\sqrt{2p(1-p)}\): \(\text{MDE} \approx (z_{1-\alpha/2} + z_{1-\beta})\sqrt{2p(1-p)/n}\). With <var>p</var> = 0.1751 and <var>n</var> = 4,689: \(2.8016 \times \sqrt{2 \times 0.1751 \times 0.8249 / 4689} = 0.0220\).</p>
+      <p><b>What we showed.</b> Users per arm grow like 1 / (lift)²; the MDE shrinks like 1 / √<var>n</var>.</p>
+    </div></details>
+
+    <h4>4 · Peeking: why you may not stop when it looks good</h4>
+    <p><b>The obvious thing.</b> Check the dashboard every day, and stop the test the first day the p-value dips under 0.05. It feels efficient. It is a false-alarm machine. Simulate 20,000 <b>A/A tests</b>, where both arms get the same ranker and every "significant" result is false, with 5,000 users per arm at the week's 17.51% baseline:</p>
+    <div class="code"><div class="ch"><span>code/day_4/ab_test.py · peeking</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def peeking(p, n, looks, sims=20_000, seed=0):
+    """A/A tests (no real difference). Share declared 'significant' when we look once at the end,
+    versus when we look after every batch and stop at the first p &lt; 0.05."""
+    rng = np.random.default_rng(seed)
+    per = n // looks
+    a = rng.binomial(per, p, size=(sims, looks)).cumsum(1)
+    b = rng.binomial(per, p, size=(sims, looks)).cumsum(1)
+    m = per * np.arange(1, looks + 1)
+    pool = (a + b) / (2 * m)
+    z = (b - a) / m / np.sqrt(pool * (1 - pool) * 2 / m)
+    sig = np.abs(z) &gt; Z.inv_cdf(0.975)
+    return sig[:, -1].mean(), sig.any(1).mean()</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>looks at the data</th><th class="num">1</th><th class="num">5</th><th class="num">20</th><th class="num">100</th></tr>
+      <tr><td>false positives, looking once at the end</td><td class="num">5.1%</td><td class="num">5.0%</td><td class="num">5.0%</td><td class="num">4.9%</td></tr>
+      <tr class="hi"><td>false positives, stopping at the first p &lt; 0.05</td><td class="num">5.1%</td><td class="num">14.1%</td><td class="num">24.7%</td><td class="num">37.3%</td></tr>
+    </table></div>
+    <p>Each look is another chance for noise to cross the line, and you keep only the crossing. Twenty daily looks turn a 5% test into a 25% one. Fix the sample size in advance and decide once; or, if you must watch, use a sequential test built for it, which spends the 5% across the looks.</p>
+
+    <h4>5 · Novelty effects</h4>
+    <p>New faces in the box attract clicks at first simply because they are new, and the effect fades as the panel becomes familiar. The first week of a test overstates the long-run gain. Plot the treatment effect by days since each user's first exposure: if it shrinks, run until it flattens, or judge on users who joined after the test began. (The opposite also happens: a change that users must get used to can look worse at first.)</p>
+
+    <h4>6 · Network interference, measured, and cluster randomisation</h4>
+    <p><b>The situation.</b> A friendship has two ends. If treatment shows Esha to You, and You is in treatment but Esha is in control, the friendship still lands on Esha's count, in the control arm. The arms leak.</p>
+    <p><b>A model of the leak on the week's graph.</b> Each of the 20,000 test-window friendships forms if <em>either</em> person was shown the other in their ten, by the ranker of their own arm. A user's outcome: did they make at least one connection. Everyone in control: 20.94% of users connect. Everyone in treatment: 26.49%. The true global effect of switching everyone over is +5.56 points.</p>
+    <p><b>User-level randomisation</b> (coin per user, as above), repeated 300 times with fresh coins: the measured lift averages +3.54 points, 64% of the true effect. Control users collect friendships from treated users' better suggestions, so the gap shrinks. That is the dilution §10 warned about, and it is large: a third of the effect disappears.</p>
+    <p><b>Cluster randomisation.</b> Put people who befriend each other in the same arm, so fewer friendships cross. The week's graph has weak communities; the best simple clusters are each user's first group: 196 clusters, the largest 2,876 users, and only 25.1% of the window's friendships fall inside one. Even so, flipping a coin per cluster measures +4.86 points on average, 87% of the truth.</p>
+    <div class="tablewrap"><table>
+      <tr><th>design (300 re-randomisations each)</th><th class="num">mean measured lift</th><th class="num">share of true +0.0556</th><th class="num">spread (SD) of one test</th></tr>
+      <tr><td>coin per user</td><td class="num">+0.0354</td><td class="num">64%</td><td class="num">0.0085</td></tr>
+      <tr class="hi"><td>coin per cluster (group)</td><td class="num">+0.0486</td><td class="num">87%</td><td class="num">0.0151</td></tr>
+    </table></div>
+    <p>The price is the last column. With 196 clusters instead of 9,357 users, there are far fewer independent units, and one giant cluster swings the result: a single cluster test is nearly twice as noisy. Cluster designs trade bias for variance. In practice, run the user-level test, read its lift as a lower bound, and confirm a big launch with a cluster-level one.</p>
+    <p class="idea"><b>In one line.</b> Randomise users by a sticky hash; fix the metric, guardrails and sample size first; read the p-value as surprise under "no effect" and the interval as the size; never stop on a peek; and when outcomes cross users, expect the lift to be diluted.</p>
+    <div class="part"><b>Practice</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/implement-rand10-using-rand7/">470. Implement Rand10() Using Rand7()</a>: rejection sampling. The same trick turns a hash into an exact 10% treatment share when the hash range is not a multiple of 10.</li>
+      <li>Compute the users per arm for a 3% relative lift on a 7% baseline, then at 90% power instead of 80%.</li>
+      <li>Rerun the A/A simulation with 20 looks and a threshold of 0.01 per look. How close to 5% overall does it get?</li>
+      <li>In <code>ab_test.py</code>, change the outcome from "at least one connection" to "connections per user". The friend counts are heavy-tailed (Day 3): what happens to the spread of one test?</li>
+    </ul></div>
+  </div>
+
+  <!-- ============================================================ §11 -->
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · the trap in your own data</span></div>
+
+    <h4>11 · The trap: exposure bias</h4>
+    <p>Everything above has a crack running through it, and it's the most important idea in this chapter.</p>
+    <p><b>Your training data was created by your previous system.</b></p>
+    <p>You only have labels for pairs you <em>showed</em>. You showed those pairs because the old rule, mutual friends, already thought they were good. So your shiny new model learns, in part, "pairs the old rule liked tend to succeed." Pairs the old rule never surfaced have no labels at all, and if you treat "never shown" as "negative", you teach the model they were bad, when in truth <b>they were never tried</b>.</p>
+    <figure class="fig"><img src="img/exposure-bias.png" alt="A loop of four boxes: the old model decides who gets shown; we only observe outcomes for people who were shown; the new model learns that shown means good; pairs never shown look like negatives, though they were never tried."><figcaption>The old model decides who's shown; we only learn from who's shown; the new model inherits the old model's blind spots.</figcaption></figure>
+    <p>Left alone, this loop narrows the world: the same kinds of suggestions, for the same kinds of users, forever, and your offline metrics will <em>approve</em>, because your test set has the same bias as your training set. This is <b>exposure bias</b> (a form of selection bias), and it compounds.</p>
+
+    <p><b>Simulated on the week's graph.</b> The graph has no impression log, so we write one. The old system shows each user the nine candidates with most mutual friends, plus one <b>exploration slot</b>: a candidate drawn uniformly from the rest. Every pair therefore has a known probability of being shown, its <b>propensity</b> π: 1 for the top nine, 1 / (candidates − 9) for the others. The simulation's one assumption: a shown pair connects exactly when it connected in the real window. We only get to see outcomes of shown pairs.</p>
+    <div class="code"><div class="ch"><span>code/day_4/exposure_bias.py · log_impressions, hits_at_10</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def log_impressions(D, seed=0):
+    """shown[i] for every candidate pair, and its propensity pi[i] = P(shown) under the old policy."""
+    rng = np.random.default_rng(seed)
+    shown, pi = np.zeros(len(D["u"]), bool), np.zeros(len(D["u"]))
+    bounds = np.r_[0, np.flatnonzero(np.diff(D["u"])) + 1, len(D["u"])]
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        order = a + np.argsort(-D["cn"][a:b], kind="stable")   # most mutual friends first, ties by id
+        top, rest = order[:TOP], order[TOP:]
+        shown[top], pi[top] = True, 1.0
+        if len(rest):
+            shown[rng.choice(rest)] = True
+            pi[rest] = 1.0 / len(rest)                        # the exploration slot is uniform
+    return shown, pi
+
+def hits_at_10(D, scores, weight):
+    """Per-user sum of weight over the ranker's top 10 (weight = label, or a logged estimate of it)."""
+    out = np.zeros(len(D["users"]))
+    bounds = np.r_[0, np.flatnonzero(np.diff(D["u"])) + 1, len(D["u"])]
+    pos = {int(u): i for i, u in enumerate(D["users"])}
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        top = a + np.argsort(-scores[a:b], kind="stable")[:SLOTS]
+        out[pos[int(D["u"][a])]] = weight[top].sum()
+    return out</code></pre></div>
+    <p>In the test window that log holds 93,511 impressions, and they contain 1,764 of the 21,290 friendships that formed among candidates: 8.3%. Now ask the log the question an offline report asks: how many hits would each ranker put in a user's ten?</p>
+    <div class="tablewrap"><table>
+      <tr><th>hits in the top ten per user</th><th class="num">counted on the log (unseen = 0)</th><th class="num">inverse-propensity weighted</th><th class="num">truth (every label)</th></tr>
+      <tr><td>mutual friends (the old system)</td><td class="num">0.1855</td><td class="num">0.1987</td><td class="num">0.1972</td></tr>
+      <tr class="hi"><td>logistic regression (the new one)</td><td class="num">0.1343</td><td class="num">0.1785</td><td class="num">0.2576</td></tr>
+      <tr><td>verdict, new vs old</td><td class="num">−27.6%</td><td class="num">−10.2%</td><td class="num">+30.6%</td></tr>
+    </table></div>
+    <p>Counted on the log, the new ranker loses by 28%. It is 31% better. The log can only confirm the old system's choices: any pair the new ranker likes and the old one never showed scores zero. This is the sentence "your offline metrics will approve", measured.</p>
+    <p><b>Inverse propensity weighting</b> fixes the bias: weight each logged outcome by 1/π, so a pair that had a 1-in-800 chance of being shown stands in for the 800 that were not. Its estimate for the old system, 0.1987, lands on the truth, 0.1972. For the new system one log gives 0.1785, still short. Repeat the logging with 20 different exploration draws and the new system averages 0.2663 against a truth of 0.2576: right on average, but one log's estimate has a standard deviation of 0.1150, nearly half the value. One random slot among about 800 candidates is an unbiased but very noisy window. More exploration, or exploring among better candidates (still with known propensities), buys precision.</p>
+    <p><b>And training on the log?</b> Train the same logistic regression four ways on the training window's simulated log, and judge each on the real test window:</p>
+    <div class="tablewrap"><table>
+      <tr><th>trained on</th><th class="num">recall@10</th><th class="num">vs every label (paired, 95%)</th></tr>
+      <tr><td>every label (only possible in a simulation)</td><td class="num">0.0718</td><td class="num">–</td></tr>
+      <tr><td>every candidate, never shown = negative</td><td class="num">0.0684</td><td class="num">−0.0034 [−0.0060, −0.0009]</td></tr>
+      <tr><td>shown pairs only</td><td class="num">0.0741</td><td class="num">+0.0023 [+0.0004, +0.0041]</td></tr>
+      <tr><td>shown pairs only, weighted by 1/π</td><td class="num">0.0685</td><td class="num">−0.0034 [−0.0060, −0.0010]</td></tr>
+    </table></div>
+    <p>Treating never-shown as negative costs a little, as the loop above predicts. The surprise is that unweighted shown-only training does slightly better than training on every label: the shown pairs are high-mutual-friend candidates plus random ones, a mix of hard and easy cases that happens to suit a linear model here; do not count on it elsewhere. And the 1/π weights, some of them several hundred, make the weighted fit noisy enough to lose its advantage. On this graph, the loop's real damage is in <em>evaluation</em>: it reversed the verdict.</p>
+    <details class="deep"><summary>The math, step by step: why weighting by 1/π removes exposure bias</summary><div>
+      <p><b>What we will do.</b> Show that the weighted average of logged outcomes equals the average we would have seen had every pair been shown.</p>
+      <p><b>Notation.</b> For a candidate pair with features <var>x</var>: <var>S</var> = 1 if it was shown, <var>Y</var> = 1 if it would connect when shown, and \(\pi(x) = P(S = 1 \mid x) > 0\), known because we logged it. Showing is decided by the policy's coin, independently of <var>Y</var> given <var>x</var>.</p>
+      <p><b>Numbers first.</b> 1,000 similar pairs, 30 of which would connect, each shown with probability 0.1. About 100 are shown and about 3 of those connect. Weight each shown pair by 1/0.1 = 10: 3 × 10 = 30 connections out of 100 × 10 = 1,000 pairs, the full rate of 3%.</p>
+      <p><b>In symbols.</b> Average first over the policy's coin, with <var>x</var> and <var>Y</var> fixed, using \(\mathbb{E}[S\mid x, Y] = \pi(x)\):</p>
+      <div class="eq">\[ \mathbb{E}\Big[\frac{S}{\pi(x)}\, Y\Big] = \mathbb{E}\Big[\frac{\mathbb{E}[S\mid x, Y]}{\pi(x)}\, Y\Big] = \mathbb{E}[\,Y\,]. \]</div>
+      <p><b>The catch.</b> The variance contains \(1/\pi(x)\): a pair shown with probability 1/800 that connects contributes 800 at once. That is the 0.1150 spread measured above. Unbiasedness needs \(\pi > 0\) for every pair the new policy might pick: a pair the old policy could never show cannot be reweighted into existence.</p>
+      <p><b>What we showed.</b> With logged propensities, 1/π weighting gives unbiased estimates of any new policy's outcomes, at a variance set by the smallest propensities.</p>
+    </div></details>
+    <p>The standard defences:</p>
+    <ul>
+      <li><b>Log the propensity.</b> Record <em>why and with what probability</em> each pair was shown. That lets you re-weight training and do counterfactual evaluation, estimating how a <em>new</em> policy would have done on <em>old</em> data (inverse propensity scoring).</li>
+      <li><b>Keep an exploration bucket.</b> For a small slice of traffic, show some candidates at random from a broader pool. It costs a little short-term quality and buys you unbiased data about the world outside your current beliefs. No exploration, no discovery, ever.</li>
+      <li><b>Never shown ≠ negative.</b> Treat unshown pairs as <em>unlabelled</em>, not as zeros. (This framing has a name: positive–unlabelled learning.)</li>
+      <li><b>Correct for position.</b> A click on position 1 and a click on position 8 are not the same evidence. Model position as a feature in training, then remove it at serving time.</li>
+    </ul>
+    <p>Notice the pattern: the hardest problems in this system are not model problems. They're <b>data problems created by the system itself.</b></p>
+    <div class="part"><b>Practice: sampling with known probabilities</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/random-pick-with-weight/">528. Random Pick with Weight</a>: prefix sums and binary search. An exploration policy that samples candidates in proportion to a score, with the propensity of each pick known exactly.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/linked-list-random-node/">382. Linked List Random Node</a>: reservoir sampling, one uniform pick from a stream of unknown length. The exploration slot when candidates stream in from many shards.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/random-pick-index/">398. Random Pick Index</a>: the same reservoir, restricted to items that match. A uniform pick among the candidates that pass eligibility.</li>
+      <li>In <code>exposure_bias.py</code>, give the exploration slot three draws instead of one. How much does the spread of the IPW estimate for the new ranker shrink?</li>
+    </ul></div>
+
+    <h4>12 · The whole thing, on one page</h4>
+    <ol>
+      <li><b>Define the win.</b> Engagement = a request sent <em>and accepted</em> within a window. Everything else is a proxy.</li>
+      <li><b>Write the function.</b> <var>f</var>(<var>u</var>, <var>v</var>) → P(connection), a calibrated probability, not just a score.</li>
+      <li><b>Ship the dumb rule.</b> Rank by mutual friends. Measure it. It's your baseline and your fallback.</li>
+      <li><b>Sharpen the rule.</b> Adamic–Adar, shared school/work/city, contacts: hand features, hand weights.</li>
+      <li><b>Turn history into data.</b> One row per impression, point-in-time features, label in a fixed window, dismissals as true negatives.</li>
+      <li><b>Pick the loss.</b> Log loss: it punishes confident wrongness and forces honest probabilities.</li>
+      <li><b>Climb the model ladder.</b> Logistic regression → boosted trees → embeddings / graph models, only when each step beats the last, offline <em>and</em> online.</li>
+      <li><b>Evaluate like an adult.</b> Never accuracy. PR-AUC and Precision@K for ranking quality, ROC-AUC as a summary, calibration for honesty: split by time, sliced by user type, always against the baseline.</li>
+      <li><b>Prove it live.</b> User-level A/B test, accepted connections as the primary metric, dismissals and reports as guardrails, interference in mind.</li>
+      <li><b>Fight your own shadow.</b> Log propensities, explore on a small slice, and never mistake "never shown" for "no good".</li>
+    </ol>
+    <p>That's the design. A box that says <em>People You May Know</em> is really a loop: <b>show → observe → learn → show better</b>, and the craft is in keeping that loop honest.</p>
+    <p class="idea"><b>For the interview.</b> Practise saying §1 and §11 out loud. Anyone can name a model. Naming the right label, and spotting that your data was generated by your last model, is what separates a designer from a model-picker.</p>
+  </div>
+
+  <!-- ============================================================ representations -->
+  <div class="blk ml" style="--c:var(--ai)">
+    <div class="bh"><span class="kind">AI · from features to representations</span></div>
+
+    <h4>1 · Why the ranker never saw a user id</h4>
+    <p>Every model above described a pair by numbers anyone could compute: mutual friends, groups, friend counts. None of them was told <em>who</em> the people were. That is deliberate. Give a linear model the raw id, as one column per user (one-hot), and it learns one weight per person: 10,000 columns here, a billion at full scale, and a weight for "this particular person" is learned only from that person's few rows. To learn "<var>u</var> likes <var>v</var>" it would need a column per pair: 10⁸ here, 10¹⁸ at a billion users, almost all never seen once. Ids do not generalise, and they blow up. Hand features do generalise: a shared group means the same thing for every pair.</p>
+    <p><b>But what if there are no hand features?</b> A new product with no profile fields; or a catalogue of things (songs, products, tickets) whose only description is who used them. Then the only evidence is behaviour, and the id itself has to learn what it means from that behaviour. The idea: give every user a short vector of numbers, learned so that people who behave alike get vectors that point alike, and score a pair by the dot product of their vectors.</p>
+
+    <h4>2 · Factorise who befriends whom</h4>
+    <p><b>The hand intuition.</b> Write the friendships as a matrix <var>A</var>: a row per person, a 1 where two people are friends. Multiply it by itself and entry (<var>u</var>, <var>v</var>) of \(A^2\) counts the people who are friends with both: exactly the mutual-friend count of Day 1. Now compress. A <b>truncated SVD</b> finds, for each person, <var>k</var> numbers whose dot products reproduce \(A^2\) as well as any <var>k</var> numbers can. On the six people, two numbers each are enough to reproduce You's counts exactly:</p>
+    <div class="tablewrap"><table>
+      <tr><th>person</th><th>friends</th><th class="num">vector (k = 2)</th><th class="num">dot product with You</th></tr>
+      <tr class="hi"><td>You</td><td>Ben, Chloe</td><td class="num">(+1.10, −0.88)</td><td class="num">–</td></tr>
+      <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td class="num">(+1.54, +0.79)</td><td class="num">friend</td></tr>
+      <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td class="num">(+1.54, +0.79)</td><td class="num">friend</td></tr>
+      <tr><td>Dev</td><td>Ben</td><td class="num">(+0.55, −0.44)</td><td class="num">1.00</td></tr>
+      <tr class="hi"><td>Esha</td><td>Ben, Chloe</td><td class="num">(+1.10, −0.88)</td><td class="num">2.00</td></tr>
+      <tr><td>Farid</td><td>Chloe</td><td class="num">(+0.55, −0.44)</td><td class="num">1.00</td></tr>
+    </table></div>
+    <p>Read the vectors. You and Esha have the same friend list, so they get the same vector. Ben and Chloe differ only in Dev versus Farid, and two numbers cannot afford to keep that difference: they get the same vector too. <b>People with similar friend lists get nearby vectors.</b> That is the whole idea, and it is also the cost: the compression throws away exactly the detail that made two people different.</p>
+    <div class="code"><div class="ch"><span>code/day_4/embeddings.py · embed, rank_all</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def embed(M, k, seed=0, power=4):
+    """Truncated SVD M ≈ U S Vᵀ (randomised: find the top-k row space, then an exact small SVD).
+    User i's vector is U[i] * S, so z_u · z_v ≈ (M Mᵀ)[u, v]. For M = A that is A², the
+    mutual-friend count; for M = [A | a·G] it is mutual friends + a² · shared groups."""
+    rng = np.random.default_rng(seed)
+    Q = np.linalg.qr(M @ rng.normal(size=(M.shape[1], 2 * k)).astype(np.float32))[0]
+    for _ in range(power):                            # power iterations sharpen the top directions
+        Q = np.linalg.qr(M @ (M.T @ Q))[0]
+    Ub, S, _ = np.linalg.svd(Q.T @ M, full_matrices=False)
+    return (Q @ Ub[:, :k]) * S[:k]
+
+def rank_all(Z, A, users, k=10, chunk=1000):
+    """Top k over ALL users (not just friends of friends), excluding the user and current friends."""
+    out = {}
+    for a in range(0, len(users), chunk):
+        u = users[a:a + chunk]
+        S = Z[u] @ Z.T
+        S[A[u] &gt; 0] = -np.inf
+        S[np.arange(len(u)), u] = -np.inf
+        top = np.argpartition(-S, k, axis=1)[:, :k]
+        for i, uu in enumerate(u):
+            out[int(uu)] = top[i][np.argsort(-S[i, top[i]], kind="stable")]
+    return out</code></pre></div>
+    <p>The SVD is computed the randomised way: multiply the matrix by a few hundred random vectors to find the directions that matter, then do an exact SVD of the small result. <var>M</var> can be any user-by-something matrix: friends only, or friends plus groups (each user's groups as extra columns, weighted 2, so the dot product becomes mutual friends + 4 × shared groups, smoothed). Because every user now has a vector, the ranker no longer needs a mutual friend: <code>rank_all</code> scores <em>every</em> user, not just friends of friends.</p>
+
+    <h4>3 · Measured against mutual friends</h4>
+    <div class="tablewrap"><table>
+      <tr><th>score, ranked over all 10,000 users</th><th class="num">recall@10</th><th class="num">users with 1–5 friends</th><th class="num">hits beyond two hops</th></tr>
+      <tr><td>mutual friends (friends of friends only)</td><td class="num">0.0524</td><td class="num">0.0526</td><td class="num">0</td></tr>
+      <tr><td>friends only, k = 16</td><td class="num">0.0398</td><td class="num">0.0328</td><td class="num">52</td></tr>
+      <tr><td>friends only, k = 64</td><td class="num">0.0435</td><td class="num">0.0357</td><td class="num">5</td></tr>
+      <tr><td>friends only, k = 256</td><td class="num">0.0446</td><td class="num">0.0446</td><td class="num">1</td></tr>
+      <tr><td>friends + groups, k = 16</td><td class="num">0.0307</td><td class="num">0.0360</td><td class="num">189</td></tr>
+      <tr><td>friends + groups, k = 64</td><td class="num">0.0344</td><td class="num">0.0490</td><td class="num">205</td></tr>
+      <tr class="hi"><td>friends + groups, k = 256</td><td class="num">0.0453</td><td class="num">0.0764</td><td class="num">297</td></tr>
+    </table></div>
+    <p class="small muted">Test cut, 9,357 users; 641 of them had one to five friends. "Hits beyond two hops": future friends with no mutual friend at the cut that landed in the user's ten; there are 18,710 such (user, future friend) pairs, 46.8% of all 40,000, and mutual friends can never rank any of them.</p>
+    <ul>
+      <li><b>Overall, the compressed count loses to the exact count.</b> Friends only, 256 numbers per person: −0.0078 [−0.0101, −0.0053] against mutual friends. When the behaviour is the friend graph itself, the vector is an approximation of something we can compute exactly.</li>
+      <li><b>For users with few friends, the vectors win.</b> Friends + groups at k = 256: +0.0238 [+0.0065, +0.0404] over mutual friends for the 641 users with one to five friends, 0.0764 against 0.0526. Their sparse rows borrow strength from everyone who behaves like them.</li>
+      <li><b>They reach past two hops.</b> 297 future friendships with no mutual friend at the cut land in someone's ten. Few, against 18,710, but a two-hop candidate generator finds zero of them.</li>
+      <li><b>As a feature for the ranker, nothing here.</b> Adding the dot product to the logistic regression: 0.0718 → 0.0720, +0.0002 [−0.0008, +0.0012]. It already had mutual friends and shared groups, the two things the vector compresses.</li>
+    </ul>
+    <p><b>What the vectors buy.</b> A fixed-size description of every user, so candidates can come from <b>nearest neighbours</b> in vector space (with an approximate nearest-neighbour index, at a billion users) instead of a two-hop scan whose cost grows with the square of the friend counts (Day 3). A score for cold-ish users, whose few signals are shared by many others. And one more column for the ranker, which pays off when the vectors learn from behaviour the hand features do not already summarise: views, messages, searches, what someone dismissed.</p>
+    <p><b>What they cost.</b> Storage: 10,000 × 256 × 4 bytes = 10.24 MB here, 10⁹ × 256 × 4 bytes ≈ 1 TB at a billion users. Staleness: the vectors describe the graph at the cut, and must be recomputed as it grows. Explanations: "3 mutual friends" is a reason a person can check; a dot product is not. And no history means no vector: the five test users with no friends still get nothing from friends alone (groups give them a row). <b>Two towers</b> close that last gap by computing the vector from whatever features a new user does have, with a small network per side, trained on the same behaviour.</p>
+    <p class="idea"><b>In one line.</b> When there are no features, let the id learn a vector from how it is used: factorise who-did-what, score by dot product, and measure it against the exact rule; on this graph it helps the users with least history and loses on average.</p>
+    <p>This idea, learn a vector for anything from how it is used, is next week's subject: representation learning, then word embeddings, then representations that change with their context, built with attention.</p>
+
+    <div class="part"><b>Further reading</b><ul>
+      <li>D. Liben-Nowell and J. Kleinberg, <a href="https://doi.org/10.1002/asi.20591">"The link-prediction problem for social networks"</a>, <em>JASIST</em> 2007: pair scores on a time split.</li>
+      <li>J. H. Friedman, <a href="https://doi.org/10.1214/aos/1013203451">"Greedy function approximation: a gradient boosting machine"</a>, <em>Annals of Statistics</em> 2001.</li>
+      <li>T. Gneiting and A. E. Raftery, <a href="https://doi.org/10.1198/016214506000001437">"Strictly proper scoring rules, prediction, and estimation"</a>, <em>JASA</em> 2007.</li>
+      <li>T. Saito and M. Rehmsmeier, <a href="https://doi.org/10.1371/journal.pone.0118432">"The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets"</a>, <em>PLOS ONE</em> 2015.</li>
+      <li>A. Niculescu-Mizil and R. Caruana, "Predicting good probabilities with supervised learning", ICML 2005 (Platt scaling and isotonic regression).</li>
+      <li>R. Kohavi, D. Tang and Y. Xu, <em>Trustworthy Online Controlled Experiments</em>, Cambridge University Press, 2020.</li>
+      <li>R. Johari, P. Koomen, L. Pekelis and D. Walsh, "Peeking at A/B tests: why it matters, and what to do about it", KDD 2017.</li>
+      <li>J. Ugander, B. Karrer, L. Backstrom and J. Kleinberg, "Graph cluster randomization: network exposure to multiple universes", KDD 2013.</li>
+      <li>T. Joachims, A. Swaminathan and T. Schnabel, "Unbiased learning-to-rank with biased feedback", WSDM 2017.</li>
+      <li>Y. Koren, R. Bell and C. Volinsky, <a href="https://doi.org/10.1109/MC.2009.263">"Matrix factorization techniques for recommender systems"</a>, <em>IEEE Computer</em> 2009.</li>
+      <li>N. Halko, P.-G. Martinsson and J. A. Tropp, <a href="https://doi.org/10.1137/090771806">"Finding structure with randomness: probabilistic algorithms for constructing approximate matrix decompositions"</a>, <em>SIAM Review</em> 2011.</li>
+    </ul></div>
+  </div>
+
+  <div class="check" data-check="day4">
+    <div class="ch"><b>Checkpoint · Day 4</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d4a" data-dim="ml"><span class="tx">Name the five countable events in the box, say what optimising each one would surface, and defend "sent and accepted within a window" as the label; say what the week's graph uses instead and why.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4b" data-dim="ml"><span class="tx">Build training rows with two time cuts and point-in-time features, explain the 53.2% of future friends that were candidates and the 0.484 ceiling, and sample negatives with r = 0.05.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4c" data-dim="ml"><span class="tx">Compute log loss by hand (0.11, 2.30), derive its gradient p − y and its convexity, and show it is a proper scoring rule while absolute error is not.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4d" data-dim="ml"><span class="tx">Train logistic regression in NumPy, read its weights (why mutual friends is −0.813 next to Adamic–Adar), and say what boosted trees and crosses add, with the measured result.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4e" data-dim="ml"><span class="tx">Compute ROC-AUC by hand and with one sort, average precision by hand, and explain why the same model scores 0.832 ROC-AUC and 0.0214 PR-AUC.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4f" data-dim="ml"><span class="tx">Report recall@10 and precision@10 against the mutual-friends baseline, by slice, with bootstrap intervals over users and paired differences; check calibration, apply the log r correction and explain the drift it cannot fix.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4g" data-dim="del"><span class="tx">Design an A/B test: sticky hash, primary metric, guardrails, users per arm and MDE from the formula, the z-test by hand (z = 5.17), the p-value in plain words, and the ship rule; solve 470.</span><span class="dim del">Delivery</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4h" data-dim="ml"><span class="tx">Explain why peeking inflates false positives (24.7% at 20 looks), how novelty misleads, and how interference dilutes a lift (64% of the truth per user, 87% per cluster, at a higher variance).</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4i" data-dim="ai"><span class="tx">Explain exposure bias with the simulation (−28% on the log, +31% in truth), derive why 1/π weighting is unbiased and why it is noisy, list the four defences, and solve 528, 382 and 398.</span><span class="dim ai">AI</span></label>
+    <label class="ck"><input type="checkbox" data-id="d4j" data-dim="ai"><span class="tx">Explain why rankers drop raw ids, factorise the friendship matrix into user vectors, and say what they bought (+0.0238 for users with few friends, reach beyond two hops) and cost on the week's graph.</span><span class="dim ai">AI</span></label>
+  </div>
+</section>

@@ -1,0 +1,141 @@
+<section id="start" style="padding-top:0">
+  <div class="eyebrow">Week 1 · People You May Know</div>
+  <h1>People You May Know<br><span class="muted" style="font-size:.55em;font-weight:600;letter-spacing:0">from two friend lists to a billion users</span></h1>
+  <p class="lead">Someone joins a social app and adds two friends. A moment later the app shows them a short list of people they may know. Who should be on that list, and how do you produce it for everyone, fast? This week answers that one question, and watches it grow from a coding exercise into a machine-learning problem and a distributed system.</p>
+
+  <figure class="fig"><img src="img/pymk-hero.jpg" alt="On the left, one user. In the middle, a dense web of people joined by lines of friendship. On the right, three suggestion cards, each with a person and a score ring filled to a different level."><figcaption>One user in, a web of friendships behind them, a few ranked suggestions out.</figcaption></figure>
+
+  <div class="progcard">
+    <div class="top"><b>Your coverage</b><span class="small muted"><span data-total></span> · saved in this browser only · <button class="linkbtn" type="button" data-reset>Reset</button></span></div>
+    <div class="prog" data-prog></div>
+  </div>
+</section>
+
+<section class="s" id="problem" data-sec="problem">
+  <div class="shead"><span class="sno">THE PROBLEM</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim sys">System Design</span></span></div>
+  <h2>The box, and what it has to do</h2>
+
+  <h3>The box</h3>
+  <p>Almost every social or professional app has the same quiet box near the top of the screen: <b>People you may know</b>. A photo, a name, a line such as "2 mutual friends", and a button that says <i>Add friend</i>.</p>
+  <p>It matters most to the people who have the fewest friends. A new user who has added two people sees an empty feed: nothing to read, nobody to message, no reason to come back tomorrow. Every friendship they make fills the feed, brings messages and invitations, and makes the next friendship easier. So the box is not decoration. For a new user it decides whether the app becomes useful at all, and for everyone else it keeps the network growing. Connections drive almost everything else the app does.</p>
+  <p class="idea"><b>In one line.</b> When a user opens the app, show them the handful of people they are most likely to want to connect with.</p>
+
+  <h3>Inputs, outputs, constraints</h3>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>In plain words</th></tr>
+    <tr><td><b>In</b></td><td>Every user's friend list. A friendship goes both ways, so if Ben is on your list, you are on Ben's.</td></tr>
+    <tr><td><b>Out</b></td><td>For the user who just opened the app: ten people, best first. Never the user themselves, and never someone who is already their friend.</td></tr>
+    <tr><td><b>Fast</b></td><td>The box is on the screen the user is looking at, so the answer has to arrive while the page loads.</td></tr>
+  </table></div>
+  <p>To make "fast" and "many users" concrete, fix some numbers. They are <b>hypothetical inputs</b>, chosen to be the right size for a large social app, not anyone's real figures:</p>
+  <ul>
+    <li>suppose <b>1,000,000,000 users</b>;</li>
+    <li>suppose each has about <b>300 friends</b>;</li>
+    <li>suppose the ten suggestions must be ready in <b>under 100 milliseconds</b>, well under a second.</li>
+  </ul>
+  <p>Two pieces of arithmetic follow straight away. The friend lists hold 1,000,000,000 × 300 = 300 billion entries, or 2.4 terabytes at 8 bytes per user id: too much for one ordinary machine's memory. And the obvious way to answer, compare your list with every other user's, means a billion comparisons per page load. Even at a supposed one comparison per nanosecond, that is a full second, ten times the budget, for a single user. Most of those comparisons find nothing in common, because most people on Earth share no friend with you.</p>
+  <details class="deep"><summary>The arithmetic, step by step: the size of the lists and the cost of one answer</summary><div>
+    <p><b>Friendships.</b> 1,000,000,000 users × 300 friends = 300,000,000,000 list entries. Each friendship is written twice (once in each person's list), so there are 300,000,000,000 ÷ 2 = 150,000,000,000 friendships.</p>
+    <p><b>Bytes.</b> A billion ids do not fit in 4 bytes with room to grow, so store each id in 8 bytes: 300,000,000,000 × 8 = 2,400,000,000,000 bytes = 2.4 TB, before any index or copy.</p>
+    <p><b>Comparing with everyone.</b> One user against everyone else is 1,000,000,000 − 1 = 999,999,999 comparisons. At one comparison per nanosecond (10<sup>−9</sup> s), that is about 10<sup>9</sup> × 10<sup>−9</sup> s = 1 s.</p>
+    <p><b>Looking only near you.</b> The people worth scoring are on your friends' lists. You have 300 friends, each with about 300 friends, so reading all their lists is 300 × 300 = 90,000 entries. That is 999,999,999 ÷ 90,000 ≈ 11,111 times less than comparing with everyone. Day 1 and Day 3 build on exactly this.</p>
+  </div></details>
+
+  <h3>What is a good suggestion?</h3>
+  <p>"Most likely to want to connect" is foggy until you tie it to something the app can count. When person <i>v</i> appears in your box, a chain of events can follow:</p>
+  <div class="dg"><div class="seq"><span class="nd">shown</span><span class="lk">→</span><span class="nd">clicked</span><span class="lk">→</span><span class="nd">request sent</span><span class="lk">→</span><span class="nd hot">accepted</span><span class="lk">→</span><span class="nd">interact later</span></div><div class="cap">Each arrow loses people. Which step counts as success changes what gets built: clicks reward curiosity, accepted requests need both people to agree, and later interaction is the truest signal but arrives weeks late.</div></div>
+  <p>Day 4 picks the target properly and learns it from data. For Days 1 to 3 we use a simple stand-in, the <b>naive score</b>:</p>
+  <p class="idea"><b>The naive score.</b> The number of <b>mutual friends</b>: how many people are on both your friend list and theirs.</p>
+  <p>It is a sensible first guess because of how people meet. Most of the people you know were introduced: a classmate's flatmate, a colleague's partner, someone at a friend's birthday. If two of your friends both know Esha, you have probably been at the same dinners already. The more friends you share with someone, the more likely you already know them, or soon will. It is also cheap to explain on the screen: "2 mutual friends".</p>
+</section>
+
+<section class="s" id="example" data-sec="example">
+  <div class="shead"><span class="sno">THE RUNNING EXAMPLE</span><span class="dims"><span class="dim dsa">DSA</span></span></div>
+  <h2>Six people, counted by hand</h2>
+  <p>Every page this week uses the same six people. <b>You</b> have just joined and added two friends, <b>Ben</b> and <b>Chloe</b>, who also know each other. Ben knows <b>Dev</b> and <b>Esha</b>. Chloe knows <b>Esha</b> and <b>Farid</b>. In code they are ids 0 to 5 in that order.</p>
+  <div class="dg">
+    <svg viewBox="0 0 470 180" width="100%" style="max-width:32rem" role="img" aria-label="You are friends with Ben and Chloe, who are friends with each other. Ben is friends with Dev and Esha; Chloe is friends with Esha and Farid.">
+      <g stroke-width="2" style="stroke:var(--line)"><line x1="45" y1="90" x2="155" y2="45"/><line x1="45" y1="90" x2="155" y2="135"/><line x1="155" y1="45" x2="155" y2="135"/><line x1="155" y1="45" x2="275" y2="20"/><line x1="155" y1="45" x2="275" y2="90"/><line x1="155" y1="135" x2="275" y2="90"/><line x1="155" y1="135" x2="275" y2="160"/></g>
+      <g stroke-width="2"><circle cx="45" cy="90" r="18" style="fill:var(--accent);stroke:var(--accent)"/><circle cx="155" cy="45" r="14" style="fill:var(--panel);stroke:var(--accent)"/><circle cx="155" cy="135" r="14" style="fill:var(--panel);stroke:var(--accent)"/><circle cx="275" cy="20" r="13" style="fill:var(--panel);stroke:var(--muted)"/><circle cx="275" cy="90" r="13" style="fill:var(--accent-soft);stroke:var(--accent)"/><circle cx="275" cy="160" r="13" style="fill:var(--panel);stroke:var(--muted)"/></g>
+      <g font-size="12" text-anchor="middle" dominant-baseline="central" style="font-family:var(--f-mono)"><text x="45" y="90" style="fill:var(--panel)">You</text><text x="155" y="45" style="fill:var(--ink)">B</text><text x="155" y="135" style="fill:var(--ink)">C</text><text x="275" y="20" style="fill:var(--ink)">D</text><text x="275" y="90" style="fill:var(--ink)">E</text><text x="275" y="160" style="fill:var(--ink)">F</text></g>
+      <g font-size="12" style="fill:var(--muted);font-family:var(--f-display)"><text x="295" y="24">Dev · 1 mutual (Ben)</text><text x="295" y="94">Esha · 2 mutual (Ben, Chloe)</text><text x="295" y="164">Farid · 1 mutual (Chloe)</text><text x="155" y="20" text-anchor="middle">Ben</text><text x="155" y="168" text-anchor="middle">Chloe</text></g>
+    </svg>
+    <div class="cap">Each line is a friendship: seven in all. The counts on the right are the overlap of each person's friend list with yours.</div>
+  </div>
+
+  <p>Write the friend lists down, then for each person compare their list with yours (Ben, Chloe) and count the overlap.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Person</th><th>Their friend list</th><th>In common with yours</th><th>Mutual friends</th><th>Suggest?</th></tr>
+    <tr><td>You</td><td>Ben, Chloe</td><td>–</td><td>–</td><td>no: that is you</td></tr>
+    <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td>Chloe</td><td>1</td><td>no: already your friend</td></tr>
+    <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td>Ben</td><td>1</td><td>no: already your friend</td></tr>
+    <tr><td>Dev</td><td>Ben</td><td>Ben</td><td>1</td><td>yes, 2nd</td></tr>
+    <tr><td><b>Esha</b></td><td>Ben, Chloe</td><td>Ben, Chloe</td><td><b>2</b></td><td><b>yes, 1st</b></td></tr>
+    <tr><td>Farid</td><td>Chloe</td><td>Chloe</td><td>1</td><td>yes, 3rd</td></tr>
+  </table></div>
+  <div class="dg"><div class="seq"><span class="nd hot">Esha · 2</span><span class="lk">→</span><span class="nd new">Dev · 1</span><span class="lk">→</span><span class="nd new">Farid · 1</span></div><div class="cap">Your suggestions, best first. Dev and Farid tie at 1; the rule "smaller id first" puts Dev (3) before Farid (5), so the answer is the same on every run.</div></div>
+  <p>Three things to keep from the hand count. Ben and Chloe each share a friend with you, but they are already your friends, so they are filtered out: a rule, not a score. Ties happen, and a fixed tie rule is what makes the answer testable. And the counting itself is just <b>the overlap of two friend lists</b>, which is where Day 1 starts.</p>
+
+  <p>The same hand count, as code. Friend lists are a dictionary from id to a set of ids; the overlap of two lists is the set intersection <code>&amp;</code>.</p>
+  <div class="code"><div class="ch"><span>code/index/hand_count.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">NAMES = ["You", "Ben", "Chloe", "Dev", "Esha", "Farid"]
+friends = {
+    0: {1, 2},          # You: Ben, Chloe
+    1: {0, 2, 3, 4},    # Ben: You, Chloe, Dev, Esha
+    2: {0, 1, 4, 5},    # Chloe: You, Ben, Esha, Farid
+    3: {1},             # Dev: Ben
+    4: {1, 2},          # Esha: Ben, Chloe
+    5: {2},             # Farid: Chloe
+}
+
+def mutual_friends(friends, u):
+    """For everyone who is not u and not already u's friend,
+    count the overlap of their friend list with u's."""
+    counts = {}
+    for v in friends:
+        if v == u or v in friends[u]:
+            continue                      # never suggest yourself or a friend
+        shared = friends[u] &amp; friends[v]  # the friends you have in common
+        if shared:
+            counts[v] = len(shared)
+    return counts
+
+def suggest(friends, u, k=10):
+    """The k people with the most mutual friends; ties go to the smaller id."""
+    counts = mutual_friends(friends, u)
+    return sorted(counts, key=lambda v: (-counts[v], v))[:k]
+
+# every friendship is written in both lists
+assert all(u in friends[v] for u in friends for v in friends[u])
+assert mutual_friends(friends, 0) == {3: 1, 4: 2, 5: 1}   # Dev 1, Esha 2, Farid 1
+assert suggest(friends, 0) == [4, 3, 5]                    # Esha, then Dev before Farid
+assert suggest(friends, 0, k=2) == [4, 3]</code></pre></div>
+  <p>This is correct, and it is exactly the "compare with everyone" approach from the constraints: the loop visits every user. On six people that is nothing. On a billion it is the full second we just ruled out. The rest of the week is about keeping this answer while doing far less work.</p>
+</section>
+
+<section class="s" id="roadmap" data-sec="roadmap">
+  <div class="shead"><span class="sno">THE WEEK</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim sys">System Design</span><span class="dim del">Delivery</span></span></div>
+  <h2>How the problem grows</h2>
+  <p>Each day takes the same question one step further. It starts as an interview coding problem and ends as a system design you can defend at a whiteboard.</p>
+  <div class="flow"><span class="b hi">DSA</span><span class="ar">→</span><span class="b">at scale</span><span class="ar">→</span><span class="b">graph</span><span class="ar">→</span><span class="b">ML</span><span class="ar">→</span><span class="b">distributed system</span><span class="ar">→</span><span class="b hi">product</span></div>
+  <div class="daycards">
+    <a class="daycard" href="day_1.html"><b>Day 1 · Common friends</b><span>Counting mutual friends is intersecting two friend lists: from nested loops to hash sets, merges and bitsets, then with the lists on different machines.</span></a>
+    <a class="daycard" href="day_2.html"><b>Day 2 · The top k</b><span>From counts to the ten shown: a fixed list versus a stream of new friendships, then the same choice spread across many machines.</span></a>
+    <a class="daycard" href="day_3.html"><b>Day 3 · It is a graph</b><span>The friend lists form a graph, and walking it two steps out finds the candidates, shows why popular people are expensive, and gives better scores.</span></a>
+    <a class="daycard" href="day_4.html"><b>Day 4 · Learn what engagement means</b><span>Replace the naive score with a learned probability: the ML design, the data science and A/B tests that judge it, then representations learned from behaviour.</span></a>
+    <a class="daycard" href="day_5.html"><b>Day 5 · A billion users</b><span>The distributed algorithms that serve every user fast, then the product design around them: privacy, notifications, fairness, cold start.</span></a>
+    <a class="daycard hi" href="worksheet.html"><b>Worksheet and checks</b><span>The lab's work items, a check for every day, and interview drills in coding, ML design and system design.</span></a>
+  </div>
+
+  <h3>The lab</h3>
+  <p>The week's lab is the <code>pymk</code> package in <a href="https://github.com/dpaul0501/ai-engineer-100-labs/tree/main/week_01"><code>week_01/</code></a> of this repository. You build People You May Know end to end on a synthetic network of 10,000 users and 100,000 friendships: the exact mutual-friend baseline, faster approximate candidates, a learned ranker, and a small serving layer with a cache and the "never suggest" rules. The acceptance tests start red; its <code>README.md</code> says how to set up and in what order to work, and the <a href="worksheet.html">worksheet</a> lists the work items.</p>
+
+  <div class="check" data-check="index">
+    <div class="ch"><b>Checkpoint · The problem</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="r1" data-dim="sys"><span class="tx">State the inputs, outputs and constraints of People You May Know out loud, in under a minute, as you would open an interview answer.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="r2" data-dim="sys"><span class="tx">From a billion users with 300 friends each, work out the list size (2.4 TB at 8 bytes per id) and why comparing with every user cannot meet the time budget.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="r3" data-dim="ml"><span class="tx">Name the countable events from shown to interact, and say what goes wrong if you optimise for clicks alone.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r4" data-dim="ml"><span class="tx">Explain in two sentences why the number of mutual friends is a sensible first score.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r5" data-dim="dsa"><span class="tx">Count mutual friends by hand on the six people: Esha 2, Dev 1, Farid 1; say why Ben, Chloe and You are excluded and why Dev comes before Farid.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="r6" data-dim="dsa"><span class="tx">Type <code>mutual_friends</code> and <code>suggest</code> yourself and make the asserts pass.</span><span class="dim dsa">DSA</span></label>
+  </div>
+</section>

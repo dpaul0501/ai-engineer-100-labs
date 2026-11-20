@@ -1,0 +1,23 @@
+per-user recall@10 of the LR ranker: mean 0.0718; p50 0.000, p75 0.000, p90 0.250, p99 1.000; 77.3% of users get no future friend in their ten
+  bootstrap over users, B=200: mean 0.0718, 95% interval [0.0687, 0.0745]
+  bootstrap over users, B=1000: mean 0.0718, 95% interval [0.0686, 0.0753]
+  bootstrap over users, B=5000: mean 0.0718, 95% interval [0.0685, 0.0752]
+  normal approximation: 0.0718 ± 0.0035
+if everyone saw control: 0.1751 of 9,357 users convert; treatment: 0.2268 (true lift +0.0517, +29.5% relative)
+A/B: control 853/4689 = 0.1819, treatment 1050/4668 = 0.2249, pooled 0.2034, SE 0.00832, z 5.17, p-value 2.3e-07
+   95% CI for the lift: [+0.0267, +0.0593]
+users per arm to detect 0.1751 -> 0.2268: 941
+users per arm for a 2% relative lift on 0.1751: 186,390
+users per arm for a 5% relative lift on 0.1751: 30,168
+users per arm for a 10% relative lift on 0.1751: 7,684
+MDE with 4,689 users per arm at baseline 0.1751: 0.0220 absolute (12.6% relative)
+A/A, 5,000 users per arm,   1 looks: false positives looking once 0.051, stopping at first p<0.05 0.051
+A/A, 5,000 users per arm,   5 looks: false positives looking once 0.050, stopping at first p<0.05 0.141
+A/A, 5,000 users per arm,  20 looks: false positives looking once 0.050, stopping at first p<0.05 0.247
+A/A, 5,000 users per arm, 100 looks: false positives looking once 0.049, stopping at first p<0.05 0.373
+
+interference: share of users with a connection, all control 0.2094, all treatment 0.2649; true global effect +0.0556
+clusters: 196 groups, largest 2,876 users; 25.1% of the window's friendships fall inside one cluster
+  user-level     randomisation: mean estimate +0.0354 (64% of the true effect), SD across 300 re-randomisations 0.0085
+  cluster-level  randomisation: mean estimate +0.0486 (87% of the true effect), SD across 300 re-randomisations 0.0151
+sticky hash: 50,283 of 100,000 users in treatment; 25,005 in both of two experiments

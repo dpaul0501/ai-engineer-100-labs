@@ -1,0 +1,546 @@
+<section class="s" id="day1" data-sec="day1">
+  <div class="shead"><span class="sno">DAY 1 · COMMON FRIENDS</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim sys">Systems</span><span class="dim ml">ML</span></span></div>
+  <h2>Common friends: intersect two friend lists</h2>
+  <p><b>Where we are.</b> The reading gave each candidate a naive score: the number of mutual friends. Open Esha's profile and the app says "2 mutual friends: Ben and Chloe". Behind that line is one small question asked billions of times a day: which ids appear in both your friend list and hers? That is the <b>intersection</b> of two lists. Today starts with one pair and grows: five ways to intersect two lists, measured on the week's data; then every candidate for one user at once; then, as an advanced part, lists too large for one machine.</p>
+
+  <p><b>By hand.</b> Your friends are Ben and Chloe. Esha's friends are Ben and Chloe. Walk your list and ask, for each name, "is this one in Esha's list?" Ben: yes. Chloe: yes. Two mutual friends. For Dev (friends: Ben) the same walk gives Ben only: one. For Farid (friends: Chloe): Chloe only: one.</p>
+  <div class="dg">
+    <div class="seq"><span class="lk">You&nbsp;&nbsp;</span><span class="nd hot">Ben</span><span class="nd hot">Chloe</span></div>
+    <div class="seq" style="margin-top:.5rem"><span class="lk">Esha&nbsp;</span><span class="nd hot">Ben</span><span class="nd hot">Chloe</span></div>
+    <div class="seq" style="margin-top:.5rem"><span class="lk">Dev&nbsp;&nbsp;</span><span class="nd hot">Ben</span></div>
+    <div class="seq" style="margin-top:.5rem"><span class="lk">Farid</span><span class="nd hot">Chloe</span></div>
+    <div class="cap">Highlighted ids are in your list too. You ∩ Esha = {Ben, Chloe}: 2. You ∩ Dev = {Ben}: 1. You ∩ Farid = {Chloe}: 1. The score is the size of the intersection.</div>
+  </div>
+  <p>Six people make this trivial. On the week's data (10,000 users, 100,000 friendships) a typical list has 15 friends, the mean is 20, and the five largest have 793, 1,108, 1,117, 1,132 and 1,480. Those few long lists, the <b>hubs</b>, decide which method wins.</p>
+
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · one pair, five ways to intersect</span></div>
+
+    <p>A small sorted example to count steps on: <var>A</var> = [3, 9, 14, 20] and <var>B</var> = [1, 3, 4, 7, 9, 12, 15, 20, 22, 30]. The answer is [3, 9, 20]. Write <var>a</var> for the shorter length and <var>b</var> for the longer.</p>
+
+    <h4>1 · The obvious attempt: compare everything with everything</h4>
+    <p>For each id in <var>A</var>, scan <var>B</var> until you find it. That is up to <var>a</var> × <var>b</var> = 4 × 10 = 40 comparisons; stopping at the first match, the code below makes 25. It needs nothing from the input (any order, any container), which is its only virtue.</p>
+    <div class="code"><div class="ch"><span>code/day_1/intersect.py · nested loops</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def intersect_nested(a, b):
+    """Any two lists. Compare every x in a with the members of b: up to |a|*|b| comparisons."""
+    out, ops = [], 0
+    for x in a:
+        for y in b:
+            ops += 1
+            if x == y:
+                out.append(x)
+                break                      # ids are distinct: x cannot match again
+    return sorted(out), ops</code></pre></div>
+    <p>Every function in this file returns the common ids and the number of operations it used, so the measurements below can count work as well as time it. On the week's data the nested loops make 720 comparisons for a typical pair and 11,021 when one side is a hub.</p>
+
+    <h4>2 · A hash set: one lookup per id</h4>
+    <p><b>The idea.</b> Keep one list as a hash set, where "is Ben in here?" takes one step on average. Walk the <em>shorter</em> list and look each id up in the longer one: <var>a</var> lookups. In the example, 4 lookups instead of 25 comparisons. If the set does not exist yet, building it costs one insert per id, so the total is \(O(a + b)\) time; if it is already stored, the pair costs only \(O(a)\).</p>
+    <div class="code"><div class="ch"><span>code/day_1/intersect.py · hash set</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def intersect_hash(a, b_set):
+    """a: any list; b_set: the other list, already a hash set. One lookup per x in a.
+    Call it with the SHORTER list as a."""
+    out = [x for x in a if x in b_set]
+    return sorted(out), len(a)</code></pre></div>
+    <p><b>The catch is memory.</b> A Python set for the largest list (1,480 ids) takes 131,288 bytes for its table alone; the same ids as a sorted array of 4-byte integers take 5,920 bytes. Keeping every list as a hash set costs about 22 times the memory of keeping it as an array.</p>
+
+    <h4>3 · Both lists sorted: merge with two pointers</h4>
+    <p><b>The idea.</b> If both lists are sorted, put a finger at the start of each. If <var>A</var>'s finger points at the smaller id, that id cannot be in <var>B</var> (everything left in <var>B</var> is bigger), so move <var>A</var>'s finger. If <var>B</var>'s is smaller, move <var>B</var>'s. If they are equal, write it down and move both.</p>
+    <div class="dg"><div class="steps">
+      <div class="step"><span class="k">1–2</span><span class="seq"><span class="nd hot">3</span><span class="lk">vs</span><span class="nd">1</span><span class="lk">→</span><span class="nd hot">3</span><span class="lk">vs</span><span class="nd hot">3</span></span><span class="why">1 &lt; 3: move <var>B</var>'s finger. Then equal: <b>output 3</b></span></div>
+      <div class="step"><span class="k">3–5</span><span class="seq"><span class="nd hot">9</span><span class="lk">vs</span><span class="nd">4</span><span class="nd">7</span><span class="nd hot">9</span></span><span class="why">skip 4 and 7 in <var>B</var>; equal: <b>output 9</b></span></div>
+      <div class="step"><span class="k">6–7</span><span class="seq"><span class="nd">14</span><span class="lk">vs</span><span class="nd">12</span><span class="nd">15</span></span><span class="why">skip 12; then 14 &lt; 15, so 14 is not in <var>B</var>: move <var>A</var>'s finger</span></div>
+      <div class="step"><span class="k">8–9</span><span class="seq"><span class="nd hot">20</span><span class="lk">vs</span><span class="nd">15</span><span class="nd hot">20</span></span><span class="why">skip 15; equal: <b>output 20</b>. <var>A</var> is used up: stop after 9 steps (the lengths add to 14)</span></div>
+    </div></div>
+    <div class="code"><div class="ch"><span>code/day_1/intersect.py · two-pointer merge</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def intersect_merge(a, b):
+    """a, b sorted, no repeats. Two pointers; each step moves at least one: &lt;= |a| + |b| steps."""
+    i = j = ops = 0
+    out = []
+    while i &lt; len(a) and j &lt; len(b):
+        ops += 1
+        if a[i] &lt; b[j]:
+            i += 1                         # a[i] is below everything left in b: not shared
+        elif a[i] &gt; b[j]:
+            j += 1
+        else:
+            out.append(a[i]); i += 1; j += 1
+    return out, ops</code></pre></div>
+    <p>Every step moves at least one finger, so the merge takes at most \(a + b\) steps. It needs no extra memory beyond the two arrays, and it reads both front to back, which suits arrays in memory, compressed lists on disk and streams alike. The price: on a small list against a hub it walks through almost all of the hub's list to find a handful of matches.</p>
+
+    <h4>4 · Very different sizes: binary search, then galloping</h4>
+    <p><b>Binary search.</b> When one list is tiny and the other huge, look each id of the short list up in the long one by halving: about \(\log_2 b\) comparisons each, so \(a \log_2 b\) in all. Against the 1,480-id list that is about 11 comparisons per id instead of walking 1,480 entries.</p>
+    <p><b>Galloping.</b> Binary search forgets where the last search ended. Galloping remembers: from where the finger stopped, leap 1, 2, 4, 8 … places ahead until you pass the id, then binary-search the last leap. For 9 in the example, starting at position 2: look at 4 (too small), 7 (too small), 12 (past it), then search between 7 and 12 and find 9. The cost is about \(a \log_2(b/a)\): close to the merge when the sizes are equal, close to binary search when they are far apart. In the example the merge took 9 steps, binary search 20 and galloping 14; the small example favours the merge, the hubs do not.</p>
+    <div class="code"><div class="ch"><span>code/day_1/intersect.py · binary search and galloping</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def lower_bound(b, x, lo, hi):
+    """Smallest i in [lo, hi) with b[i] &gt;= x (hi if none), and the comparisons used."""
+    ops = 0
+    while lo &lt; hi:
+        mid = (lo + hi) // 2
+        ops += 1
+        if b[mid] &lt; x:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo, ops
+
+def intersect_binary(a, b):
+    """a short and sorted, b long and sorted. Binary-search each x of a in all of b:
+    about |a| * log2|b| comparisons."""
+    out, ops = [], 0
+    for x in a:
+        i, c = lower_bound(b, x, 0, len(b))
+        ops += c + 1
+        if i &lt; len(b) and b[i] == x:
+            out.append(x)
+    return out, ops
+
+def intersect_gallop(a, b):
+    """a short and sorted, b long and sorted. From where the last search stopped, leap
+    1, 2, 4, 8 ... places until past x, then binary-search that last leap:
+    about |a| * log2(|b| / |a|) comparisons."""
+    out, ops, j = [], 0, 0
+    for x in a:
+        lo, step = j, 1
+        hi = j
+        while hi &lt; len(b):
+            ops += 1
+            if b[hi] &gt;= x:
+                break
+            lo = hi + 1                    # b[hi] &lt; x: the answer lies beyond hi
+            hi += step
+            step *= 2
+        j, c = lower_bound(b, x, lo, min(hi, len(b)))
+        ops += c + 1
+        if j == len(b):
+            break                          # everything left in a is bigger than all of b
+        if b[j] == x:
+            out.append(x); j += 1
+    return out, ops</code></pre></div>
+
+    <h4>5 · Dense ids: bitsets and popcount</h4>
+    <p><b>The idea.</b> Number the users 0 to <var>n</var> − 1 and store each friend list as <var>n</var> bits: bit <var>x</var> is 1 when <var>x</var> is a friend. You are bits 1 and 2 (Ben, Chloe): 000110 read right to left; Esha is the same, 000110. AND the two bit strings and count the 1s that survive (a <b>popcount</b>, one machine instruction per 64-bit word): 2. The work is \(n/64\) words whatever the list sizes: 157 words for 10,000 users.</p>
+    <div class="code"><div class="ch"><span>code/day_1/intersect.py · bitsets</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def to_bits(ids):
+    """A friend list as one big integer: bit x is 1 when x is a friend."""
+    bits = 0
+    for x in ids:
+        bits |= 1 &lt;&lt; x
+    return bits
+
+def intersect_bits(a_bits, b_bits, n):
+    """Ids 0..n-1. AND the two bitsets, then count the 1s (popcount): n/64 machine words."""
+    both = a_bits &amp; b_bits
+    out = [x for x in range(n) if both &gt;&gt; x &amp; 1] if both else []
+    return out, (n + 63) // 64
+
+def count_bits(a_bits, b_bits):
+    """Only the number of mutual friends: AND, then popcount."""
+    return (a_bits &amp; b_bits).bit_count()</code></pre></div>
+    <p><b>The catch is again memory.</b> A bitset costs \(n/8\) bytes per user however few friends they have: 1,250 bytes each here, 12,500,000 bytes for all 10,000 users, against 800,000 bytes for every list as 4-byte arrays (15.6 times more). With a billion users one bitset would be 125 MB. Bitsets pay inside a small, dense id range: one community, one company, one block of a matrix.</p>
+
+    <h4>6 · Measured on the week's data</h4>
+    <p>All five methods ran on real pairs and were checked to agree. Three groups: 2,000 typical pairs (a random user and a random person two steps away, the kind of pair the suggestions score); 2,000 skewed pairs (a user with at most 20 friends and one of the 7 users with 500+ friends); and all 45 pairs among the ten largest lists. Operations are counted inside each function; times are pure Python on one laptop core.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Group</th><th class="num">shorter (mean)</th><th class="num">longer (mean)</th><th class="num">mutual</th><th class="num">nested</th><th class="num">hash</th><th class="num">merge</th><th class="num">binary</th><th class="num">gallop</th><th class="num">bitset words</th></tr>
+      <tr><td>Typical</td><td class="num">14.4</td><td class="num">50.6</td><td class="num">1.12</td><td class="num">719.7</td><td class="num">14.4</td><td class="num">59.2</td><td class="num">88.7</td><td class="num">57.9</td><td class="num">157</td></tr>
+      <tr class="hi"><td>Small vs hub</td><td class="num">12.7</td><td class="num">982.2</td><td class="num">2.50</td><td class="num">11,021.1</td><td class="num">12.7</td><td class="num">910.4</td><td class="num">138.9</td><td class="num">157.8</td><td class="num">157</td></tr>
+      <tr><td>Hub vs hub</td><td class="num">558.2</td><td class="num">1,017.8</td><td class="num">97.89</td><td class="num">546,247.7</td><td class="num">558.2</td><td class="num">1,474.9</td><td class="num">6,175.1</td><td class="num">2,050.6</td><td class="num">157</td></tr>
+    </table></div>
+    <div class="chart"><div class="t">Small list against a hub (about 13 ids against about 982): operations per pair</div>
+      <div class="br"><span>merge</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">910.4</span></div>
+      <div class="br"><span>gallop</span><span class="tr"><i style="width:17.3%"></i></span><span class="v">157.8</span></div>
+      <div class="br"><span>bitset words</span><span class="tr"><i style="width:17.2%"></i></span><span class="v">157</span></div>
+      <div class="br"><span>binary</span><span class="tr"><i style="width:15.3%"></i></span><span class="v">138.9</span></div>
+      <div class="br"><span>hash</span><span class="tr"><i style="width:1.4%"></i></span><span class="v">12.7</span></div>
+      <div class="cap">The merge walks through most of the hub's list: 5.8 times the comparisons of galloping. With so short a list on one side, plain binary search is slightly cheaper than galloping (138.9 against 157.8): the doubling pays only when the short list has enough ids for the finger to move far.</div>
+    </div>
+    <div class="chart"><div class="t">Hub against hub (about 558 ids against about 1,018): operations per pair</div>
+      <div class="br"><span>binary</span><span class="tr"><i style="width:100%;--c:var(--bad)"></i></span><span class="v">6,175.1</span></div>
+      <div class="br"><span>gallop</span><span class="tr"><i style="width:33.2%"></i></span><span class="v">2,050.6</span></div>
+      <div class="br"><span>merge</span><span class="tr"><i style="width:23.9%"></i></span><span class="v">1,474.9</span></div>
+      <div class="br"><span>hash</span><span class="tr"><i style="width:9.0%"></i></span><span class="v">558.2</span></div>
+      <div class="br"><span>bitset words</span><span class="tr"><i style="width:2.5%"></i></span><span class="v">157</span></div>
+      <div class="cap">With similar sizes the order flips: binary search repeats work the merge never does (3 times galloping), galloping stays within 1.4 times the merge, and the bitset, at a fixed 157 words, is 9.4 times cheaper than the merge.</div>
+    </div>
+    <p><b>Times, microseconds per pair</b> (pure Python, one laptop core):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Group</th><th class="num">nested</th><th class="num">hash</th><th class="num">merge</th><th class="num">binary</th><th class="num">gallop</th><th class="num">bitset</th><th class="num">set &amp; set (C)</th></tr>
+      <tr><td>Typical</td><td class="num">23.16</td><td class="num">1.04</td><td class="num">7.07</td><td class="num">8.10</td><td class="num">6.68</td><td class="num">0.80</td><td class="num">0.82</td></tr>
+      <tr class="hi"><td>Small vs hub</td><td class="num">312.74</td><td class="num">1.27</td><td class="num">97.38</td><td class="num">13.62</td><td class="num">15.47</td><td class="num">0.64</td><td class="num">1.04</td></tr>
+      <tr><td>Hub vs hub</td><td class="num">18,483.16</td><td class="num">31.49</td><td class="num">254.19</td><td class="num">730.59</td><td class="num">480.00</td><td class="num">0.75</td><td class="num">31.03</td></tr>
+    </table></div>
+    <p>Read the times with care: the hash lookups, Python's built-in <code>set &amp; set</code> and the bitset AND run in C, while the merge, binary search and galloping loops run in the interpreter. The operation counts are the fair comparison; in a compiled language over integer arrays, the merge and galloping are the methods search engines and graph systems use, because they need no extra memory and read memory in order.</p>
+
+    <div class="tablewrap"><table>
+      <tr><th>Method</th><th>Cost</th><th>Needs</th><th>Wins when</th></tr>
+      <tr><td>Nested loops</td><td>\(a \cdot b\)</td><td>nothing</td><td>never, beyond a handful of ids</td></tr>
+      <tr><td>Hash set</td><td>\(a\) lookups (+ \(b\) to build)</td><td>one side as a hash set; about 22× the memory of an array</td><td>lists already in memory as sets; one-off pairs</td></tr>
+      <tr><td>Two-pointer merge</td><td>\(a + b\)</td><td>both sorted; no extra memory</td><td>similar sizes; arrays, disk, streams</td></tr>
+      <tr><td>Binary search</td><td>\(a \log_2 b\)</td><td>both sorted, random access into the longer</td><td>a few ids against a huge list</td></tr>
+      <tr><td>Galloping</td><td>\(\approx a \log_2(b/a)\)</td><td>both sorted, random access</td><td>sizes unknown in advance: never far from the better of merge and binary search</td></tr>
+      <tr><td>Bitset + popcount</td><td>\(n/64\) words</td><td>dense ids 0…<var>n</var>−1; \(n/8\) bytes per list</td><td>small id range, long lists, many pairs</td></tr>
+    </table></div>
+
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li><b>Say first:</b> "Build a hash set from one list and probe it with the other: \(O(a + b)\) time, \(O(\min(a, b))\) extra space if I build the set from the shorter one. If the sets are already stored, probe with the shorter list: \(O(\min(a, b))\)."</li>
+      <li><b>"What if both are sorted?"</b> Two pointers, \(O(a + b)\) time, \(O(1)\) extra space. Prove it with the invariant in the math below.</li>
+      <li><b>"What if one list is huge?"</b> Binary search each id of the small one: \(O(a \log b)\). Galloping if you do not know the sizes in advance.</li>
+      <li><b>"Memory is tight?"</b> Sorted arrays and the merge; a hash set costs many times the array (22 times here).</li>
+      <li><b>"Ids are small and dense, and you do this for many pairs?"</b> Bitsets: AND plus popcount, \(n/64\) words per pair.</li>
+      <li><b>"Duplicates?"</b> (LeetCode 350) A count map instead of a set, or the merge emitting a match once per matched pair.</li>
+    </ul></div>
+    <p class="idea"><b>In one line.</b> Hash set by default; two pointers when sorted and memory matters; binary search or galloping when one side is huge; bitsets when ids are dense.</p>
+
+    <details class="deep"><summary>The math, step by step: why the merge is correct, what galloping costs, and why nothing can do much better</summary><div>
+      <p>Write <var>a</var> for the shorter length and <var>b</var> for the longer, and \(A_i\), \(B_j\) for the ids under the two fingers.</p>
+      <p><b>The merge is correct.</b> Both lists are sorted with no repeats. Two facts stay true before every step. (P): everything already passed in either list, \(A[{:}i]\) and \(B[{:}j]\), is smaller than both \(A_i\) and \(B_j\). (Q): the output so far is exactly what \(A[{:}i]\) and \(B[{:}j]\) have in common. Both hold at the start, when nothing has been passed. Take a step where \(A_i &lt; B_j\). Everything passed in <var>B</var> is below \(A_i\) by (P), and everything not yet passed in <var>B</var> is at least \(B_j &gt; A_i\). So \(A_i\) is nowhere in <var>B</var>, and moving past it without output keeps (Q); (P) still holds because \(A_i &lt; B_j\). The case \(A_i &gt; B_j\) is the mirror image. If \(A_i = B_j\), outputting it and moving both keeps (Q), and (P) holds because both lists strictly increase. When one list runs out, (P) says nothing left in the other can match, so the output is the whole intersection. Each step moves a finger, so there are at most \(a + b\) steps.</p>
+      <p><b>What galloping costs.</b> Take one id of the short list, and say its search moves the finger past \(g\) positions of <var>B</var>. The leaps probe 1, 3, 7, 15 … places ahead; passing \(g\) places takes about \(\log_2(g+1)\) probes plus one that overshoots, and the binary search of the last leap costs about as many again. So that id costs at most about \(2\log_2(g_i + 1) + 4\) comparisons. The finger only moves forward, so all the jumps together are at most <var>b</var>: \(\sum_i g_i \le b\). The logarithm curves downward, so the average of logs is at most the log of the average (Jensen's inequality):</p>
+      <div class="eq">\[ \sum_{i=1}^{a} \log_2(g_i + 1) \;\le\; a \log_2\!\Big(\frac{1}{a}\sum_i (g_i + 1)\Big) \;\le\; a \log_2\!\Big(\frac{b}{a} + 1\Big). \]</div>
+      <p>So galloping takes at most about \(2a\log_2(b/a+1) + 4a\) comparisons. When \(b \approx a\) that is a constant times <var>a</var>, like the merge. When <var>b</var> is far larger it approaches \(2a \log_2 b\), twice a binary search per id: which is why, against a hub with only 13 ids on the other side, plain binary search came out slightly ahead.</p>
+      <p><b>No comparison method can do much better.</b> Think about inputs where the two lists share nothing. To answer "nothing in common", a method must know, for each id of <var>A</var>, which two neighbouring ids of <var>B</var> it falls between (otherwise another input with the same comparison results would put it equal to one of them). That fixes the full interleaving of the two lists, and there are \(\binom{a+b}{a}\) interleavings. Each comparison has two outcomes, so <var>c</var> comparisons tell at most \(2^c\) interleavings apart:</p>
+      <div class="eq">\[ c \;\ge\; \log_2 \binom{a+b}{a} \;\ge\; \log_2\Big(\frac{a+b}{a}\Big)^{a} \;\ge\; a\log_2\frac{b}{a}. \]</div>
+      <p>The middle step uses \(\binom{N}{a} = \prod_{i=0}^{a-1}\frac{N-i}{a-i}\), where each factor is at least \(N/a\).</p>
+      <p><b>What this shows.</b> The merge is correct and costs at most \(a + b\); galloping costs at most about \(2a\log_2(b/a+1) + 4a\); every comparison method needs at least \(a\log_2(b/a)\). Galloping is within a constant factor of the best possible for every pair of sizes.</p>
+    </div></details>
+  </div>
+
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · from one pair to one user</span></div>
+    <h4>7 · Count every candidate in one pass</h4>
+    <p><b>The situation.</b> The profile line needs one pair. The suggestion list for You needs a count for everyone who shares at least one friend with you, so it can rank them.</p>
+    <p><b>The obvious attempt.</b> Intersect your list with every other user's list: 9,999 intersections per user, nearly all of them empty. A little better: intersect only with friends of friends, since nobody else can share a friend with you. On the week's data that is 1,191 people per user on average, and with hash lookups over the shorter list it costs 19,714 lookups per user.</p>
+    <p><b>The idea.</b> Turn it around. Each of your friends <em>vouches</em> for each of their friends: when you read Ben's list, every person on it gets one more mutual friend with you. Keep a dictionary of counts. For You: Ben's list adds 1 to Dev and Esha (and to Chloe and You, who are skipped); Chloe's list adds 1 to Esha and Farid. Result: Esha 2, Dev 1, Farid 1, after reading 4 + 4 = 8 entries.</p>
+    <div class="code"><div class="ch"><span>code/day_1/one_user.py · counts with a dictionary</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def mutual_counts(friends, u):
+    """For every friend of a friend of u (not u, not already a friend): how many mutual friends.
+    Reads each friend's list once, so the cost is the sum of u's friends' list lengths."""
+    counts = {}
+    for f in friends[u]:                   # each friend f of u ...
+        for v in friends[f]:               # ... vouches for each of f's friends
+            if v != u and v not in friends[u]:
+                counts[v] = counts.get(v, 0) + 1
+    return counts
+
+def cost(friends, u):
+    """Entries read by mutual_counts: the sum of the friends' list lengths."""
+    return sum(len(friends[f]) for f in friends[u])
+
+c = mutual_counts(EXAMPLE, 0)
+assert c == {3: 1, 4: 2, 5: 1}                       # Dev 1, Esha 2 (Ben, Chloe), Farid 1
+assert cost(EXAMPLE, 0) == 8                         # Ben's 4 entries + Chloe's 4</code></pre></div>
+    <p><b>Measured.</b> The counts were checked against one intersection per candidate for 300 users. The work is the sum of your friends' list lengths:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Per user</th><th class="num">mean</th><th class="num">median</th><th class="num">worst</th></tr>
+      <tr><td>entries read by the counting pass</td><td class="num">1,477</td><td class="num">1,023</td><td class="num">51,806</td></tr>
+      <tr><td>friends of friends counted</td><td class="num">1,191</td><td class="num"></td><td class="num">8,119 for the same user</td></tr>
+      <tr><td>lookups if you intersected with each of them</td><td class="num">19,714</td><td class="num"></td><td class="num"></td></tr>
+    </table></div>
+    <p>The counting pass reads 13.3 times fewer entries than intersecting with each friend of a friend. All 10,000 users took 3.12 s on one laptop core, 0.31 ms per user. The worst user is the one with 1,480 friends: their friends' lists add up to 51,806 entries and took 11.91 ms. The 1,480 people on that hub's list each read its 1,480 entries whenever their own counts are built, so one long list makes many users expensive. Over all users the reads add up to 14,768,324: the sum of every list's length squared (the math below shows why). Day 3 gives this structure its proper name and deals with the hubs.</p>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"For one pair, intersect. For one user's whole candidate list, count: read each friend's list once into a hash map, \(O(\sum_{f} d_f)\) where \(d_f\) is friend <var>f</var>'s list length."</li>
+      <li>Follow-up "who is expensive?": users whose friends have long lists, not users with many friends. The cost is set by your friends' lengths.</li>
+    </ul></div>
+    <p class="idea"><b>In one line.</b> Many intersections with one shared side collapse into one counting pass over your friends' lists.</p>
+    <details class="deep"><summary>The math, step by step: why the total is the sum of squared lengths</summary><div>
+      <p>Write \(d_f\) for the length of <var>f</var>'s list. User <var>u</var>'s pass reads \(\sum_{f \in \text{friends}(u)} d_f\) entries. Add this over every user <var>u</var>:</p>
+      <div class="eq">\[ \sum_u \sum_{f \in \text{friends}(u)} d_f \;=\; \sum_f d_f \cdot \#\{u : f \in \text{friends}(u)\} \;=\; \sum_f d_f \cdot d_f \;=\; \sum_f d_f^2 . \]</div>
+      <p>The middle step swaps the order of the sums: list <var>f</var> is read once for each person who has <var>f</var> as a friend, and those are exactly <var>f</var>'s \(d_f\) friends.</p>
+      <p><b>Why the tail sets the bill.</b> With <var>n</var> users and mean length \(\bar d\), \(\sum_f d_f^2 = n(\bar d^2 + \sigma^2)\), where \(\sigma^2\) is the variance of the lengths. If everyone had exactly 20 friends the total would be \(10{,}000 \times 20^2 = 4{,}000{,}000\). The measured 14,768,324 means \(\sigma^2 = 1{,}476.8 - 400 = 1{,}076.8\): the spread of lengths, driven by the hubs, costs 2.7 times more than the average itself.</p>
+    </div></details>
+  </div>
+
+  <p><b>The bridge to scale.</b> Suppose a billion users with 300 friends each. One user's pass reads about 300 × 300 = 90,000 entries; all users together about \(10^9 \times 90{,}000 = 9 \times 10^{13}\). The lists alone hold \(10^9 \times 300 = 3 \times 10^{11}\) ids, 2.4 TB at 8 bytes each. They no longer fit on one machine, and the rest of the day is about what changes when they do not.</p>
+</section>
+
+<section class="s" id="day1-scale" data-sec="day1-scale">
+  <div class="shead"><span class="sno">DAY 1 · COMMON FRIENDS</span><span class="dims"><span class="dim sys">Systems</span><span class="dim ml">ML</span></span></div>
+  <h2>Advanced · at scale: when the lists do not fit on one machine</h2>
+  <p>This part goes beyond the coding round into system design. Three questions: what to do when the two lists of one pair live on different machines; how to count mutual friends for every pair at once as a batch job, and why one hub can swamp it; and how to estimate overlap from a short signature instead of the full lists. Day 5 builds the full serving design on top of these.</p>
+
+  <div class="blk sys">
+    <div class="bh"><span class="kind">Systems · advanced · two machines, one pair</span></div>
+    <h4>8 · Ship the smaller list</h4>
+    <p><b>The situation.</b> Lists are spread over machines by user id. Your list is on machine A, Esha's on machine B, and the profile page needs your mutual-friend count.</p>
+    <p><b>The obvious attempt.</b> Fetch both lists to the web server and intersect there. That moves both lists every time, and if one belongs to a hub, it moves the big one.</p>
+    <p><b>The idea.</b> Move the smaller list to where the larger one lives, intersect there (hash set or merge, as above), and send back only the answer. A median user (15 friends) against the 1,480-id hub, at 4 bytes an id:</p>
+    <div class="tablewrap"><table>
+      <tr><th>Plan</th><th>Bytes moved</th></tr>
+      <tr><td>ship the hub's list to the user's machine</td><td class="num">1,480 × 4 = 5,920</td></tr>
+      <tr class="hi"><td>ship the user's list to the hub's machine, return a 4-byte count</td><td class="num">15 × 4 + 4 = 64</td></tr>
+    </table></div>
+    <p>That is 92 times fewer bytes. With hypothetical sizes of 300 and 5,000 friends and 8-byte ids, it is 2,400 + 8 bytes against 40,000. The same rule, applied to whole tables, is the "broadcast the small side" choice of a distributed join: send the small table to every machine holding pieces of the big one. When both lists are long (two hubs, 1,132 and 1,480 ids: 4,528 bytes for the smaller), the next step is to send a summary instead of a list. A MinHash signature of 64 numbers is 64 × 8 = 512 bytes, at the price of an estimate (section 10).</p>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"Move the computation to the data: ship the smaller list, return a count." State the bytes.</li>
+      <li>Follow-up "both lists are huge": a compact summary (a MinHash signature for overlap, a Bloom filter for membership) trades exactness for bytes.</li>
+    </ul></div>
+  </div>
+
+  <div class="blk sys">
+    <div class="bh"><span class="kind">Systems · advanced · every pair at once as a batch job</span></div>
+    <h4>9 · Mutual friends for all pairs, MapReduce-style</h4>
+    <p><b>The situation.</b> Instead of counting on demand, precompute every user's mutual-friend counts overnight on many machines. Day 1's counting pass says "each friend vouches for each of their friends". Turned into a batch job it says: <b>user <var>u</var> is a mutual friend of every two people on <var>u</var>'s list.</b></p>
+    <div class="dg">
+      <div class="seq"><span class="nd">map: each user's list</span><span class="lk">→</span><span class="nd">every pair on it, with a 1</span><span class="lk">→</span><span class="nd hot">shuffle: route by pair</span><span class="lk">→</span><span class="nd">reduce: add the 1s</span></div>
+      <div class="cap">Map runs on the machine holding each list. The shuffle sends every record across the network to the reducer that owns its pair. The reducer's sum for (x, y) is the number of users who have both x and y as friends: their mutual-friend count.</div>
+    </div>
+    <p><b>By hand.</b> Ben's list is You, Chloe, Dev, Esha, so his map emits six pairs: (You, Chloe), (You, Dev), (You, Esha), (Chloe, Dev), (Chloe, Esha), (Dev, Esha). Chloe's list is You, Ben, Esha, Farid: six more, including (You, Esha) again. You and Esha each emit (Ben, Chloe); Dev and Farid, with one friend each, emit nothing. In all, 14 records reduce to 12 distinct pairs, and (You, Esha) sums to 2. Pairs that are already friends, such as (Ben, Chloe), are dropped at the end.</p>
+    <div class="code"><div class="ch"><span>code/day_1/mapreduce.py · the job, simulated in one process</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python"># Mutual-friend counts for ALL pairs as a MapReduce-style job, simulated in one process.
+# Map: each user's friend list -&gt; every pair of those friends, with a 1 ("u is a mutual friend of x and y").
+# Shuffle: route each pair to the reducer that owns it (hash of the pair).
+# Reduce: add up the 1s per pair = the number of mutual friends.
+from itertools import combinations
+
+def map_user(u, friend_list):
+    for x, y in combinations(sorted(friend_list), 2):
+        yield (x, y), 1
+
+def shuffle(records, reducers):
+    parts = [{} for _ in range(reducers)]
+    for key, val in records:
+        parts[hash(key) % reducers].setdefault(key, []).append(val)
+    return parts
+
+def reduce_sum(part):
+    return {key: sum(vals) for key, vals in part.items()}
+
+def run_job(friends, reducers=4, mapper=map_user):
+    emitted = []
+    for u, fl in friends.items():
+        emitted.extend(mapper(u, fl))
+    out = {}
+    for part in shuffle(emitted, reducers):
+        out.update(reduce_sum(part))
+    return out, len(emitted)</code></pre></div>
+    <p><b>Measured on the week's data.</b> The full run uses the same job written with NumPy arrays (<code>measure_mapreduce.py</code>), checked against this simulation on the first 10,000 friendships.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Stage</th><th class="num">Records</th></tr>
+      <tr><td>emitted by map and shuffled (one per pair on each list)</td><td class="num">7,284,162</td></tr>
+      <tr><td>distinct pairs after reduce</td><td class="num">6,034,751</td></tr>
+      <tr><td>… already friends (dropped)</td><td class="num">80,446</td></tr>
+      <tr><td>… not yet friends (candidates)</td><td class="num">5,954,305</td></tr>
+      <tr><td>… with 2+ mutual friends</td><td class="num">798,191</td></tr>
+      <tr class="hi"><td>rows actually shown: top 10 per user</td><td class="num">99,994</td></tr>
+    </table></div>
+    <p>The job shuffles 73 records for every row anyone will see. And where do they come from?</p>
+    <div class="chart"><div class="t">Share of all shuffled records, by who emitted them</div>
+      <div class="br"><span>1 user (1,480 friends)</span><span class="tr"><i style="width:15.0%;--c:var(--bad)"></i></span><span class="v">15.0%</span></div>
+      <div class="br"><span>7 users (500+ friends)</span><span class="tr"><i style="width:49.1%;--c:var(--bad)"></i></span><span class="v">49.1%</span></div>
+      <div class="br"><span>other 9,993 users</span><span class="tr"><i style="width:50.9%"></i></span><span class="v">50.9%</span></div>
+      <div class="cap">A list of length <var>d</var> emits \(d(d-1)/2\) pairs. The largest list alone emits 1,480 × 1,479 / 2 = 1,094,460; the median user emits 105. The 7 users with 500+ friends, 0.07% of users, emit almost half of the shuffle.</div>
+    </div>
+    <p><b>How one hub explodes the job.</b> The shuffle size is \(\sum_u d_u(d_u - 1)/2\), half the sum of squared lengths (14,768,324 here) less a small term: the same quantity as the counting pass, now paid in network bytes. A single map task is 10,423 times the median one, so the whole job waits for the hub's mapper (a <b>straggler</b>). The reducers are fine: routing by a hash of the pair, the busiest of 100 reducers got 1.018 times the average load. Routing by the first user of the pair instead (to get each user's list on one reducer) gave 1.49. Now suppose one account with a million friends: it alone emits \(10^6 \times (10^6 - 1)/2 \approx 5 \times 10^{11}\) records, about 8 TB at 16 bytes a record, all from one map task.</p>
+    <p><b>Three fixes, measured.</b> "Kept" compares each user's top 10 from the cheaper job with the exact top 10, by the exact mutual-friend counts of the people shown (100% means equally good lists).</p>
+    <div class="tablewrap"><table>
+      <tr><th>Fix</th><th class="num">Records shuffled</th><th class="num">of exact</th><th class="num">Top-10 kept</th></tr>
+      <tr><td>exact job</td><td class="num">7,284,162</td><td class="num">100%</td><td class="num">100%</td></tr>
+      <tr><td>skip lists over 1,000 (cap hub fan-out)</td><td class="num">4,312,992</td><td class="num">59.2%</td><td class="num">97.6%</td></tr>
+      <tr><td>skip lists over 500</td><td class="num">3,705,090</td><td class="num">50.9%</td><td class="num">96.5%</td></tr>
+      <tr><td>skip lists over 200</td><td class="num">2,893,099</td><td class="num">39.7%</td><td class="num">93.5%</td></tr>
+      <tr><td>longer lists emit pairs of 500 sampled friends</td><td class="num">4,578,340</td><td class="num">62.9%</td><td class="num">97.5%</td></tr>
+      <tr><td>… 200 sampled friends</td><td class="num">3,430,399</td><td class="num">47.1%</td><td class="num">95.5%</td></tr>
+      <tr><td>… 100 sampled friends</td><td class="num">2,685,077</td><td class="num">36.9%</td><td class="num">91.9%</td></tr>
+      <tr class="hi"><td>emit only for 10% of users (those to be served)</td><td class="num">1,476,474</td><td class="num">20.3%</td><td class="num">exact for them</td></tr>
+      <tr class="hi"><td>emit only for 1% of users</td><td class="num">141,785</td><td class="num">1.9%</td><td class="num">exact for them</td></tr>
+    </table></div>
+    <p>Capping the 7 hubs halves the shuffle and the lists keep 96.5% of their mutual-friend value: a friend shared through a hub is weak evidence anyway, since the hub shares a friend with almost everyone (Day 3 turns this into a score). Sampling a hub's friends keeps some of that signal at a similar cost. The third fix changes the job's shape: a mapper emits (<var>x</var>, <var>y</var>) only when <var>x</var> is a user we need suggestions for today, so the output stays exact for them and the shuffle shrinks with the share of users served.</p>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"Map each friend list to all pairs of its friends with a 1, shuffle by pair, reduce by summing. The shuffle is \(\sum d^2/2\), so the heavy tail, not the mean, sets the cost."</li>
+      <li>Follow-ups: "one mapper never finishes" (a hub: cap or sample its fan-out); "most of the output is never shown" (emit only for users you will serve, keep top-k per user in the reducer); "a reducer is overloaded" (route by a hash of the pair, not by user).</li>
+    </ul></div>
+    <details class="deep"><summary>The math, step by step: what the job emits, and why its answer is the mutual-friend count</summary><div>
+      <p><b>Correctness.</b> The reducer for pair (<var>x</var>, <var>y</var>) receives one 1 from each user <var>u</var> whose list contains both <var>x</var> and <var>y</var>. A user whose list contains both is a friend of <var>x</var> and of <var>y</var>: a mutual friend. So the sum is \(|\text{friends}(x) \cap \text{friends}(y)|\), exactly the intersection of section 1, computed for every pair at once.</p>
+      <p><b>Size.</b> A list of length <var>d</var> has \(\binom{d}{2} = d(d-1)/2\) pairs, so the job emits</p>
+      <div class="eq">\[ \sum_u \frac{d_u(d_u - 1)}{2} \;=\; \frac{1}{2}\Big(\sum_u d_u^2 - \sum_u d_u\Big) \;=\; \frac{14{,}768{,}324 - 200{,}000}{2} \;=\; 7{,}284{,}162 . \]</div>
+      <p>(\(\sum_u d_u = 200{,}000\) because every friendship appears on two lists.) It is the counting pass of section 7 for every user, halved because each unordered pair is emitted once.</p>
+      <p><b>Emitting only for wanted users.</b> If <var>T</var> is the set of users to serve, the mapper of <var>u</var> emits, for each friend <var>x</var> of <var>u</var> in <var>T</var>, the pairs (<var>x</var>, <var>y</var>) for the other \(d_u - 1\) friends <var>y</var>. That is \(\sum_u |\text{friends}(u) \cap T|\,(d_u - 1)\) records, and each <var>x</var> in <var>T</var> still receives one 1 from every mutual friend, so its counts are exact.</p>
+    </div></details>
+  </div>
+
+  <div class="blk ml">
+    <div class="bh"><span class="kind">ML · advanced · estimating overlap: MinHash and LSH</span></div>
+    <h4>10 · MinHash: a short signature that remembers overlap</h4>
+    <p><b>The situation.</b> Two long lists on different machines, or millions of pairs to compare: we want each list's overlap with others from something much shorter than the list.</p>
+    <p><b>A measure that fits.</b> Shared friends divided by everyone either person knows is the <b>Jaccard similarity</b>, <var>J</var>, from 0 to 1. You (Ben, Chloe) and Esha (Ben, Chloe): \(J = 2/2 = 1\). You and Dev (Ben): one shared out of two people in all, \(J = 1/2\). Knowing <var>J</var> and the two lengths gives the mutual count back: \(m = J(|A| + |B|)/(1 + J)\).</p>
+    <p><b>The idea.</b> Shuffle all users into one random order. For each person, note which of their friends comes first. Two people get the same "first friend" exactly when the first person in the order, among everyone either of them knows, is someone they both know. By hand for You and Dev: among Ben and Chloe, each comes first with chance one half. Ben first: your first friend is Ben and Dev's is Ben: they agree. Chloe first: yours is Chloe and Dev's is Ben: they differ. They agree half the time, and \(J = 1/2\). <b>The chance that the first friends agree is exactly <var>J</var>.</b></p>
+    <p>Repeat with <var>k</var> independent orders: each person's <var>k</var> first friends form their <b>signature</b>, <var>k</var> numbers however long the list. The share of positions where two signatures agree estimates <var>J</var>. A hash function stands in for each order (friend <var>x</var>'s position is <code>mix64(x ^ seed)</code>), so no order is ever stored.</p>
+    <div class="code"><div class="ch"><span>code/day_1/minhash.py · signatures and the estimates</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import random
+from collections import defaultdict
+
+MASK = (1 &lt;&lt; 64) - 1
+
+def mix64(x):
+    """splitmix64 finalizer: nearby ids get unrelated 64-bit values (stands in for a random order)."""
+    x = (x + 0x9E3779B97F4A7C15) &amp; MASK
+    x = ((x ^ (x &gt;&gt; 30)) * 0xBF58476D1CE4E5B9) &amp; MASK
+    x = ((x ^ (x &gt;&gt; 27)) * 0x94D049BB133111EB) &amp; MASK
+    return x ^ (x &gt;&gt; 31)
+
+def make_seeds(k, seed=0):
+    rng = random.Random(seed)
+    return [rng.getrandbits(64) for _ in range(k)]
+
+def signature(friend_list, seeds):
+    """For each of the k random orders, the friend that comes first (its hash value)."""
+    return [min(mix64(x ^ s) for x in friend_list) for s in seeds]
+
+def jaccard(a, b):
+    """Shared friends / everyone either knows."""
+    return len(a &amp; b) / len(a | b)
+
+def estimate_jaccard(sig_a, sig_b):
+    return sum(x == y for x, y in zip(sig_a, sig_b)) / len(sig_a)
+
+def estimate_mutual(j, len_a, len_b):
+    """|A &amp; B| from J: J = m / (|A| + |B| - m)  =&gt;  m = J (|A| + |B|) / (1 + J)."""
+    return j * (len_a + len_b) / (1 + j)</code></pre></div>
+    <p><b>Measured on real pairs.</b> Among the 5,954,305 non-friend pairs two steps apart, the mean <var>J</var> is 0.0262; 9,267 pairs have \(J \ge 0.1\) and 83 have \(J \ge 0.2\). Two samples of 2,000 pairs each: typical pairs (mean \(J = 0.0257\), 1.17 mutual friends) and high-overlap pairs with \(J \ge 0.1\) (mean \(J = 0.115\), 2.31 mutual friends). Errors are averaged over five independent sets of hashes; "predicted" is \(\sqrt{J(1-J)/k}\) averaged over the sample (math below).</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">k</th><th>Pairs</th><th class="num">error of Ĵ (RMS)</th><th class="num">predicted</th><th class="num">mutual-count error (mean abs)</th></tr>
+      <tr><td class="num">16</td><td>typical</td><td class="num">0.0395</td><td class="num">0.0394</td><td class="num">1.53</td></tr>
+      <tr><td class="num">16</td><td>high-overlap</td><td class="num">0.0773</td><td class="num">0.0795</td><td class="num">1.12</td></tr>
+      <tr><td class="num">64</td><td>typical</td><td class="num">0.0191</td><td class="num">0.0197</td><td class="num">0.79</td></tr>
+      <tr><td class="num">64</td><td>high-overlap</td><td class="num">0.0391</td><td class="num">0.0397</td><td class="num">0.57</td></tr>
+      <tr><td class="num">256</td><td>typical</td><td class="num">0.0103</td><td class="num">0.0099</td><td class="num">0.43</td></tr>
+      <tr class="hi"><td class="num">256</td><td>high-overlap</td><td class="num">0.0204</td><td class="num">0.0199</td><td class="num">0.30</td></tr>
+    </table></div>
+    <p>The formula predicts the error to within a few per cent, and four times the hashes halve it. But look at the scale: with mean <var>J</var> = 0.026, an error of 0.02 is most of the signal, and even 256 numbers leave the mutual count off by 0.3 on pairs that share about 2. On this data the lists are short (median 15), so the signatures are the bigger object: at <var>k</var> = 128 they take 10,240,000 bytes against 800,000 for every list. MinHash earns its place when lists are long and far apart (512 bytes against the hub's 5,920) and when the question is "which pairs overlap a lot?", which is where LSH comes in.</p>
+    <details class="deep"><summary>The math, step by step: why the first friends agree with probability J, and how noisy the estimate is</summary><div>
+      <p><b>Step 1: list it out once.</b> Take <var>A</var> = {1, 2, 3} and <var>B</var> = {2, 3, 4}. They share 2 and 3, and together contain 1, 2, 3, 4, so \(J = 2/4\). Order 1, 2, 3, 4 at random. If 2 or 3 comes first among them, it is the first member of both sets: agree. If 1 comes first, <var>A</var>'s first is 1 and <var>B</var>'s is not: differ. If 4 comes first, the same the other way. Each of the four is first with chance 1/4, so they agree with chance 2/4 = <var>J</var>.</p>
+      <p><b>Step 2: the general argument.</b> Write the min-hash of a set as \(h_\pi(A) = \min_{x \in A} \pi(x)\), the position of its earliest member under the order π. Let \(x^{*}\) be the earliest element of \(A \cup B\). By symmetry each element of \(A \cup B\) is equally likely to be \(x^{*}\), with chance \(1/|A \cup B|\).</p>
+      <ul>
+        <li>If \(x^{*}\) is in both sets, it comes before every other member of each, so both min-hashes equal \(\pi(x^{*})\): they agree.</li>
+        <li>If \(x^{*}\) is only in <var>A</var>, then \(h_\pi(A) = \pi(x^{*})\) is smaller than the position of every member of <var>B</var>: they differ. "Only in <var>B</var>" is the same.</li>
+      </ul>
+      <p>So they agree exactly when \(x^{*} \in A \cap B\), which has probability \(|A \cap B|/|A \cup B| = J\).</p>
+      <p><b>Step 3: the estimate and its noise.</b> With <var>k</var> independent orders, let \(Z_i = 1\) if the <var>i</var>-th min-hashes agree. Each \(Z_i\) is 1 with probability <var>J</var>, independently, so its variance is \(J(1-J)\). The estimate is their average:</p>
+      <div class="eq">\[ \hat J = \frac1k \sum_{i=1}^k Z_i, \qquad \mathbb E[\hat J] = J, \qquad \operatorname{Var}(\hat J) = \frac{1}{k^2}\cdot k \cdot J(1-J) = \frac{J(1-J)}{k} . \]</div>
+      <p>The typical error is the square root, \(\sqrt{J(1-J)/k}\). At \(J = 0.1\) and \(k = 100\) that is \(\sqrt{0.09/100} = 0.03\). Halving it costs four times the hashes, as the table shows.</p>
+      <p><b>Step 4: back to a count.</b> \(J = m/(|A| + |B| - m)\) where <var>m</var> is the mutual count. Solve for <var>m</var>: \(J(|A| + |B|) - Jm = m\), so \(m = J(|A| + |B|)/(1 + J)\). An error in \(\hat J\) is multiplied by about \((|A| + |B|)/(1+J)^2\), which is why long lists turn a small error in <var>J</var> into a large one in the count.</p>
+      <p><b>What was proved.</b> One random order makes two min-hashes agree with probability exactly <var>J</var>; averaging <var>k</var> orders gives an unbiased estimate with variance \(J(1-J)/k\).</p>
+    </div></details>
+
+    <h4>11 · LSH: find high-overlap pairs without comparing all pairs</h4>
+    <p><b>The situation.</b> Signatures make one comparison cheap, but 10,000 users still make about 50 million pairs, and a billion users about \(5 \times 10^{17}\). We want only the high-overlap pairs, found by putting people into buckets instead of comparing them.</p>
+    <p><b>The idea.</b> Cut each signature of <var>k</var> numbers into <var>b</var> <em>bands</em> of <var>r</var> numbers. For each band, put every user into a bucket labelled by that band's <var>r</var> numbers. Two users become a <b>candidate pair</b> if they share a bucket in at least one band. Matching a whole band is unlikely unless two people overlap a lot (a narrow door), and <var>b</var> bands give them many chances (many doors). This is <b>locality-sensitive hashing</b> (LSH). A pair agrees on one band with probability \(J^r\), so it becomes a candidate with probability \(1 - (1 - J^r)^b\), an S-shaped curve whose step sits near \((1/b)^{1/r}\).</p>
+    <div class="chart"><div class="t">Chance of becoming a candidate pair, r = 2, b = 50 (step near (1/50)<sup>1/2</sup> = 0.141)</div>
+      <div class="br"><span>J = 0.02</span><span class="tr"><i style="width:2.0%"></i></span><span class="v">0.020</span></div>
+      <div class="br"><span>J = 0.05</span><span class="tr"><i style="width:11.8%"></i></span><span class="v">0.118</span></div>
+      <div class="br"><span>J = 0.10</span><span class="tr"><i style="width:39.5%"></i></span><span class="v">0.395</span></div>
+      <div class="br"><span>J = 0.15</span><span class="tr"><i style="width:67.9%"></i></span><span class="v">0.679</span></div>
+      <div class="br"><span>J = 0.20</span><span class="tr"><i style="width:87.0%"></i></span><span class="v">0.870</span></div>
+      <div class="br"><span>J = 0.30</span><span class="tr"><i style="width:99.1%"></i></span><span class="v">0.991</span></div>
+      <div class="cap">Computed from \(1 - (1 - J^2)^{50}\) (math below).</div>
+    </div>
+    <div class="code"><div class="ch"><span>code/day_1/minhash.py · banding and the S-curve</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def lsh_candidates(sigs, r, b):
+    """Cut each signature into b bands of r values. Two users are a candidate pair if they agree
+    on a whole band. Returns (candidate pairs, pairs emitted by the buckets before de-duplication)."""
+    pairs, emitted = set(), 0
+    for band in range(b):
+        buckets = defaultdict(list)
+        for u, sig in sigs.items():
+            buckets[tuple(sig[band * r:(band + 1) * r])].append(u)
+        for members in buckets.values():
+            emitted += len(members) * (len(members) - 1) // 2
+            for i, x in enumerate(members):
+                for y in members[i + 1:]:
+                    pairs.add((min(x, y), max(x, y)))
+    return pairs, emitted
+
+def s_curve(j, r, b):
+    """P(a pair with Jaccard j becomes a candidate) = 1 - (1 - j^r)^b."""
+    return 1 - (1 - j ** r) ** b</code></pre></div>
+    <p><b>Measured on the week's data.</b> Target: the 9,267 non-friend pairs with \(J \ge 0.1\). "Emitted" counts the pairs the buckets produce before de-duplication, against 7,284,162 records for the exact job of section 9. Three independent sets of hashes per setting (NumPy version in <code>measure_minhash.py</code>).</p>
+    <div class="tablewrap"><table>
+      <tr><th class="num">r</th><th class="num">b</th><th class="num">step</th><th class="num">recall, predicted</th><th class="num">recall, measured [min, max]</th><th class="num">pairs emitted</th><th class="num">of exact job</th><th class="num">candidates with J ≥ 0.1</th></tr>
+      <tr><td class="num">1</td><td class="num">10</td><td class="num">0.100</td><td class="num">0.700</td><td class="num">0.706 [0.671, 0.731]</td><td class="num">1,628,363</td><td class="num">22.4%</td><td class="num">0.5%</td></tr>
+      <tr class="hi"><td class="num">2</td><td class="num">100</td><td class="num">0.100</td><td class="num">0.720</td><td class="num">0.722 [0.678, 0.761]</td><td class="num">635,678</td><td class="num">8.7%</td><td class="num">1.3%</td></tr>
+      <tr><td class="num">2</td><td class="num">50</td><td class="num">0.141</td><td class="num">0.481</td><td class="num">0.480 [0.454, 0.526]</td><td class="num">228,392</td><td class="num">3.1%</td><td class="num">2.1%</td></tr>
+      <tr><td class="num">3</td><td class="num">50</td><td class="num">0.271</td><td class="num">0.078</td><td class="num">0.089 [0.070, 0.118]</td><td class="num">9,356</td><td class="num">0.1%</td><td class="num">8.9%</td></tr>
+    </table></div>
+    <ul>
+      <li><b>The S-curve predicts the recall</b> to within a few points. Runs scatter because the wanted pairs are not independent: many are two short lists that share one hub, and whether that hub gets a small hash decides all their bands at once.</li>
+      <li><b>At the same step, more rows cost less.</b> (1, 10) and (2, 100) both put the step at 0.1 and find about 71% of the wanted pairs, but (2, 100) emits 2.6 times fewer pairs: its steeper curve lets through fewer of the millions of barely overlapping ones.</li>
+      <li><b>Candidates are not answers.</b> Even the best setting has only 1.3% of candidates at \(J \ge 0.1\). Checking each candidate exactly, with the intersections of section 1, is part of the method.</li>
+    </ul>
+    <div class="part"><b>Interview takeaway</b><ul>
+      <li>"MinHash makes overlap cheap to compare: <var>k</var> numbers per user, error \(\sqrt{J(1-J)/k}\). LSH banding finds high-overlap pairs by bucketing: choose <var>r</var> and <var>b</var> to place the step at the similarity you care about, then check candidates exactly."</li>
+      <li>Follow-ups: "how big should <var>k</var> be?" (from the error you can tolerate at the <var>J</var> you care about); "a huge bucket" (one hub with a small hash puts all its friends together: cap bucket size); "lists change" (a new friend updates a signature in <var>k</var> steps by keeping the smaller hash; a removed friend forces a recompute).</li>
+    </ul></div>
+    <p class="idea"><b>In one line.</b> A random order's first friend agrees with probability <var>J</var>, so <var>k</var> orders give a fixed-size signature; banding turns "find similar pairs" into "find people in the same bucket".</p>
+    <details class="deep"><summary>The math, step by step: the S-curve and where its step is</summary><div>
+      <p><b>Step 1: one position.</b> By the MinHash result, one signature position agrees with probability <var>J</var>, and positions use independent hashes.</p>
+      <p><b>Step 2: one band.</b> A band agrees only if all <var>r</var> of its positions agree: \(J^r\). With \(r = 2\) and \(J = 0.1\), that is 0.01.</p>
+      <p><b>Step 3: all bands.</b> The pair is missed only if every one of the <var>b</var> bands fails, each with probability \(1 - J^r\), independently:</p>
+      <div class="eq">\[ P(\text{candidate}) = 1 - (1 - J^r)^b . \]</div>
+      <p>With \(r = 2\), \(b = 50\), \(J = 0.1\): \(1 - 0.99^{50} = 1 - 0.605 = 0.395\), the value in the chart.</p>
+      <p><b>Step 4: where the step is.</b> Try \(J^r = 1/b\): the probability is \(1 - (1 - 1/b)^b \approx 1 - 1/e \approx 0.63\). To find the steepest point, differentiate \(f(J) = 1 - (1 - J^r)^b\):</p>
+      <div class="eq">\[ f'(J) = b\,r\,J^{r-1}(1 - J^r)^{b-1} . \]</div>
+      <p>Set the derivative of \(\ln f'\) to zero:</p>
+      <div class="eq">\[ \frac{r-1}{J} - \frac{(b-1)\,r\,J^{r-1}}{1 - J^r} = 0 \;\Rightarrow\; J^r = \frac{r-1}{rb-1} . \]</div>
+      <p>For large <var>b</var>, \((r-1)/(rb-1) \approx (1 - 1/r)/b\), the same size as \(1/b\): the step is near \((1/b)^{1/r}\).</p>
+      <p><b>Step 5: the two errors.</b> A pair well below the step becomes a candidate with probability about \(b\,J^r\) (since \(1 - (1-x)^b \approx bx\) for small <var>x</var>). A pair above it is missed with probability \((1 - J^r)^b\). With \(r = 2\), \(b = 50\): a pair at \(J = 0.02\) slips through with chance about \(50 \times 0.0004 = 0.02\); a pair at \(J = 0.3\) is missed with chance \(0.91^{50} \approx 0.009\).</p>
+      <p><b>What was proved.</b> Banding catches a pair of similarity <var>J</var> with probability \(1 - (1 - J^r)^b\); more rows sharpen the step, more bands move it left.</p>
+    </div></details>
+  </div>
+</section>
+
+<section class="s" id="day1-practice" data-sec="day1-practice">
+  <div class="shead"><span class="sno">DAY 1 · COMMON FRIENDS</span><span class="dims"><span class="dim dsa">DSA</span></span></div>
+  <h2>Practice</h2>
+  <div class="blk dsa">
+    <div class="bh"><span class="kind">DSA · LeetCode, grouped by technique</span></div>
+    <h4>★ Do live: 349. Intersection of Two Arrays</h4>
+    <p>Solve <a class="lc" href="https://leetcode.com/problems/intersection-of-two-arrays/">349. Intersection of Two Arrays</a> out loud, as in an interview: state the hash-set solution and its cost, code it, test the edge cases (repeats, no overlap, one empty side), then answer the follow-ups from section 6: sorted input, one array huge, tight memory.</p>
+    <details class="sol"><summary>A solution, with the sorted follow-up</summary><div>
+      <div class="code"><div class="ch"><span>code/day_1/lc349.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def intersection(nums1, nums2):
+    """Hash set: build a set from one array, probe it with the distinct values of the other.
+    O(n + m) time, O(min(n, m)) extra space if we build the set from the shorter one."""
+    if len(nums1) &gt; len(nums2):
+        nums1, nums2 = nums2, nums1
+    small = set(nums1)
+    return [x for x in set(nums2) if x in small]
+
+def intersection_sorted(nums1, nums2):
+    """Follow-up "what if both are sorted?": two pointers, O(1) extra space besides the answer."""
+    i = j = 0
+    out = []
+    while i &lt; len(nums1) and j &lt; len(nums2):
+        if nums1[i] &lt; nums2[j]:
+            i += 1
+        elif nums1[i] &gt; nums2[j]:
+            j += 1
+        else:
+            if not out or out[-1] != nums1[i]:   # skip repeats: each value once
+                out.append(nums1[i])
+            i += 1; j += 1
+    return out</code></pre></div>
+      <p>The output must hold each value once, so the hash version probes with the distinct values of the longer array, and the merge skips a value equal to the last one written.</p>
+    </div></details>
+    <div class="part"><b>Hash set or count map</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/intersection-of-two-arrays-ii/">350. Intersection of Two Arrays II</a>: repeats count, so a count map replaces the set (or the merge emits once per matched pair).</li>
+      <li><a class="lc" href="https://leetcode.com/problems/find-the-difference-of-two-arrays/">2215. Find the Difference of Two Arrays</a>: the other side of intersection, with two sets.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/find-common-characters/">1002. Find Common Characters</a>: many lists over a fixed alphabet of 26: per-letter counts with a running minimum, a small-alphabet cousin of the bitset.</li>
+    </ul></div>
+    <div class="part"><b>Two pointers on sorted input</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/minimum-common-value/">2540. Minimum Common Value</a>: the merge, stopped at the first match.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/interval-list-intersections/">986. Interval List Intersections</a>: the merge over sorted intervals: advance whichever ends first.</li>
+      <li><a class="lc" href="https://leetcode.com/problems/intersection-of-two-linked-lists/">160. Intersection of Two Linked Lists</a>: two pointers on lists of different lengths, with \(O(1)\) memory.</li>
+    </ul></div>
+    <div class="part"><b>Counting across many lists</b><ul>
+      <li><a class="lc" href="https://leetcode.com/problems/intersection-of-multiple-arrays/">2248. Intersection of Multiple Arrays</a>: count how many lists each value appears in, the same move as the counting pass of section 7.</li>
+    </ul></div>
+    <div class="part"><b>On the week's data</b><ul>
+      <li>Rerun <code>measure_intersect.py</code> with pairs of two hubs only and find the size ratio at which galloping starts to beat the merge.</li>
+      <li>Add a bucket-size cap to <code>lsh_candidates</code> and measure what it does to recall and to pairs emitted.</li>
+    </ul></div>
+  </div>
+
+  <p><b>Next.</b> We can now count mutual friends for one pair, for one user and for everyone. Day 2 takes those counts and picks the ten to show, from a fixed list and from a stream of new friendships.</p>
+
+  <div class="check" data-check="day1">
+    <div class="ch"><b>Checkpoint · Day 1</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="d1a" data-dim="dsa"><span class="tx">Intersect two friend lists with a hash set, looping over the shorter one; state the time and the extra memory, and why a set costs about 22 times an array here.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1b" data-dim="dsa"><span class="tx">Write the two-pointer merge for sorted lists from memory, trace it on [3, 9, 14, 20] and the ten-id list (9 steps), and prove it correct with the two invariants.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1c" data-dim="dsa"><span class="tx">Explain when binary search and galloping beat the merge, using the measured small-vs-hub and hub-vs-hub counts, and the \(a\log_2(b/a)\) lower bound.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1d" data-dim="dsa"><span class="tx">Intersect with bitsets and popcount; compute the words per pair and the bytes per user for 10,000 and for a billion ids, and say when bitsets are worth it.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1e" data-dim="dsa"><span class="tx">Count mutual friends for one user with a dictionary, show the cost is the sum of the friends' list lengths, and why the total over users is the sum of squared lengths.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1f" data-dim="dsa"><span class="tx">Solve ★349 live, explaining as you code, then 350, 2540 and 986, and answer the sorted / huge / memory follow-ups out loud.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1g" data-dim="sys"><span class="tx">For a pair on two machines, compute the bytes for shipping each list and choose; sketch the all-pairs MapReduce job, its \(\sum d(d-1)/2\) shuffle, the hub straggler, and the three fixes with their measured cost.</span><span class="dim sys">Systems</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1h" data-dim="ml"><span class="tx">Prove that MinHash agrees with probability <var>J</var>, derive the error \(\sqrt{J(1-J)/k}\), and turn an estimate of <var>J</var> back into a mutual-friend count.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="d1i" data-dim="sys"><span class="tx">Choose LSH rows and bands for a target similarity from the S-curve, predict the recall, and explain why candidates still need an exact check.</span><span class="dim sys">Systems</span></label>
+  </div>
+</section>

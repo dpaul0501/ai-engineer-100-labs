@@ -1,0 +1,8 @@
+top 1% of users by degree are 0.108 of the endpoints of future friendships
+cap per person   slots to top 1%   people shown at least once   hits@10 (future friendships)
+          none             0.501                        0.768   0.0185
+           200             0.172                        0.854   0.0119
+            50             0.050                        0.888   0.0105
+            20             0.022                        0.924   0.0099
+cold start: 71 users with <= 2 friends; median two-hop candidates 28; of their 129 future friendships, two-hop finds 0.186, shared group 0.589, either 0.705
+asserts passed

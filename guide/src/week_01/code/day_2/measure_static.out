@@ -1,0 +1,21 @@
+users 10000, friendships 100000
+candidates per user n: min 5, median 888, mean 1191, p90 2478, p99 4607, max 8271
+users with fewer than 10 candidates: 2
+all (user, candidate) counts: 11908610; share equal to 1: 86.6%; share <= 3: 99.0%; largest count anywhere: 67
+largest count per user: median 5, p99 22, max 67
+users whose 10th and 11th candidates tie on count: 9271 of 9998 (92.7%)
+
+comparisons (bucket: steps) per candidate, 1000 sampled users with >= 10 candidates, mean n 1195:
+  sort           9.41
+  heap           1.17
+  quickselect    2.18
+  bucket         1.06
+largest user n = 8271: heap insertions mean 78.1 over 20 shuffles; k(1 + ln(n/k)) = 77.2
+
+time for all 10,000 users (one laptop core), best of 3:
+  sort               504.1 us/user   1.00x faster than sort
+  heap               168.9 us/user   2.99x faster than sort
+  quickselect        227.0 us/user   2.22x faster than sort
+  bucket              97.1 us/user   5.19x faster than sort
+  heapq.nsmallest    132.0 us/user   3.82x faster than sort
+all four methods returned identical top-10 lists for every user

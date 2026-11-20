@@ -1,0 +1,7 @@
+200,000 requests over 10,000 users; top 1% of users send 0.107 of requests, top 10% send 0.310
+cache size (share of users)   LRU hit, skewed   LRU hit, uniform   best fixed set, skewed   LRU hit, skewed + reloads
+     100 (  1%)                0.030            0.010            0.107                    0.516
+     500 (  5%)                0.113            0.049            0.223                    0.557
+    1000 ( 10%)                0.189            0.099            0.310                    0.596
+    2000 ( 20%)                0.320            0.198            0.442                    0.661
+asserts passed

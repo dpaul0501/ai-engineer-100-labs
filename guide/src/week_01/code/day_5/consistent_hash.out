@@ -1,0 +1,22 @@
+mod N: share of users moved
+  16 -> 17: 0.9442   (predicted 0.9412)
+  64 -> 65: 0.9845   (predicted 0.9846)
+  16 -> 32: 0.5014   (predicted 0.5000)
+  mod 16 balance: fullest / mean = 1.08
+ring v=100, 16 -> 17: moved 0.0602, all to the new server (ideal 1/17 = 0.0588)
+balance vs virtual nodes, 16 servers, averaged over 20 ring layouts
+  v      points  arc std/mean  predicted  fullest server / mean (users)
+  1          16         0.872      0.939      3.31
+  10        160         0.317      0.305      1.64
+  100      1600         0.104      0.097      1.23
+  1000    16000         0.031      0.031      1.10
+moving users when a 17th server joins, 100 random layouts
+  v=1    mean 0.0609  worst 0.2825
+  v=100  mean 0.0584  worst 0.0750
+hot keys: top 1% of lists get 0.111 of reads, 0.691 of ids read; hottest list read 1480 times, median 15
+  graph store, ids read per shard, top 1% on  1 replicas: fullest / mean = 3.08
+  graph store, ids read per shard, top 1% on  2 replicas: fullest / mean = 2.40
+  graph store, ids read per shard, top 1% on  4 replicas: fullest / mean = 1.68
+  graph store, ids read per shard, top 1% on 16 replicas: fullest / mean = 1.06
+  suggestion store, requests per shard: fullest / mean = 1.22
+asserts passed

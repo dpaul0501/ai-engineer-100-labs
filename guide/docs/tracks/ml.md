@@ -4,47 +4,61 @@ Statistics and core ML: each idea derived from first principles, checked by meas
 
 ## Week 1: People You May Know
 
-- **[Day 1: Count it exactly](../week_01/day_1.html):** does a mutual friend predict a friendship?
-    - 1 · More mutual friends, more likely friends?
-    - 2 · Why it works: friendships close triangles
-    - 3 · Why sorting by mutual friends is the right first rule
-- **[Day 2: Popular people](../week_01/day_2.html):** most people have few friends, a few have very many
-    - The obvious estimate: 20 × 20
-    - Who has how many friends
-    - Where the popular people come from: the rich get richer
-    - Your friends have more friends than you
-    - So what does one request cost?
-- **[Day 2: Popular people](../week_01/day_2.html):** how slow is slow: percentiles and p99
-    - The situation: one number for "fast enough"
-    - Percentiles, in plain words
-    - How sure is a p99 from a sample?
-    - Practice: [295. Find Median from Data Stream](https://leetcode.com/problems/find-median-from-data-stream/)
-- **[Day 3: Read less](../week_01/day_3.html):** read some friends, and scale up
-    - Try the obvious thing: read the first lists that fit
-    - The idea: a random handful of friends, scaled up
-    - Use it
-    - When it is enough, and what to say in an interview
-- **[Day 3: Read less](../week_01/day_3.html):** the yardstick: recall@10 against the exact answer
-    - What "almost the same people" means
-    - Ties need a rule
-    - How much do we lose at each budget?
-    - Skipping popular friends: a trade
-- **[Day 4: Learn who connects](../week_01/day_4.html):** link prediction as a learning problem
-    - 1 · Learn from the past: freeze the graph, see who connects next
-    - 2 · Negatives, and why the choice biases you
-    - 3 · Features: what makes a friend of a friend likely
-    - 4 · Logistic regression: a weighted vote turned into a probability
-    - 5 · How to judge it: AUC
-    - 6 · Two ways to compute AUC: pooled, or within each user
-    - 7 · What the user sees: recall@10, with error bars over users
-    - 8 · Calibration: does a 2% prediction mean 2%?
-    - 9 · Feedback loops: the model changes the data it learns from
-- **[Day 5: A billion users](../week_01/day_5.html):** proving it helps: A/B tests
-    - The situation
-    - Try the obvious thing
-    - The idea: randomize by user
-    - How many users?
-    - Two ways the result can mislead
+- **[Day 1: Common friends](../week_01/day_1.html):** advanced · estimating overlap: MinHash and LSH
+    - 10 · MinHash: a short signature that remembers overlap
+    - 11 · LSH: find high-overlap pairs without comparing all pairs
+- **[Day 2: The top k](../week_01/day_2.html):** heavy hitters: too many items to count them all
+    - 10 · Who gained the most friends this hour?
+    - 11 · Count-Min: counts without storing ids
+    - 12 · Windows: "this hour" in three ways
+    - 13 · Static or stream: which one does the product need?
+- **[Day 3: It is a graph](../week_01/day_3.html):** pair scores from the shape of the graph
+    - 5 · Better pair scores: Jaccard, Adamic–Adar, resource allocation
+    - 6 · Random walks: a score that looks beyond two steps
+    - 7 · Are there islands? Union-find
+    - 8 · Partitioning the graph across machines
+    - 9 · Think like a vertex: BFS and PageRank in rounds
+    - Practice: [547. Number of Provinces](https://leetcode.com/problems/number-of-provinces/) · [684. Redundant Connection](https://leetcode.com/problems/redundant-connection/)
+- **[Day 3: It is a graph](../week_01/day_3.html):** the bridge to Day 4
+    - 10 · Several scores, and no way yet to weigh them
+    - Practice: [1971. Find if Path Exists in Graph](https://leetcode.com/problems/find-if-path-exists-in-graph/) · [841. Keys and Rooms](https://leetcode.com/problems/keys-and-rooms/) · [997. Find the Town Judge](https://leetcode.com/problems/find-the-town-judge/) · [1761. Minimum Degree of a Connected Trio in a Graph](https://leetcode.com/problems/minimum-degree-of-a-connected-trio-in-a-graph/) · [547. Number of Provinces](https://leetcode.com/problems/number-of-provinces/) · [684. Redundant Connection](https://leetcode.com/problems/redundant-connection/) · [785. Is Graph Bipartite?](https://leetcode.com/problems/is-graph-bipartite/) · [133. Clone Graph](https://leetcode.com/problems/clone-graph/)
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** what good means, and the function that says it
+    - 1 · What does "good" even look like?
+    - 2 · The whole problem, in one function
+    - 3 · Who are u and v, exactly?
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** from a rule to a model
+    - 4 · Start dumb: the mutual-friends rule
+    - 5 · Do we have history? Then it's supervised learning
+    - 6 · Error and loss: what does "wrong" mean?
+    - 7 · The predictor: models, in the order you'd try them
+    - 8 · Features: where the wins actually come from
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** offline evaluation
+    - 9 · Offline evaluation: why accuracy is a lie here
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** online evaluation
+    - 10 · Online evaluation: the A/B test is the real exam
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** how sure is a number, and did it work live
+    - 1 · Percentiles and the bootstrap: an interval for recall@10
+    - 2 · The A/B test as a hypothesis test
+    - 3 · Power, sample size and the minimum detectable effect
+    - 4 · Peeking: why you may not stop when it looks good
+    - 5 · Novelty effects
+    - 6 · Network interference, measured, and cluster randomisation
+    - Practice: [470. Implement Rand10() Using Rand7()](https://leetcode.com/problems/implement-rand10-using-rand7/)
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** the trap in your own data
+    - 11 · The trap: exposure bias
+    - 12 · The whole thing, on one page
+    - Practice: [528. Random Pick with Weight](https://leetcode.com/problems/random-pick-with-weight/) · [382. Linked List Random Node](https://leetcode.com/problems/linked-list-random-node/) · [398. Random Pick Index](https://leetcode.com/problems/random-pick-index/)
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** from features to representations
+    - 1 · Why the ranker never saw a user id
+    - 2 · Factorise who befriends whom
+    - 3 · Measured against mutual friends
+- **[Day 5: A billion users](../week_01/day_5.html):** 7 · training–serving skew
+- **[Worksheet and learning checks](../week_01/worksheet.html):** design, from Day 4
+    - 1 · "Design the ranker for People You May Know."
+    - 2 · "Our new model's ROC-AUC went from 0.805 to 0.832. Ship it?"
+    - 3 · "Design the online experiment for the new ranker."
+    - 4 · "Retraining on last month's logs made things worse. Why?"
+    - 5 · "A user signs up with no friends. What do they see?"
 
 ## Week 3: Tokenization
 

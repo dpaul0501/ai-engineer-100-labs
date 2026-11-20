@@ -4,17 +4,14 @@ Every week is built around one design problem of the kind top companies ask. The
 
 ## Week 1: People You May Know
 
-**The problem:** [People You May Knowfrom two hops to a billion users](../week_01/index.html)
+**The problem:** [People You May Knowfrom two friend lists to a billion users](../week_01/index.html)
 
-- **[Week reading](../week_01/index.html):** checkpoint
-    - Explain why the raw count shows the same popular people to almost everyone (one user in 66% of all top-10 lists), and why learning from who actually connected can do better.
-- **[Day 4: Learn who connects](../week_01/day_4.html):** checkpoint
-    - Set up link prediction as a learning problem with two time cuts, say what counts as a positive and a miss, and explain why a random edge split inflated recall 2.7×.
-    - Explain how a live recommender's feedback loop creates exposure bias, using the measured hub exposure, and how exploration with inverse propensity weighting corrects it.
-- **[Day 5: A billion users](../week_01/day_5.html):** checkpoint
-    - Explain training–serving skew and point-in-time features, why the impression log is needed to learn from behaviour without a feedback loop, and how learned user embeddings would replace hand-made features.
+- **[Day 4: Learn what engagement means](../week_01/day_4.html):** checkpoint
+    - Explain exposure bias with the simulation (−28% on the log, +31% in truth), derive why 1/π weighting is unbiased and why it is noisy, list the four defences, and solve 528, 382 and 398.
+    - Explain why rankers drop raw ids, factorise the friendship matrix into user vectors, and say what they bought (+0.0238 for users with few friends, reach beyond two hops) and cost on the week's graph.
 - **[Worksheet and learning checks](../week_01/worksheet.html):** checkpoint
-    - 10. Why must the ranker be tested on a time split rather than a random one, and how can its own suggestions mislead the next model you train?
+    - 14. On the old ranker's impression log the new ranker looks 28% worse. On the truth it is 31% better. Explain, fix the evaluation, and name the defences.
+    - 15. Why did the ranker never see a user id, and what does a learned vector per user buy and cost on the week's graph?
 
 ## Week 3: Tokenization
 

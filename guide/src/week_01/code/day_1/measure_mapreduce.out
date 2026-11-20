@@ -1,0 +1,18 @@
+emitted records 7,284,162 (sum of d(d-1)/2; sum of d^2 = 14,768,324)
+distinct pairs after reduce 6,034,751: already friends 80,446, not yet friends 5,954,305
+  of the non-friend pairs, 2+ mutual friends: 798,191
+rows actually shown (top 10 per user): 99,994; emitted per row shown: 73
+largest list 1480 friends emits 1,094,460 = 15.0% of all
+7 users with 500+ friends (0.07% of users) emit 49.1%
+median user emits 105; largest map task / median = 10,423
+100 reducers by hash of pair: busiest / average load = 1.018
+100 reducers by first user of the pair: busiest / average = 1.49
+fix, emitted, share of exact emit, top-10 mutual friends kept
+  skip lists over 1000: 4,312,992  59.2%  97.6%
+  skip lists over 500: 3,705,090  50.9%  96.5%
+  skip lists over 200: 2,893,099  39.7%  93.5%
+  sample 500 friends of larger lists: 4,578,340  62.9%  97.5%
+  sample 200 friends of larger lists: 3,430,399  47.1%  95.5%
+  sample 100 friends of larger lists: 2,685,077  36.9%  91.9%
+  emit only for 10% of users: 1,476,474  20.3%  100.0% (exact for them)
+  emit only for 1% of users: 141,785  1.9%  100.0% (exact for them)

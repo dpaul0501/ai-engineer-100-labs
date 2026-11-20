@@ -9,9 +9,9 @@ details.deep>div{padding-top:.2rem}
 p.idea{margin:1.1rem 0;padding:.7rem 1rem;border-left:4px solid var(--trace);background:var(--trace-soft);border-radius:0 8px 8px 0}
 p.idea b{color:var(--trace)}
 </style>
-<title>People You May Know</title>
+<title>People You May Know · The problem</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="A week-long chapter on byte pair encoding: the problem, the optimization, the information theory, the data structures, the algorithm, software and ML design, and the project.">
+<meta name="description" content="Week 1 reading: what People You May Know has to do, what a good suggestion is, and the plan for the week.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -199,6 +199,10 @@ footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:v
 .dayhead{display:flex;gap:.6rem 1rem;align-items:baseline;flex-wrap:wrap}
 .blk{border:1px solid var(--line);border-top:3px solid var(--c,var(--accent));border-radius:12px;background:var(--panel);padding:1rem 1.1rem .6rem;margin:1.4rem 0}
 .blk.ml{--c:var(--ml)}.blk.alg{--c:var(--dsa)}.blk.des{--c:var(--sys)}
+.blk.dsa{--c:var(--dsa)}
+.blk.sys{--c:var(--sys)}
+.blk.ai{--c:var(--ai)}
+.blk.del{--c:var(--del)}
 .blk>.bh{display:flex;justify-content:space-between;gap:.4rem 1rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.2rem}
 .blk>.bh .kind{font:700 .7rem var(--f-display);text-transform:uppercase;letter-spacing:.14em;color:var(--c)}
 .blk>h3{margin:.1rem 0 .5rem}
@@ -271,490 +275,169 @@ mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%}
 .daycard span{font:.84rem/1.45 var(--f-display);color:var(--muted)}
 .daycard.hi{border-color:var(--accent);background:var(--accent-soft)}
 .weekmap a{font-weight:700}
+figure.fig{margin:1.4rem 0;display:grid;gap:.5rem}
+figure.fig img{display:block;width:100%;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+figure.fig figcaption{font-size:.88rem;color:var(--muted)}
 </style>
 <div class="layout">
 <nav class="rail" aria-label="Week 1">
-  <div class="brand">People You May Know <span>from two hops to a billion users</span></div>
+  <div class="brand">People You May Know <span>from two friend lists to a billion users</span></div>
   <div class="rail-label">Coverage, whole week</div>
   <div class="prog" data-prog></div>
   <div class="rail-label">Week 1 · People You May Know</div>
-  <a href="index.html" class="on" data-page="index.html"><span class="n">R</span>Week reading</a>
-  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Count it exactly</a>
-  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>Popular people</a>
-  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>Read less</a>
-  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Learn who connects</a>
+  <a href="index.html" class="on" data-page="index.html"><span class="n">R</span>The problem</a>
+  <a href="day_1.html" data-page="day_1.html"><span class="n">D1</span>Common friends</a>
+  <a href="day_2.html" data-page="day_2.html"><span class="n">D2</span>The top k</a>
+  <a href="day_3.html" data-page="day_3.html"><span class="n">D3</span>It is a graph</a>
+  <a href="day_4.html" data-page="day_4.html"><span class="n">D4</span>Learn what engagement means</a>
   <a href="day_5.html" data-page="day_5.html"><span class="n">D5</span>A billion users</a>
   <a href="worksheet.html" data-page="worksheet.html"><span class="n">WS</span>Worksheet and checks</a>
   <a href="talk.html"><span class="n">▶</span>The talk (slides)</a>
   <a href="../"><span class="n">↩</span>Guide home</a>
 </nav>
 
-<main><div class="page">
-<section id="start" style="padding-top:0">
+<main><div class="page"><section id="start" style="padding-top:0">
   <div class="eyebrow">Week 1 · People You May Know</div>
-  <h1>People You May Know<br><span class="muted" style="font-size:.55em;font-weight:600;letter-spacing:0">from two hops to a billion users</span></h1>
-  <p class="lead">Someone joins a social app and adds two friends. A moment later the app shows them ten people they may know. Who should be on that list? This week answers that question from scratch: first with a pencil on six people, then with twenty lines of Python on 10,000, and finally as a system that could serve a billion. "Design People You May Know" is also a classic interview problem, asked at companies such as Meta and LinkedIn; the design built here is hypothetical, and every step of it is measured.</p>
+  <h1>People You May Know<br><span class="muted" style="font-size:.55em;font-weight:600;letter-spacing:0">from two friend lists to a billion users</span></h1>
+  <p class="lead">Someone joins a social app and adds two friends. A moment later the app shows them a short list of people they may know. Who should be on that list, and how do you produce it for everyone, fast? This week answers that one question, and watches it grow from a coding exercise into a machine-learning problem and a distributed system.</p>
 
-  <div class="metrics">
-    <div class="metric"><div class="v">53%</div><div class="l">of new friendships on the week's graph joined two people who already had a mutual friend</div></div>
-    <div class="metric"><div class="v">0.02% → 12%</div><div class="l">chance that two people become friends, with no mutual friend vs 10 or more</div></div>
-    <div class="metric"><div class="v">3.7×</div><div class="l">as many friends, on average, for your friends as for the average user: so one request reads more than it looks</div></div>
-    <div class="metric"><div class="v">66%</div><div class="l">of all users' top-10 lists include the same person, the most-connected user: a raw count favours the popular</div></div>
-  </div>
+  <figure class="fig"><img src="img/pymk-hero.jpg" alt="On the left, one user. In the middle, a dense web of people joined by lines of friendship. On the right, three suggestion cards, each with a person and a score ring filled to a different level."><figcaption>One user in, a web of friendships behind them, a few ranked suggestions out.</figcaption></figure>
 
   <div class="progcard">
     <div class="top"><b>Your coverage</b><span class="small muted"><span data-total></span> · saved in this browser only · <button class="linkbtn" type="button" data-reset>Reset</button></span></div>
     <div class="prog" data-prog></div>
   </div>
+</section>
 
-  <h3>How the week works</h3>
-  <div class="flow"><span class="b hi">Week reading</span><span class="ar">→</span><span class="b">Days 1–5</span><span class="ar">→</span><span class="b hi">Weekend build</span></div>
-  <ul>
-    <li><b>Start here.</b> This reading builds a first working answer and ends with the four things that break when it meets real users. Each day takes one of them and fixes it.</li>
-    <li><b>One question, one dataset.</b> Every page works on the same synthetic social network: 10,000 users and 100,000 friendships, each stamped with the order in which it formed. Every number you see comes from code you can run on it; estimates label their assumptions.</li>
-    <li><b>Each idea comes in the same order:</b> the idea in plain words, the code, the number it gives on the week's graph, and then, if you want it, the math step by step in a closed box marked <i>The math, step by step</i>. You can follow the story without opening those boxes, and you will understand them better if you do.</li>
-    <li><b>Practice is real interview practice:</b> LeetCode problems by number, variations an interviewer might ask, and worked solutions that stay closed until you open them.</li>
-    <li><b>Checkpoints fill your coverage.</b> Each page ends with a checklist. Tick what you can do, and the bars fill across five dimensions: DSA, ML, AI, System Design and Software Delivery.</li>
-    <li><b>Self-paced.</b> A "day" is a unit of work, not a date.</li>
-  </ul>
+<section class="s" id="problem" data-sec="problem">
+  <div class="shead"><span class="sno">THE PROBLEM</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim sys">System Design</span></span></div>
+  <h2>The box, and what it has to do</h2>
 
-  <h3>The week at a glance</h3>
-  <div class="tablewrap"><table class="weekmap">
-    <tr><th></th><th>Title</th><th>The question</th><th>What you learn</th></tr>
-    <tr><td>R</td><td><b>Week reading</b></td><td>Who should a new user be shown?</td><td>People as dots and lines; friends of friends counted by hand and in code; a check against the future; the map of the week</td></tr>
-    <tr><td>D1</td><td><a href="day_1.html">Count it exactly</a></td><td>Is the count right, and how should the friendships be stored?</td><td>Adjacency lists, matrices and CSR; counting with a hash map; set intersection; top-k; traversal; triadic closure and the clustering coefficient; the function's contract and its tests</td></tr>
-    <tr><td>D2</td><td><a href="day_2.html">Popular people</a></td><td>Why are some requests dozens of times slower than the average?</td><td>Heavy-tailed friend counts; the friendship paradox; total work as a sum of squared friend counts; triangle counting; capping hubs; percentiles, p99 and a bootstrap interval</td></tr>
-    <tr><td>D3</td><td><a href="day_3.html">Read less</a></td><td>Can we read a small part of the graph and still find almost the same people?</td><td>Sampling friends with an unbiased estimate; recall@K; Jaccard, MinHash and LSH; Bloom filters; personalized PageRank; several candidate sources under one budget</td></tr>
-    <tr><td>D4</td><td><a href="day_4.html">Learn who connects</a></td><td>Which candidates will actually become friends?</td><td>Link prediction on a time split; Adamic–Adar; logistic regression; AUC and recall@10 with error bars; calibration; feedback loops; merging ranked lists with a heap</td></tr>
-    <tr><td>D5</td><td><a href="day_5.html">A billion users</a></td><td>What does it take to serve everyone, fast, with rules people can trust?</td><td>Estimation at a billion users; tail latency under fan-out; Little's law; hot keys; sharding and consistent hashing; caching; precompute vs online; the product rules and privacy; the serving architecture; A/B tests</td></tr>
-    <tr><td>WE</td><td><a href="worksheet.html"><b>Weekend build</b></a></td><td>Can you ship it?</td><td>A tested <code>pymk</code> package built in the same order as the week, measured on the week's graph, then learning checks</td></tr>
+  <h3>The box</h3>
+  <p>Almost every social or professional app has the same quiet box near the top of the screen: <b>People you may know</b>. A photo, a name, a line such as "2 mutual friends", and a button that says <i>Add friend</i>.</p>
+  <p>It matters most to the people who have the fewest friends. A new user who has added two people sees an empty feed: nothing to read, nobody to message, no reason to come back tomorrow. Every friendship they make fills the feed, brings messages and invitations, and makes the next friendship easier. So the box is not decoration. For a new user it decides whether the app becomes useful at all, and for everyone else it keeps the network growing. Connections drive almost everything else the app does.</p>
+  <p class="idea"><b>In one line.</b> When a user opens the app, show them the handful of people they are most likely to want to connect with.</p>
+
+  <h3>Inputs, outputs, constraints</h3>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>In plain words</th></tr>
+    <tr><td><b>In</b></td><td>Every user's friend list. A friendship goes both ways, so if Ben is on your list, you are on Ben's.</td></tr>
+    <tr><td><b>Out</b></td><td>For the user who just opened the app: ten people, best first. Never the user themselves, and never someone who is already their friend.</td></tr>
+    <tr><td><b>Fast</b></td><td>The box is on the screen the user is looking at, so the answer has to arrive while the page loads.</td></tr>
   </table></div>
+  <p>To make "fast" and "many users" concrete, fix some numbers. They are <b>hypothetical inputs</b>, chosen to be the right size for a large social app, not anyone's real figures:</p>
+  <ul>
+    <li>suppose <b>1,000,000,000 users</b>;</li>
+    <li>suppose each has about <b>300 friends</b>;</li>
+    <li>suppose the ten suggestions must be ready in <b>under 100 milliseconds</b>, well under a second.</li>
+  </ul>
+  <p>Two pieces of arithmetic follow straight away. The friend lists hold 1,000,000,000 × 300 = 300 billion entries, or 2.4 terabytes at 8 bytes per user id: too much for one ordinary machine's memory. And the obvious way to answer, compare your list with every other user's, means a billion comparisons per page load. Even at a supposed one comparison per nanosecond, that is a full second, ten times the budget, for a single user. Most of those comparisons find nothing in common, because most people on Earth share no friend with you.</p>
+  <details class="deep"><summary>The arithmetic, step by step: the size of the lists and the cost of one answer</summary><div>
+    <p><b>Friendships.</b> 1,000,000,000 users × 300 friends = 300,000,000,000 list entries. Each friendship is written twice (once in each person's list), so there are 300,000,000,000 ÷ 2 = 150,000,000,000 friendships.</p>
+    <p><b>Bytes.</b> A billion ids do not fit in 4 bytes with room to grow, so store each id in 8 bytes: 300,000,000,000 × 8 = 2,400,000,000,000 bytes = 2.4 TB, before any index or copy.</p>
+    <p><b>Comparing with everyone.</b> One user against everyone else is 1,000,000,000 − 1 = 999,999,999 comparisons. At one comparison per nanosecond (10<sup>−9</sup> s), that is about 10<sup>9</sup> × 10<sup>−9</sup> s = 1 s.</p>
+    <p><b>Looking only near you.</b> The people worth scoring are on your friends' lists. You have 300 friends, each with about 300 friends, so reading all their lists is 300 × 300 = 90,000 entries. That is 999,999,999 ÷ 90,000 ≈ 11,111 times less than comparing with everyone. Day 1 and Day 3 build on exactly this.</p>
+  </div></details>
 
-  <h3>What you will be able to do</h3>
-  <div class="obj">
-    <div><span class="dim dsa">DSA</span><ul><li>Turn a "who should I suggest?" question into a graph problem and solve it exactly</li><li>Pick a graph representation and a set-intersection or top-k method for the sizes in front of you, and defend the choice in an interview</li><li>Approximate with sampling, MinHash, LSH and Bloom filters, and say what each one gives up</li></ul></div>
-    <div><span class="dim ml">ML</span><ul><li>Check a recommender against the future with a time split, without leaking the answer</li><li>Train and evaluate a link-prediction model with AUC and recall@K, with error bars</li><li>Explain why popular people make the work explode, with the measured numbers</li></ul></div>
-    <div><span class="dim ai">AI</span><ul><li>Explain how a recommender's own suggestions change the data it later learns from</li><li>Say why learned user embeddings (Week 2) can replace hand-made features</li></ul></div>
-    <div><span class="dim sys">System Design</span><ul><li>Answer "Design People You May Know" end to end at a whiteboard: candidates, scoring, filtering, serving</li><li>Estimate storage, traffic and reads per request at a billion users from labelled assumptions</li><li>Reason about sharding, caching, fan-out and tail latency, and choose between precomputing and computing online</li></ul></div>
-    <div><span class="dim del">Software Delivery</span><ul><li>Write a function's contract (who may never be suggested, how ties break) before its code</li><li>Test it with known answers, properties and a brute-force reference</li><li>Ship a small package whose final filter keeps the hard rules on every response</li></ul></div>
-  </div>
-  <p class="small muted">Prerequisites: Python, sets and dictionaries, big-O notation, and what a conditional probability is. Everything else is introduced where the story needs it.</p>
-</section><section class="s" id="reading" data-sec="reading">
-  <div class="shead"><span class="sno">WEEK READING</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim ai">AI</span><span class="dim sys">System Design</span><span class="dim del">Delivery</span></span></div>
-  <h2>Friends of friends: a first answer, and what breaks</h2>
-  <p>This reading builds the first People You May Know (PYMK) that works. It starts from how people meet in real life, draws that as a picture, counts the picture by hand, turns the counting into code, and checks on data that the code suggests people who really do become friends. It ends with the four problems that appear as soon as the users are real, and which day fixes each one.</p>
+  <h3>What is a good suggestion?</h3>
+  <p>"Most likely to want to connect" is foggy until you tie it to something the app can count. When person <i>v</i> appears in your box, a chain of events can follow:</p>
+  <div class="dg"><div class="seq"><span class="nd">shown</span><span class="lk">→</span><span class="nd">clicked</span><span class="lk">→</span><span class="nd">request sent</span><span class="lk">→</span><span class="nd hot">accepted</span><span class="lk">→</span><span class="nd">interact later</span></div><div class="cap">Each arrow loses people. Which step counts as success changes what gets built: clicks reward curiosity, accepted requests need both people to agree, and later interaction is the truest signal but arrives weeks late.</div></div>
+  <p>Day 4 picks the target properly and learns it from data. For Days 1 to 3 we use a simple stand-in, the <b>naive score</b>:</p>
+  <p class="idea"><b>The naive score.</b> The number of <b>mutual friends</b>: how many people are on both your friend list and theirs.</p>
+  <p>It is a sensible first guess because of how people meet. Most of the people you know were introduced: a classmate's flatmate, a colleague's partner, someone at a friend's birthday. If two of your friends both know Esha, you have probably been at the same dinners already. The more friends you share with someone, the more likely you already know them, or soon will. It is also cheap to explain on the screen: "2 mutual friends".</p>
+</section>
 
-  <h3>R.1 · How do people meet?</h3>
-  <p>Think about how you met the people you know now. A few you found on your own. Most were introduced: a classmate's roommate, a colleague's partner, someone at a friend's birthday. People meet through people they already know.</p>
-  <p>Now picture six people. <b>You</b> have just joined the app and added two friends, <b>Ben</b> and <b>Chloe</b>, who also know each other. Ben knows two people you have never met, <b>Dev</b> and <b>Esha</b>. Chloe knows <b>Esha</b> too, and <b>Farid</b>.</p>
-  <p>Who would you suggest? Most people say Esha first: both of your friends know her, so you have probably been at the same dinners already. Then Dev and Farid, each known through one friend. Nobody would put a stranger from another city at the top. That instinct, "suggest the people my friends know, and the more of my friends know them, the better", is the whole first algorithm. The rest of this reading makes it precise.</p>
-  <p><b>The obvious alternative fails.</b> A tempting first answer is "show the ten most popular users". It is easy (sort once, show everyone the same list) and wrong in three ways you can see right away. Everyone gets the same ten people, so nothing depends on who <em>you</em> know. A new user in Lisbon is shown a celebrity in Seoul. And those ten people get flooded with requests from strangers. A suggestion has to depend on your place among the people you know.</p>
-  <p class="idea"><b>In one line.</b> People meet through friends, so the people to suggest are your friends' friends, ranked by how many of your friends know them.</p>
-
-  <h3>R.2 · Draw it: dots and lines</h3>
-  <p>To count "how many of my friends know them" on a computer, we first need a picture a computer can hold. Draw each person as a dot and each friendship as a line between two dots.</p>
+<section class="s" id="example" data-sec="example">
+  <div class="shead"><span class="sno">THE RUNNING EXAMPLE</span><span class="dims"><span class="dim dsa">DSA</span></span></div>
+  <h2>Six people, counted by hand</h2>
+  <p>Every page this week uses the same six people. <b>You</b> have just joined and added two friends, <b>Ben</b> and <b>Chloe</b>, who also know each other. Ben knows <b>Dev</b> and <b>Esha</b>. Chloe knows <b>Esha</b> and <b>Farid</b>. In code they are ids 0 to 5 in that order.</p>
   <div class="dg">
-    <svg viewBox="0 0 640 270" role="img" aria-labelledby="g6t g6d" style="width:100%;max-width:640px;display:block;margin:0 auto;font-family:inherit">
-      <title id="g6t">The six people as dots and lines</title>
-      <desc id="g6d">You are friends with Ben and Chloe, who are friends with each other. Ben is friends with Dev and Esha. Chloe is friends with Esha and Farid. Esha has two mutual friends with you (Ben and Chloe); Dev has one (Ben); Farid has one (Chloe).</desc>
-      <g stroke-linecap="round">
-        <line x1="80" y1="130" x2="240" y2="65" stroke="var(--ink)" stroke-width="3"/>
-        <line x1="80" y1="130" x2="240" y2="195" stroke="var(--ink)" stroke-width="3"/>
-        <line x1="240" y1="65" x2="240" y2="195" stroke="var(--muted)" stroke-width="2"/>
-        <line x1="240" y1="65" x2="410" y2="40" stroke="var(--accent)" stroke-width="2"/>
-        <line x1="240" y1="65" x2="410" y2="130" stroke="var(--accent)" stroke-width="2"/>
-        <line x1="240" y1="195" x2="410" y2="130" stroke="var(--accent)" stroke-width="2"/>
-        <line x1="240" y1="195" x2="410" y2="220" stroke="var(--accent)" stroke-width="2"/>
-      </g>
-      <g font-size="13" font-weight="700" text-anchor="middle" fill="var(--ink)">
-        <circle cx="80" cy="130" r="28" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="3"/>
-        <text x="80" y="135">You</text>
-        <circle cx="240" cy="65" r="27" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
-        <text x="240" y="70">Ben</text>
-        <circle cx="240" cy="195" r="27" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
-        <text x="240" y="200">Chloe</text>
-        <circle cx="410" cy="40" r="27" fill="var(--panel)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>
-        <text x="410" y="45">Dev</text>
-        <circle cx="410" cy="130" r="27" fill="var(--panel)" stroke="var(--accent)" stroke-width="3.5"/>
-        <text x="410" y="135">Esha</text>
-        <circle cx="410" cy="220" r="27" fill="var(--panel)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>
-        <text x="410" y="225">Farid</text>
-      </g>
-      <g font-size="13" fill="var(--muted)">
-        <text x="448" y="45">1 mutual friend (Ben)</text>
-        <text x="448" y="135" fill="var(--accent)" font-weight="700">2 mutual friends (Ben, Chloe)</text>
-        <text x="448" y="225">1 mutual friend (Chloe)</text>
-        <text x="80" y="185" text-anchor="middle">you</text>
-        <text x="240" y="262" text-anchor="middle">your friends</text>
-        <text x="410" y="262" text-anchor="middle">friends of friends</text>
-      </g>
+    <svg viewBox="0 0 470 180" width="100%" style="max-width:32rem" role="img" aria-label="You are friends with Ben and Chloe, who are friends with each other. Ben is friends with Dev and Esha; Chloe is friends with Esha and Farid.">
+      <g stroke-width="2" style="stroke:var(--line)"><line x1="45" y1="90" x2="155" y2="45"/><line x1="45" y1="90" x2="155" y2="135"/><line x1="155" y1="45" x2="155" y2="135"/><line x1="155" y1="45" x2="275" y2="20"/><line x1="155" y1="45" x2="275" y2="90"/><line x1="155" y1="135" x2="275" y2="90"/><line x1="155" y1="135" x2="275" y2="160"/></g>
+      <g stroke-width="2"><circle cx="45" cy="90" r="18" style="fill:var(--accent);stroke:var(--accent)"/><circle cx="155" cy="45" r="14" style="fill:var(--panel);stroke:var(--accent)"/><circle cx="155" cy="135" r="14" style="fill:var(--panel);stroke:var(--accent)"/><circle cx="275" cy="20" r="13" style="fill:var(--panel);stroke:var(--muted)"/><circle cx="275" cy="90" r="13" style="fill:var(--accent-soft);stroke:var(--accent)"/><circle cx="275" cy="160" r="13" style="fill:var(--panel);stroke:var(--muted)"/></g>
+      <g font-size="12" text-anchor="middle" dominant-baseline="central" style="font-family:var(--f-mono)"><text x="45" y="90" style="fill:var(--panel)">You</text><text x="155" y="45" style="fill:var(--ink)">B</text><text x="155" y="135" style="fill:var(--ink)">C</text><text x="275" y="20" style="fill:var(--ink)">D</text><text x="275" y="90" style="fill:var(--ink)">E</text><text x="275" y="160" style="fill:var(--ink)">F</text></g>
+      <g font-size="12" style="fill:var(--muted);font-family:var(--f-display)"><text x="295" y="24">Dev · 1 mutual (Ben)</text><text x="295" y="94">Esha · 2 mutual (Ben, Chloe)</text><text x="295" y="164">Farid · 1 mutual (Chloe)</text><text x="155" y="20" text-anchor="middle">Ben</text><text x="155" y="168" text-anchor="middle">Chloe</text></g>
     </svg>
-    <div class="cap">The six people. Thick lines: your friendships. Grey line: Ben and Chloe know each other. Coloured lines: your friends' friendships that reach someone you do not know yet. Ids used in code: You = 0, Ben = 1, Chloe = 2, Dev = 3, Esha = 4, Farid = 5.</div>
+    <div class="cap">Each line is a friendship: seven in all. The counts on the right are the overlap of each person's friend list with yours.</div>
   </div>
-  <p>This picture has names that the rest of the week uses, and each one is just a word for something you can point at:</p>
-  <ul>
-    <li>A whole picture of dots and lines is a <b>graph</b>. Here it is a social graph: the dots are people.</li>
-    <li>A dot is a <b>node</b> (also called a <b>vertex</b>). There are six.</li>
-    <li>A line is an <b>edge</b>. There are seven. A friendship goes both ways, so the lines have no arrows; such a graph is <b>undirected</b>.</li>
-    <li>The people one line away from someone are their <b>neighbours</b>: for a person, their friends. Your neighbours are Ben and Chloe. We write \(N(u)\) for the friend list of person \(u\), so \(N(\text{You}) = \{\text{Ben}, \text{Chloe}\}\).</li>
-    <li>The number of lines touching a dot is its <b>degree</b>: how many friends that person has. You have degree 2, Ben and Chloe 4 each, Esha 2, Dev and Farid 1.</li>
-  </ul>
-  <p>Now the question from R.1 becomes something you can read off the picture. The people to suggest are the ones <b>two lines away</b> who are not you and not already your friend: Dev, Esha and Farid. We call them your <b>candidates</b>. Ben is two lines away too (You → Chloe → Ben), but he is already your friend, so he is not a candidate. And a candidate's score is the number of <b>mutual friends</b>: people who are on both friend lists.</p>
-  <div class="eq">\[ \text{mutual}(\text{You}, \text{Esha}) \;=\; \bigl|\,N(\text{You}) \cap N(\text{Esha})\,\bigr| \;=\; \bigl|\{\text{Ben}, \text{Chloe}\} \cap \{\text{Ben}, \text{Chloe}\}\bigr| \;=\; 2 \]</div>
-  <p>The bars \(|\cdot|\) mean "how many", and \(\cap\) means "on both lists". Dev scores 1 (only Ben), Farid scores 1 (only Chloe).</p>
-  <p><b>How a computer holds the picture.</b> The simplest way is one friend list per person: a table from each person to the set of their friends. This is called an <b>adjacency list</b>. Day 1 compares it with two other layouts.</p>
+
+  <p>Write the friend lists down, then for each person compare their list with yours (Ben, Chloe) and count the overlap.</p>
   <div class="tablewrap"><table>
-    <tr><th>Person</th><th>Friends</th><th class="num">Degree</th></tr>
-    <tr><td>You</td><td>Ben, Chloe</td><td class="num">2</td></tr>
-    <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td class="num">4</td></tr>
-    <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td class="num">4</td></tr>
-    <tr><td>Dev</td><td>Ben</td><td class="num">1</td></tr>
-    <tr><td>Esha</td><td>Ben, Chloe</td><td class="num">2</td></tr>
-    <tr><td>Farid</td><td>Chloe</td><td class="num">1</td></tr>
+    <tr><th>Person</th><th>Their friend list</th><th>In common with yours</th><th>Mutual friends</th><th>Suggest?</th></tr>
+    <tr><td>You</td><td>Ben, Chloe</td><td>–</td><td>–</td><td>no: that is you</td></tr>
+    <tr><td>Ben</td><td>You, Chloe, Dev, Esha</td><td>Chloe</td><td>1</td><td>no: already your friend</td></tr>
+    <tr><td>Chloe</td><td>You, Ben, Esha, Farid</td><td>Ben</td><td>1</td><td>no: already your friend</td></tr>
+    <tr><td>Dev</td><td>Ben</td><td>Ben</td><td>1</td><td>yes, 2nd</td></tr>
+    <tr><td><b>Esha</b></td><td>Ben, Chloe</td><td>Ben, Chloe</td><td><b>2</b></td><td><b>yes, 1st</b></td></tr>
+    <tr><td>Farid</td><td>Chloe</td><td>Chloe</td><td>1</td><td>yes, 3rd</td></tr>
   </table></div>
-  <p class="idea"><b>In one line.</b> People are nodes, friendships are edges, your friends are your neighbours; the people to suggest are two edges away, and their score is the number of neighbours you share.</p>
+  <div class="dg"><div class="seq"><span class="nd hot">Esha · 2</span><span class="lk">→</span><span class="nd new">Dev · 1</span><span class="lk">→</span><span class="nd new">Farid · 1</span></div><div class="cap">Your suggestions, best first. Dev and Farid tie at 1; the rule "smaller id first" puts Dev (3) before Farid (5), so the answer is the same on every run.</div></div>
+  <p>Three things to keep from the hand count. Ben and Chloe each share a friend with you, but they are already your friends, so they are filtered out: a rule, not a score. Ties happen, and a fixed tie rule is what makes the answer testable. And the counting itself is just <b>the overlap of two friend lists</b>, which is where Day 1 starts.</p>
 
-  <h3>R.3 · Count by hand</h3>
-  <p><b>The obvious way is too slow.</b> To score everyone, you could take every other user, compare their friend list with yours, and keep the best ten. On six people that is five comparisons. On a billion users it is a billion comparisons for every page view, and almost all of them return 0: most people on Earth share no friend with you. We should never even look at them.</p>
-  <p><b>The idea: walk out from yourself and let your friends vote.</b> A mutual friend of you and Esha is, by definition, one of your friends who has Esha on their list. So go to each of your friends in turn, read their friend list, and give one vote to each person you find. Skip yourself and anyone who is already your friend. When you are done, each person's votes are exactly their mutual friends with you. People with no mutual friend are never touched.</p>
-  <div class="dg"><div class="steps">
-    <div class="step"><span class="k">Ben</span><span class="seq"><span class="nd">You ✗</span><span class="nd">Chloe ✗</span><span class="nd hot">Dev +1</span><span class="nd hot">Esha +1</span></span><span class="why"><b>Read Ben's list: 4 entries.</b> You are yourself and Chloe is already your friend, so skip both. Votes: Dev 1, Esha 1.</span></div>
-    <div class="step"><span class="k">Chloe</span><span class="seq"><span class="nd">You ✗</span><span class="nd">Ben ✗</span><span class="nd hot">Esha +1</span><span class="nd hot">Farid +1</span></span><span class="why"><b>Read Chloe's list: 4 entries.</b> Skip yourself and Ben. Votes: Dev 1, Esha 2, Farid 1.</span></div>
-    <div class="step"><span class="k">top 2</span><span class="seq"><span class="nd new">Esha · 2</span><span class="nd new">Dev · 1</span><span class="nd">Farid · 1</span></span><span class="why"><b>Sort by votes, most first.</b> Dev and Farid tie at 1. Break the tie by the smaller id: Dev is 3, Farid is 5. Answer: Esha, Dev.</span></div>
-  </div><div class="cap">Filled boxes: a vote added. Outlined boxes: the two people returned.</div></div>
-  <p>Three things to notice, because each one comes back later in the week.</p>
-  <ul>
-    <li><b>Skipping still costs a read.</b> You read 8 entries to cast 4 votes. The work is the length of your friends' lists, not the number of votes.</li>
-    <li><b>Some lines are never read.</b> If Dev and Farid became friends, nothing in your count would change: the walk only reads your friends' lists.</li>
-    <li><b>Ties need a rule.</b> Without "smaller id first", Dev and Farid could come out in either order from one run to the next, and no test could check the answer. Day 1 writes this rule into the function's contract.</li>
-  </ul>
-  <div class="code"><div class="ch"><span>pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>suggest(u, k):
-    votes ← empty map from person to number
-    for each friend f of u:
-        for each friend v of f:
-            if v is not u and v is not already a friend of u:
-                votes[v] ← votes[v] + 1
-    return the k people with the most votes (ties: smaller id first)</code></pre></div>
-  <p class="idea"><b>In one line.</b> Visit each friend, read their friend list, and vote for everyone on it who is not you or already your friend; the votes are the mutual-friend counts.</p>
+  <p>The same hand count, as code. Friend lists are a dictionary from id to a set of ids; the overlap of two lists is the set intersection <code>&amp;</code>.</p>
+  <div class="code"><div class="ch"><span>code/index/hand_count.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">NAMES = ["You", "Ben", "Chloe", "Dev", "Esha", "Farid"]
+friends = {
+    0: {1, 2},          # You: Ben, Chloe
+    1: {0, 2, 3, 4},    # Ben: You, Chloe, Dev, Esha
+    2: {0, 1, 4, 5},    # Chloe: You, Ben, Esha, Farid
+    3: {1},             # Dev: Ben
+    4: {1, 2},          # Esha: Ben, Chloe
+    5: {2},             # Farid: Chloe
+}
 
-  <h3>R.4 · The code, on 10,000 people</h3>
-  <p>Here is the pseudocode as Python. <code>adj</code> is a list of Python sets, one per person, so "is <var>v</var> already a friend?" is a single hash lookup. A <code>Counter</code> holds the votes, and <code>heapq.nsmallest</code> picks the top <var>k</var> with the tie rule built into the sort key: most votes first (<code>-count[v]</code>), then smaller id (<code>v</code>). The function also returns all the votes, because the app may want to show "2 mutual friends" next to each name.</p>
-  <div class="code"><div class="ch"><span>pymk_exact.py · the exact first answer</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import Counter
-import heapq
+def mutual_friends(friends, u):
+    """For everyone who is not u and not already u's friend,
+    count the overlap of their friend list with u's."""
+    counts = {}
+    for v in friends:
+        if v == u or v in friends[u]:
+            continue                      # never suggest yourself or a friend
+        shared = friends[u] &amp; friends[v]  # the friends you have in common
+        if shared:
+            counts[v] = len(shared)
+    return counts
 
-def suggest(adj, u, k=10, blocked=frozenset()):
-    """Top-k friends of friends of u by mutual-friend count. Ties: smaller id first."""
-    direct = adj[u]
-    count = Counter()                          # candidate -&gt; mutual friends seen so far
-    for f in direct:                           # each of u's friends ...
-        for v in adj[f]:                       # ... and each of their friends
-            if v != u and v not in direct and v not in blocked:
-                count[v] += 1                  # f is one more mutual friend of u and v
-    return heapq.nsmallest(k, count, key=lambda v: (-count[v], v)), count
+def suggest(friends, u, k=10):
+    """The k people with the most mutual friends; ties go to the smaller id."""
+    counts = mutual_friends(friends, u)
+    return sorted(counts, key=lambda v: (-counts[v], v))[:k]
 
-def work(adj, u):
-    """Friend-list entries the double loop reads: the sum of u's friends' friend counts."""
-    return sum(len(adj[f]) for f in adj[u])
-
-# The six people: You = 0, Ben = 1, Chloe = 2, Dev = 3, Esha = 4, Farid = 5
-YOU, BEN, CHLOE, DEV, ESHA, FARID = range(6)
-adj = [set() for _ in range(6)]
-for a, b in [(YOU, BEN), (YOU, CHLOE), (BEN, CHLOE),
-             (BEN, DEV), (BEN, ESHA), (CHLOE, ESHA), (CHLOE, FARID)]:
-    adj[a].add(b); adj[b].add(a)               # a friendship goes both ways
-
-top, count = suggest(adj, YOU, k=2)
-assert top == [ESHA, DEV]                      # Esha: 2; Dev and Farid tie, smaller id first
-assert dict(count) == {DEV: 1, ESHA: 2, FARID: 1}
-assert work(adj, YOU) == 8                     # Ben's 4 friends + Chloe's 4 friends
-assert suggest(adj, YOU, k=2, blocked={ESHA})[0] == [DEV, FARID]</code></pre></div>
-  <p>The asserts are the hand count from R.3. Blocking Esha shows one more rule the code respects: a blocked person is never suggested, and the next one moves up.</p>
-
-  <h4>Run it on the week's graph</h4>
-  <p>Now the same function on the week's social network of 10,000 users. Take a typical user: user 8604 has 15 friends, the median (half of all users have 15 or fewer).</p>
-  <div class="code"><div class="ch"><span>run_week.py · one user's suggestions</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from ref import load_edges, adjacency          # the week's loaders (pymk/ref.py)
-
-G = adjacency(load_edges())                    # 10,000 users, 100,000 friendships
-user = 8604                                    # a typical user: 15 friends, the median
-top, count = suggest(G, user)
-for v in top:
-    print(v, count[v], len(G[v]))              # who, mutual friends, their own friend count
-print(len(count), "candidates;", work(G, user), "entries read")</code></pre></div>
-  <div class="tablewrap"><table>
-    <tr><th class="num">Rank</th><th class="num">Suggested user</th><th class="num">Mutual friends</th><th class="num">Their own friends</th></tr>
-    <tr><td class="num">1</td><td class="num">3316</td><td class="num">6</td><td class="num">1,132</td></tr>
-    <tr><td class="num">2</td><td class="num">1781</td><td class="num">4</td><td class="num">1,480</td></tr>
-    <tr><td class="num">3</td><td class="num">666</td><td class="num">3</td><td class="num">793</td></tr>
-    <tr><td class="num">4</td><td class="num">1254</td><td class="num">3</td><td class="num">1,117</td></tr>
-    <tr><td class="num">5</td><td class="num">1286</td><td class="num">3</td><td class="num">246</td></tr>
-    <tr><td class="num">6</td><td class="num">2266</td><td class="num">3</td><td class="num">171</td></tr>
-    <tr><td class="num">7</td><td class="num">2946</td><td class="num">3</td><td class="num">553</td></tr>
-    <tr><td class="num">8</td><td class="num">3396</td><td class="num">3</td><td class="num">309</td></tr>
-    <tr><td class="num">9</td><td class="num">5967</td><td class="num">3</td><td class="num">51</td></tr>
-    <tr><td class="num">10</td><td class="num">62</td><td class="num">2</td><td class="num">65</td></tr>
-  </table></div>
-  <p>The walk found <b>904 candidates</b>, and 838 of them have exactly one mutual friend, so the top ten are picked from a long, flat list. Look at the last column: the average user on this graph has 20 friends, yet four of these ten have more than 1,000. Popular people have many friends, so they turn up on many friend lists and collect votes from everyone. The most-connected user (1781, with 1,480 friends) is in 66% of all 10,000 users' top-10 lists. Keep that in mind: it is the problem Day 4 solves.</p>
-
-  <h4>What it costs: you read your friends' lists</h4>
-  <p>To make that list, the code read <b>1,018 friend-list entries</b>. That number is not 15 (user 8604's friends) and not 15 × 15. It is the total length of the 15 friends' own lists, because the inner loop reads each of them in full. Two of those friends have 343 and 277 friends, so they alone cost 620 reads. <b>The cost of a request is set by how popular your friends are, not by how many friends you have.</b></p>
-  <p>How does that look across everyone? The chart answers: for each of the 10,000 users, how many entries does one request read?</p>
-  <div class="chart"><div class="t">Entries read by one request (the sum of the user's friends' friend counts): share of the 10,000 users</div>
-    <div class="br"><span>&lt; 250</span><span class="tr"><i style="width:34%"></i></span><span class="v">9.1%</span></div>
-    <div class="br"><span>250–499</span><span class="tr"><i style="width:67%"></i></span><span class="v">17.6%</span></div>
-    <div class="br"><span>500–999</span><span class="tr"><i style="width:86%"></i></span><span class="v">22.7%</span></div>
-    <div class="br"><span>1,000–1,999</span><span class="tr"><i style="width:100%"></i></span><span class="v">26.4%</span></div>
-    <div class="br"><span>2,000–3,999</span><span class="tr"><i style="width:75%"></i></span><span class="v">19.7%</span></div>
-    <div class="br"><span>4,000–7,999</span><span class="tr"><i style="width:14%;--c:var(--muted)"></i></span><span class="v">3.6%</span></div>
-    <div class="br"><span>8,000+</span><span class="tr"><i style="width:3.4%;--c:var(--muted)"></i></span><span class="v">0.9%</span></div>
-    <div class="cap">Each bucket is twice as wide as the one before. Mean 1,477 entries; median 1,023; p99 7,284; maximum 51,806, for the user with the most friends.</div>
-  </div>
-  <p>Three readings of the chart. <b>The average is bigger than it looks:</b> with 20 friends each having 20 friends you would expect 400 reads, but the mean is 1,477, 3.7 times as many. That is because a friend, picked at random, has 73.8 friends on average, not 20: popular people appear on many lists, so your friends are more popular than you. Day 2 explains why this always happens. <b>The slow requests set the bar:</b> the <b>p99</b> is the number that 99 out of 100 requests stay under, here 7,284 reads, about 4.9 times the mean. A page that must load quickly for nearly everyone is planned around that number, not the average. <b>One request can be enormous:</b> the most-connected user's request reads 51,806 entries, 35 times the mean.</p>
-  <p class="idea"><b>In one line.</b> One request reads every friend's friend list, so its cost is the sum of your friends' friend counts, and popular friends make it expensive.</p>
-
-  <details class="deep"><summary>The math, step by step: why the count is exactly right, and the matrix view</summary><div>
-    <p><b>What we want to show.</b> When the walk finishes, every candidate's vote count equals their number of mutual friends with you, and nobody else has a count. Check it on the six people first: Esha got a vote while reading Ben's list and one while reading Chloe's, so 2 votes; her mutual friends are \(\{\text{Ben}, \text{Chloe}\} \cap \{\text{Ben}, \text{Chloe}\}\), also 2. Now the general case.</p>
-    <p><b>Names.</b> Let \(u\) be the user asking. Call their friends \(f_1, f_2, \dots, f_d\) in the order the loop visits them; \(d\) is their degree. Call a person \(v\) <b>eligible</b> if \(v \ne u\), \(v\) is not in \(N(u)\), and \(v\) is not blocked.</p>
-    <p><b>The claim we keep true at every step.</b> After the loop has finished the first \(j\) friends, every eligible \(v\) has</p>
-    <div class="eq">\[ \text{count}[v] \;=\; \bigl|\{f_1, \dots, f_j\} \cap N(v)\bigr|, \]</div>
-    <p>that is, the number of the friends visited so far who are also friends of \(v\) (a missing key counts as 0), and no ineligible person has a key. A statement like this, true before and after every pass of a loop, is called a <b>loop invariant</b>.</p>
-    <ul>
-      <li><b>Before the loop</b> (\(j = 0\)): no friend has been visited, so the right side is the size of an empty set, 0. The counter is empty, so the left side is 0 too.</li>
-      <li><b>One more friend</b> (from \(j\) to \(j+1\)): the inner loop goes through \(N(f_{j+1})\), each person once (it is a set), and adds 1 for each eligible one. Friendship goes both ways, so "\(v\) is in \(f_{j+1}\)'s list" is the same statement as "\(f_{j+1}\) is in \(v\)'s list". So an eligible \(v\) gains 1 exactly when \(f_{j+1}\) is one of \(v\)'s friends, and that is exactly when the right side grows by 1. Ineligible people are skipped, so they never get a key.</li>
-      <li><b>After the loop</b> (\(j = d\)): \(\{f_1, \dots, f_d\}\) is all of \(N(u)\), so \(\text{count}[v] = |N(u) \cap N(v)|\), the mutual-friend count, for every eligible \(v\). The keys are exactly the eligible people with at least one mutual friend: the candidates.</li>
-    </ul>
-    <p>Finally, <code>heapq.nsmallest</code> with key \((-\text{count}[v], v)\) returns the \(k\) keys that come first in the order "more votes first, then smaller id". Ids are all different, so two keys never compare equal, and the output is the same on every run. That proves the function returns the exact top \(k\) by mutual friends with the stated tie rule.</p>
-
-    <p><b>The same count as a matrix product.</b> Write the graph as a table \(A\) with one row and one column per person, where \(A_{uv} = 1\) if \(u\) and \(v\) are friends and 0 otherwise. For the six people (order: You, Ben, Chloe, Dev, Esha, Farid):</p>
-    <div class="eq">\[ A = \begin{pmatrix} 0&1&1&0&0&0\\ 1&0&1&1&1&0\\ 1&1&0&0&1&1\\ 0&1&0&0&0&0\\ 0&1&1&0&0&0\\ 0&0&1&0&0&0 \end{pmatrix} \]</div>
-    <p>Multiply \(A\) by itself. By the rule for matrix multiplication, the entry in row You, column Esha of \(A^2 = A \cdot A\) is a sum over every person \(w\):</p>
-    <div class="eq">\[ (A^2)_{\text{You},\text{Esha}} = \sum_{w} A_{\text{You},w}\,A_{w,\text{Esha}} = \underbrace{1 \cdot 1}_{w=\text{Ben}} + \underbrace{1 \cdot 1}_{w=\text{Chloe}} + \underbrace{0 + 0 + 0 + 0}_{\text{everyone else}} = 2. \]</div>
-    <p>Each term is 1 only when both factors are 1: when \(w\) is your friend <em>and</em> Esha's friend. So the sum counts the mutual friends. The same argument works for any \(u\) and \(v\): \((A^2)_{uv} = |N(u) \cap N(v)|\). Two more facts fall out. The matrix is symmetric, \((A^2)_{uv} = (A^2)_{vu}\), because friendship is. And the diagonal entry \((A^2)_{uu}\) counts friends you share with yourself, which is all of them: your degree.</p>
-    <p>So the whole of PYMK for user \(u\) is one row of \(A^2\), with yourself and your friends masked out. Your row is \((2, 1, 1, 1, 2, 1)\): the 2 at You is your degree, the 1s at Ben and Chloe are masked because they are already friends, leaving Dev 1, Esha 2, Farid 1, the R.3 answer. A full \(n \times n\) table is far too big for a real graph (Day 2 measures how much work all of \(A^2\) is), but on tiny graphs it is a perfect reference to test the walk against:</p>
-    <div class="code"><div class="ch"><span>mutual_matrix.py · a brute-force reference for tests</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">import numpy as np
-
-def mutual_matrix(adj):
-    """(A @ A)[u][v] = number of mutual friends of u and v. Tiny graphs only: n x n memory."""
-    n = len(adj)
-    A = np.zeros((n, n), dtype=np.int64)
-    for u in range(n):
-        for v in adj[u]:
-            A[u, v] = 1
-    return A @ A
-
-M = mutual_matrix(adj)
-assert list(M[YOU]) == [2, 1, 1, 1, 2, 1]      # diagonal = your friend count; Ben and Chloe are friends, not candidates
-assert (M == M.T).all()                        # m(u, v) = m(v, u)</code></pre></div>
-    <p class="small muted">Continues from <code>pymk_exact.py</code>, which defines <code>adj</code> and the names.</p>
-  </div></details>
-
-  <details class="deep"><summary>The math, step by step: what one request costs</summary><div>
-    <p><b>What we want to find.</b> How the running time of <code>suggest</code> grows with the graph, so we can predict it for users we have not measured.</p>
-    <p><b>Step 1: count the inner loop.</b> The inner body runs once for every entry of every friend's list. For You that is \(\deg(\text{Ben}) + \deg(\text{Chloe}) = 4 + 4 = 8\), the 8 reads from R.3. For user 8604 it is 1,018. In general, call it the <b>work</b> of user \(u\):</p>
-    <div class="eq">\[ W(u) \;=\; \sum_{f \in N(u)} \deg(f) \]</div>
-    <p>read "add up \(\deg(f)\) over every friend \(f\) of \(u\)". Each run of the body does two set lookups and one counter update, each a constant amount of work on average with hashing. So the loops take time proportional to \(W(u)\), written \(O(W(u))\). The outer loop's own \(d\) steps are already inside: each friend's list contains \(u\), so every \(\deg(f) \ge 1\) and \(W(u) \ge d\).</p>
-    <p><b>Step 2: count the top-k.</b> Let \(|C(u)|\) be the number of candidates (904 for user 8604). <code>heapq.nsmallest</code> passes over them once and keeps a heap of at most \(k\) items; each update costs about \(\log k\) steps. So this part is \(O(|C(u)| \log k)\).</p>
-    <p><b>Step 3: compare the two parts.</b> Every candidate received at least one vote, and every vote was one of the \(W(u)\) reads, so \(|C(u)| \le W(u)\). With \(k = 10\), \(\log k\) is a small constant. Adding the parts:</p>
-    <div class="eq">\[ \text{time} = O\bigl(W(u) + |C(u)| \log k\bigr), \qquad \text{memory} = O\bigl(|C(u)| + k\bigr). \]</div>
-    <p><b>Step 4: what it means.</b> The time is dominated by \(W(u)\), which adds up <em>your friends'</em> degrees. Bound it by its largest term to see why one popular friend is enough: if one of your friends has 1,480 friends, \(W(u) \ge 1{,}480\) however few friends you have. In words: the cost of a request is the total size of your friends' friend lists, and the heap at the end adds only a small factor on top.</p>
-  </div></details>
-
-  <div class="part"><b>Practice</b><ul>
-    <li>Type <code>pymk_exact.py</code> yourself and make every assert pass. Then add the friendship Ben–Farid. Before running, predict the new vote counts, the number of entries read for You, and the top 2.</li>
-    <li>Add the friendship Dev–Farid instead. Predict what changes for You, and say why.</li>
-    <li>A star: one person with 1,000 friends who know nobody else. How many entries does the centre's request read? A leaf's? How many candidates does a leaf have? Which request is the expensive one?</li>
-    <li><a href="https://leetcode.com/problems/get-watched-videos-by-your-friends/">LeetCode 1311 · Get Watched Videos by Your Friends</a>: find the people at exactly distance <var>k</var>, then count and sort with a tie rule. The same walk with a different target.</li>
-    <li><a href="https://leetcode.com/problems/top-k-frequent-words/">LeetCode 692 · Top K Frequent Words</a>: top-k with a fixed tie rule, exactly the last line of <code>suggest</code>.</li>
-    <li>Using <code>mutual_matrix</code>, write a test that checks, on 100 random small graphs, that <code>suggest</code>'s votes equal the masked row of \(A^2\) for every user.</li>
-  </ul></div>
-  <div class="part"><b>Problem variations</b><ul>
-    <li><b>Show who the mutual friends are</b> ("Ben, Chloe and 10 others"). Store names instead of a count. How does the memory grow?</li>
-    <li><b>Only suggest people with at least 2 mutual friends.</b> Can you skip any work and still be exact?</li>
-    <li><b>Follows instead of friendships</b> ("who to follow"): lines now have arrows. Define the candidates. Is the count still the same in both directions?</li>
-    <li><b>A brand-new user with no friends.</b> The walk finds nobody. What could the app show instead?</li>
-  </ul></div>
-  <details class="sol"><summary>Solution</summary><div>
-    <p><b>Ben–Farid added.</b> Farid now gets a vote from Ben and from Chloe: votes Dev 1, Esha 2, Farid 2. Esha and Farid tie at 2 and Esha has the smaller id, so the top 2 is Esha, Farid. Entries read: \(\deg(\text{Ben}) + \deg(\text{Chloe}) = 5 + 4 = 9\).</p>
-    <p><b>Dev–Farid added.</b> Nothing changes for You. The new line is on Dev's and Farid's lists, and the walk only reads Ben's and Chloe's.</p>
-    <p><b>The star.</b> The centre's friends each have degree 1, so the centre reads 1,000 entries and finds no candidates. A leaf's one friend has degree 1,000, so the leaf also reads 1,000 entries and finds 999 candidates, each with one mutual friend. The leaf has one friend, but that friend is a hub.</p>
-    <div class="code"><div class="ch"><span>star.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def star_work(n_leaves):
-    """Entries read for the centre and for a leaf of a star, and the leaf's candidates."""
-    adj = [set() for _ in range(n_leaves + 1)]
-    for leaf in range(1, n_leaves + 1):
-        adj[0].add(leaf); adj[leaf].add(0)
-    return work(adj, 0), work(adj, 1), len(suggest(adj, 1)[1])</code></pre></div>
-    <p><b>LeetCode 1311.</b> Breadth-first search (BFS) from <code>id</code>: a queue visits people in order of distance, so the first time someone is reached is their true distance (Day 1 proves it). Then count the videos of the people at exactly <code>level</code> and sort by (frequency, name).</p>
-    <div class="code"><div class="ch"><span>lc1311.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from collections import deque
-
-def watchedVideosByFriends(watchedVideos, friends, id, level):
-    """LeetCode 1311: videos watched by people at distance exactly `level`, by frequency then name."""
-    dist = {id: 0}
-    q = deque([id])
-    while q:                                   # BFS: the first time we reach a person is their distance
-        p = q.popleft()
-        if dist[p] == level:
-            continue                           # no need to look further out
-        for f in friends[p]:
-            if f not in dist:
-                dist[f] = dist[p] + 1
-                q.append(f)
-    freq = Counter(v for p, d in dist.items() if d == level for v in watchedVideos[p])
-    return sorted(freq, key=lambda v: (freq[v], v))</code></pre></div>
-    <p><b>LeetCode 692.</b> The key <code>(-freq, word)</code> puts higher counts first and breaks ties alphabetically, the same shape as <code>(-count[v], v)</code> in <code>suggest</code>.</p>
-    <div class="code"><div class="ch"><span>lc692.py</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def topKFrequent(words, k):
-    """LeetCode 692: k most frequent words; ties by alphabetical order."""
-    freq = Counter(words)
-    return heapq.nsmallest(k, freq, key=lambda w: (-freq[w], w))</code></pre></div>
-    <p><b>The test against \(A^2\).</b> For each user, the votes must equal \(\{v : (A^2)_{uv} > 0\}\) with yourself, your friends and blocked people removed, and the entries read must equal the row sum of \(A^2\) (each friend \(f\) contributes \(\deg(f)\) to that sum).</p>
-    <p><b>Mutual-friend names.</b> Each vote stores a friend's id instead of adding 1, so memory grows from one number per candidate to one entry per vote: up to the number of entries read. In practice, store the count and the first few names.</p>
-    <p><b>At least 2 mutual friends.</b> You cannot know someone's final count until every friend has been visited, so the walk still reads everything; you can only drop the 1-vote people at the end. (Day 3 trades exactness for reading less.)</p>
-    <p><b>Follows.</b> Candidates are the accounts reached by two arrows, \(u \to w \to v\). The count is no longer symmetric: if 30 accounts you follow all follow a celebrity, you have 30 paths to them, while they may have none back to you.</p>
-    <p><b>New user.</b> No friends means no candidates. The app needs other sources: shared groups, the same city, contacts shared with consent. Day 3 adds such sources.</p>
-  </div></details>
-
-  <h3>R.5 · Does it work? Check against the future</h3>
-  <p>The code is correct: it counts mutual friends exactly. That is not the same as being <em>useful</em>. The real question is whether the people it suggests are people the user will actually befriend. We cannot ask the future, but we can replay the past.</p>
-  <p><b>Freeze time, then look ahead.</b> Every friendship in the week's data carries the order in which it formed. Pretend the app is running at the moment the 80,000th friendship formed. Everything the app may use, friend lists and mutual counts, comes from those first 80,000 friendships. Then look at the 20,000 friendships that formed <em>after</em> that moment and ask: did those new friends already share a friend when we froze time?</p>
-  <p>Why not just pick 20,000 friendships at random to hide? Because a real app only ever knows the past. If later friendships were used to compute mutual counts, the check would be peeking at the answer and would look better than the app could ever be. Splitting by time keeps the check honest; Day 4 builds on this split to train a model.</p>
-  <div class="code"><div class="ch"><span>check_future.py · did new friends already share a friend?</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">from ref import temporal_split
-
-past, future = temporal_split(load_edges(), 0.8)   # first 80,000 friendships, last 20,000
-P = adjacency(past)                                # what the app knew at the cut
-had_mutual = sum(1 for u, v, _ in future if P[u] &amp; P[v])
-print(had_mutual, "of", len(future))               # 10,645 of 20,000 = 53.2%</code></pre></div>
-  <p><b>10,645 of the 20,000 new friendships (53.2%) joined two people who already had at least one mutual friend.</b> To see how strong that is, compare it with how rare such pairs are: of the 49,915,000 pairs of users who were not yet friends, only 8.1% had a mutual friend. So 8.1% of the pairs produced 53.2% of the new friendships, 6.6 times their share. This tendency, for two people with a friend in common to become friends, is called <b>triadic closure</b> (three people, and the third side of the triangle closes); Day 1 measures it in depth.</p>
-  <p>Does more mutual friends mean a better chance? The chart answers: for each number of mutual friends at the frozen moment, what share of those pairs became friends afterwards?</p>
-  <div class="chart"><div class="t">Chance that a non-friend pair became friends later, by mutual friends at the frozen moment (all 49.9M pairs)</div>
-    <div class="br"><span>0 mutual</span><span class="tr"><i style="width:1%;--c:var(--muted)"></i></span><span class="v">0.020%</span></div>
-    <div class="br"><span>1</span><span class="tr"><i style="width:1.6%"></i></span><span class="v">0.195%</span></div>
-    <div class="br"><span>2</span><span class="tr"><i style="width:4.9%"></i></span><span class="v">0.594%</span></div>
-    <div class="br"><span>3</span><span class="tr"><i style="width:10.3%"></i></span><span class="v">1.25%</span></div>
-    <div class="br"><span>4–5</span><span class="tr"><i style="width:18.4%"></i></span><span class="v">2.24%</span></div>
-    <div class="br"><span>6–9</span><span class="tr"><i style="width:37.8%"></i></span><span class="v">4.59%</span></div>
-    <div class="br"><span>10 or more</span><span class="tr"><i style="width:100%"></i></span><span class="v">12.2%</span></div>
-    <div class="cap">Bars drawn to scale, except 0 mutual friends (true width 0.17%), widened to stay visible. Two people with 2 mutual friends are 29 times as likely to become friends as two with none; with 10 or more, 596 times.</div>
-  </div>
-  <p>What the chart shows, in three points. <b>The chance rises at every step</b>, so sorting by mutual friends puts the likelier friendships first: the first answer is pointed in the right direction. <b>Even the best group is only 12%:</b> mutual friends are a strong hint, not a certainty, which leaves room for a better score (Day 4). <b>46.8% of the new friendships had no mutual friend at all</b> (9,355 of them). A PYMK that only looks two lines away can never suggest those people, so on this graph it can find at most 53.2% of what happens next. Finding the rest needs other places to look (Day 3).</p>
-  <p class="small muted">The week's graph is synthetic, and its generator forms 45% of friendships by closing a triangle, so closure is built in. Real networks show the same rising curve: Kossinets and Watts measured it on a university's e-mail network ("Empirical Analysis of an Evolving Social Network", <em>Science</em>, 2006).</p>
-  <p class="idea"><b>In one line.</b> Freeze the data at a moment in time, suggest from the past only, and check against what happened next: here, more mutual friends means a much higher chance of a new friendship.</p>
-
-  <details class="deep"><summary>The math, step by step: the chance of friendship, and why ranking by the count is right</summary><div>
-    <p><b>What a bar means.</b> Take the bar for 2 mutual friends. Out of which pairs? All pairs of users who were not friends at the frozen moment and had exactly 2 mutual friends then: there were 343,961. Of those, 2,042 became friends afterwards. The bar is the share:</p>
-    <div class="eq">\[ P(\text{friends later} \mid m = 2) \;=\; \frac{2{,}042}{343{,}961} \;=\; 0.594\%. \]</div>
-    <p>The vertical bar is read "given": the chance of becoming friends, counting only pairs with \(m = 2\) mutual friends. A <b>conditional probability</b> is just this, a share inside a chosen group, so the group must always be stated.</p>
-    <p><b>The group, counted exactly.</b> Here it is every unordered pair \(\{u, v\}\) of different users who were not friends at the cut. There are \(10{,}000 \times 9{,}999 / 2 = 49{,}995{,}000\) pairs of users, minus the 80,000 friendships, giving 49,915,000. The pairs with \(m \ge 1\) are found by walking two lines out from every user, as in R.3, counting each pair once. The pairs with \(m = 0\) are everything else, so their number is a subtraction, not an enumeration. Every one of the 20,000 later friendships is one of these pairs (no friendship forms twice), and its \(m\) is read from the past graph.</p>
-    <div class="code"><div class="ch"><span>closure.py · the chance of friendship by mutual-friend count, over all non-friend pairs</span><button class="copy" type="button">Copy</button></div><pre><code class="language-python">def rate_by_mutuals(past_adj, future_pairs, buckets):
-    """For each bucket (lo, hi) of m: (pairs, future friendships) over ALL unordered
-    non-friend pairs {u, v} of the past graph. Pairs with m &gt;= 1 are found two hops out;
-    pairs with m = 0 are counted as (all non-friend pairs) - (pairs with m &gt;= 1)."""
-    n = len(past_adj)
-    which = lambda m: next(i for i, (lo, hi) in enumerate(buckets) if lo &lt;= m &lt;= hi)
-    pairs, hits, at_dist2 = [0] * len(buckets), [0] * len(buckets), 0
-    for u in range(n):
-        cnt = Counter()
-        for f in past_adj[u]:
-            for v in past_adj[f]:
-                if v &gt; u and v not in past_adj[u]:      # each unordered pair once
-                    cnt[v] += 1
-        at_dist2 += len(cnt)
-        for m in cnt.values():
-            pairs[which(m)] += 1
-    past_edges = sum(len(s) for s in past_adj) // 2
-    pairs[which(0)] += n * (n - 1) // 2 - past_edges - at_dist2
-    for u, v in future_pairs:
-        hits[which(len(past_adj[u] &amp; past_adj[v]))] += 1
-    return pairs, hits</code></pre></div>
-    <p class="small muted">Tested against a brute-force loop over every pair on random small graphs, and on the week's graph it reproduces every count in the table below.</p>
-    <div class="tablewrap"><table>
-      <tr><th>Mutual friends \(m\) at the cut</th><th class="num">Non-friend pairs</th><th class="num">Became friends</th><th class="num">Share</th><th class="num">vs \(m = 0\)</th></tr>
-      <tr><td>0</td><td class="num">45,869,358</td><td class="num">9,355</td><td class="num">0.020%</td><td class="num">1×</td></tr>
-      <tr><td>1</td><td class="num">3,618,574</td><td class="num">7,057</td><td class="num">0.195%</td><td class="num">9.6×</td></tr>
-      <tr><td>2</td><td class="num">343,961</td><td class="num">2,042</td><td class="num">0.594%</td><td class="num">29×</td></tr>
-      <tr><td>3</td><td class="num">55,370</td><td class="num">692</td><td class="num">1.25%</td><td class="num">61×</td></tr>
-      <tr><td>4–5</td><td class="num">21,156</td><td class="num">473</td><td class="num">2.24%</td><td class="num">110×</td></tr>
-      <tr><td>6–9</td><td class="num">5,536</td><td class="num">254</td><td class="num">4.59%</td><td class="num">225×</td></tr>
-      <tr class="hi"><td>10+</td><td class="num">1,045</td><td class="num">127</td><td class="num">12.2%</td><td class="num">596×</td></tr>
-    </table></div>
-    <p><b>Why a rising curve justifies ranking by the count.</b> Suppose we show a set \(S\) of 10 people to \(u\), and write \(p(u, v)\) for the chance that \(v\) becomes \(u\)'s friend if shown. Let \(X_v\) be 1 if that happens and 0 if not. The expected number of new friendships is</p>
-    <div class="eq">\[ \mathbb{E}\Bigl[\sum_{v \in S} X_v\Bigr] = \sum_{v \in S} \mathbb{E}[X_v] = \sum_{v \in S} p(u, v). \]</div>
-    <p>The first step is <b>linearity of expectation</b>: the expected value of a sum is the sum of the expected values, whether or not the events are independent. The second step holds because a 0-or-1 variable's expected value is the chance that it is 1.</p>
-    <p>Which 10 make that sum largest? The 10 with the largest \(p\). Proof by swapping: if \(S\) left out some \(x\) with \(p(u, x) > p(u, y)\) for a \(y\) inside \(S\), swapping \(y\) for \(x\) changes the sum by \(p(u, x) - p(u, y) > 0\), so \(S\) was not the best. Now suppose \(p\) depends on the pair only through the mutual count, and rises with it: \(p(u, v) = g(m(u, v))\) for some increasing function \(g\). Then sorting by \(m\) gives the same order as sorting by \(p\), and the top 10 by mutual friends is the best possible set. The chart is the evidence for "rises with it" on this graph. In words: if more mutual friends always means a higher chance, ranking by mutual friends is the best ranking that only uses mutual friends; Day 4 drops the "only".</p>
-  </div></details>
-
-  <div class="part"><b>Practice</b><ul>
-    <li>From the table: how many times more likely is a pair with 3 mutual friends to become friends than a pair with none? With 6–9?</li>
-    <li>Explain to a friend, without numbers, why the check freezes time instead of hiding random friendships.</li>
-    <li>Change the cut from 80% to 50% in <code>check_future.py</code>. Predict whether the share with a mutual friend goes up or down, then run it and explain.</li>
-    <li><a href="https://leetcode.com/problems/find-the-town-judge/">LeetCode 997 · Find the Town Judge</a>: reason with in- and out-degrees, the vocabulary from R.2 on a graph with arrows.</li>
-  </ul></div>
-  <details class="sol"><summary>Solution</summary><div>
-    <p><b>Ratios.</b> 3 mutual friends: 1.25% / 0.020% ≈ 61 times. 6–9: 4.59% / 0.020% ≈ 225 times.</p>
-    <p><b>Why freeze time.</b> When the app makes a suggestion, it only knows the friendships that exist so far. Hiding random friendships would let friendships formed later feed into the mutual counts used to "predict" earlier ones, which is information the app never has.</p>
-    <p><b>A 50% cut.</b> It goes down: 16,824 of the 50,000 later friendships (33.6%) had a mutual friend, against 53.2% at 80%. Two things push it down. The frozen graph has only half the friendships, so fewer pairs share a friend yet. And the later friendships now reach much further ahead, past many triangles that had not formed at the cut. The lesson: the result depends on how much history the app has and how far ahead it predicts, so always report the cut with the number.</p>
-    <p><b>LeetCode 997.</b> The judge trusts nobody (out-degree 0) and is trusted by everyone else (in-degree \(n - 1\)). Keep one score per person, +1 for each arrow in and −1 for each arrow out, and return the person whose score is \(n - 1\). \(O(n + \text{trust})\).</p>
-  </div></details>
-
-  <h3>R.6 · What breaks as it gets real</h3>
-  <p>We now have an answer that is correct, short, and checked against the future. Put it in front of real users and four problems appear, in this order. Before any of them, Day 1 makes sure the count is exact and stays exact: the right way to store friend lists, the right way to intersect and rank, and a contract with tests, including the rules the code already hints at (never yourself, never a current friend, never someone blocked).</p>
-  <ol>
-    <li><b>Popular friends make it slow.</b> One request reads every friend's list, and some of those lists are huge: the p99 request reads 4.9 times the average, and the most-connected user's request reads 51,806 entries. Why are some people so popular, why are your friends more popular than you, and how do you measure "slow" properly? <a href="day_2.html">Day 2 · Popular people</a>.</li>
-    <li><b>We can't afford to read everything.</b> Assume 200 friends per person at a billion users (an assumption; Day 5 makes the full estimate). Then a single request reads about 200 × 200 = 40,000 entries before popular friends push it higher. And the walk can never find the 46.8% of new friendships that had no mutual friend. Read a sample, summarise friend lists into small sketches, and add other places to look. <a href="day_3.html">Day 3 · Read less</a>.</li>
-    <li><b>The count isn't the best signal.</b> The best group still converts at only 12%, and the count rewards popularity: the most-connected user is in 66% of everyone's top 10. A mutual friend with 1,480 friends tells you less than one with 15. Learn from who actually connected which signals matter. <a href="day_4.html">Day 4 · Learn who connects</a>.</li>
-    <li><b>A billion users on many machines, with rules people must be able to trust.</b> The friend lists do not fit on one machine, every request fans out to many, the slowest machine sets the page's speed, and a suggestion must never break a rule like "never show me someone I blocked" or reveal a hidden friendship. <a href="day_5.html">Day 5 · A billion users</a>.</li>
-  </ol>
-  <p>Each fix changes one part of the same pipeline. Today every part is the simplest thing that works:</p>
-  <div class="dg"><div class="vflow">
-    <div class="vbox"><b>suggest(user, k = 10)</b><span class="muted small">the page waits for the answer</span></div>
-    <div class="varr">↓</div>
-    <div class="vbox"><b>1 · Find candidates</b><span class="muted small">today: walk two lines out (R.3). Day 2 caps the hubs; Day 3 samples, sketches and adds other sources</span></div>
-    <div class="varr">↓</div>
-    <div class="vbox"><b>2 · Score</b><span class="muted small">today: the number of mutual friends. Day 4 learns a better score from who connected</span></div>
-    <div class="varr">↓</div>
-    <div class="vbox" style="border-color:var(--accent)"><b>3 · Filter</b><span class="muted small">today: skip yourself, your friends and blocked people. Day 1 writes it as a contract with tests; Day 5 adds privacy and makes it hold on fresh data</span></div>
-    <div class="varr">↓</div>
-    <div class="vbox"><b>4 · Top 10</b><span class="muted small">today: a heap with a tie rule (R.4). Day 4 merges ranked lists from several sources; Day 5 serves it at a billion users</span></div>
-  </div><div class="cap">The four parts of every PYMK answer in this week, and the day that changes each. Only the filter is never approximate.</div></div>
-  <p>That is the map. The weekend build ships all four parts as a tested package, in the same order.</p>
-  <p class="idea"><b>In one line.</b> The first answer is right but slow on popular people, too expensive at scale, fooled by popularity, and too big for one machine; each day fixes one of those, inside the same four-part pipeline.</p>
-
-  <div class="part"><b>Further reading</b><ul>
-    <li>David Easley and Jon Kleinberg, <a href="https://www.cs.cornell.edu/home/kleinber/networks-book/"><em>Networks, Crowds, and Markets</em></a>, chapters 2 (graphs) and 3 (strong and weak ties, triadic closure). Free online.</li>
-    <li>Gueorgi Kossinets and Duncan Watts, "Empirical Analysis of an Evolving Social Network", <em>Science</em> 311 (2006): the rising closure curve on real data.</li>
-    <li>David Liben-Nowell and Jon Kleinberg, "The Link-Prediction Problem for Social Networks", <em>Journal of the American Society for Information Science and Technology</em> (2007): the time-split check and mutual friends as a predictor.</li>
-    <li>Johan Ugander, Brian Karrer, Lars Backstrom and Cameron Marlow, <a href="https://arxiv.org/abs/1111.4503">The Anatomy of the Facebook Social Graph</a> (2011): degrees, clustering and the friendship paradox on a very large real graph.</li>
-    <li>Stanford CS224W, <a href="https://web.stanford.edu/class/cs224w/">Machine Learning with Graphs</a>: the early lectures on graph properties and traditional link-prediction features.</li>
-  </ul></div>
-
-  <div class="check" data-check="reading">
-    <div class="ch"><b>Checkpoint · week reading</b><span data-count></span></div>
-    <label class="ck"><input type="checkbox" data-id="r1" data-dim="dsa"><span class="tx">Draw the six people as a graph and point to a node, an edge, a neighbour and a degree; list the candidates for You and their mutual-friend counts.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="r2" data-dim="dsa"><span class="tx">Run the walk-and-vote by hand on the six people, including the skipped reads and the tie between Dev and Farid, and write the pseudocode from memory.</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="r3" data-dim="dsa"><span class="tx">Type <code>suggest</code> yourself, pass the asserts, and explain why one request's cost is the sum of your friends' friend counts (mean 1,477 entries vs the 400 that 20 × 20 suggests; p99 7,284).</span><span class="dim dsa">DSA</span></label>
-    <label class="ck"><input type="checkbox" data-id="r4" data-dim="del"><span class="tx">Write and run the test that checks <code>suggest</code> against the masked row of \(A^2\) on 100 random small graphs.</span><span class="dim del">Delivery</span></label>
-    <label class="ck"><input type="checkbox" data-id="r5" data-dim="ml"><span class="tx">Explain the time split and why it beats hiding random friendships; quote the result (53.2% of new friendships had a mutual friend) and what the remaining 46.8% means for the design.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="r6" data-dim="ml"><span class="tx">Read the chance-of-friendship chart (0.020% with no mutual friend, 12.2% with 10 or more) and explain why a rising curve makes ranking by mutual friends the right first choice.</span><span class="dim ml">ML</span></label>
-    <label class="ck"><input type="checkbox" data-id="r7" data-dim="ai"><span class="tx">Explain why the raw count shows the same popular people to almost everyone (one user in 66% of all top-10 lists), and why learning from who actually connected can do better.</span><span class="dim ai">AI</span></label>
-    <label class="ck"><input type="checkbox" data-id="r8" data-dim="sys"><span class="tx">Draw the four-part pipeline (find candidates, score, filter, top 10) and, for each of the four problems in R.6, name the part it changes and the day that fixes it.</span><span class="dim sys">System Design</span></label>
-    <div class="next"><b>Watch or read next</b><ul>
-      <li>Easley and Kleinberg, <a href="https://www.cs.cornell.edu/home/kleinber/networks-book/"><em>Networks, Crowds, and Markets</em></a>, chapter 3 (book)</li>
-      <li>Stanford CS224W, <a href="https://web.stanford.edu/class/cs224w/">Machine Learning with Graphs</a>, the lecture on traditional feature-based methods (course)</li>
-    </ul></div>
-  </div>
+# every friendship is written in both lists
+assert all(u in friends[v] for u in friends for v in friends[u])
+assert mutual_friends(friends, 0) == {3: 1, 4: 2, 5: 1}   # Dev 1, Esha 2, Farid 1
+assert suggest(friends, 0) == [4, 3, 5]                    # Esha, then Dev before Farid
+assert suggest(friends, 0, k=2) == [4, 3]</code></pre></div>
+  <p>This is correct, and it is exactly the "compare with everyone" approach from the constraints: the loop visits every user. On six people that is nothing. On a billion it is the full second we just ruled out. The rest of the week is about keeping this answer while doing far less work.</p>
 </section>
-<section class="s" id="continue">
-  <div class="shead"><span class="sno">THE REST OF THE WEEK</span></div>
-  <h2>Now follow the problem as it gets real</h2>
+
+<section class="s" id="roadmap" data-sec="roadmap">
+  <div class="shead"><span class="sno">THE WEEK</span><span class="dims"><span class="dim dsa">DSA</span><span class="dim ml">ML</span><span class="dim sys">System Design</span><span class="dim del">Delivery</span></span></div>
+  <h2>How the problem grows</h2>
+  <p>Each day takes the same question one step further. It starts as an interview coding problem and ends as a system design you can defend at a whiteboard.</p>
+  <div class="flow"><span class="b hi">DSA</span><span class="ar">→</span><span class="b">at scale</span><span class="ar">→</span><span class="b">graph</span><span class="ar">→</span><span class="b">ML</span><span class="ar">→</span><span class="b">distributed system</span><span class="ar">→</span><span class="b hi">product</span></div>
   <div class="daycards">
-    <a class="daycard" href="day_1.html"><b>Day 1 · Count it exactly</b><span>Store the friendships, count mutual friends, intersect lists, pick the top 10 · why mutual friends predict friendships · the contract and its tests</span></a>
-    <a class="daycard" href="day_2.html"><b>Day 2 · Popular people</b><span>Heavy tails and the friendship paradox · what computing everyone's suggestions costs · triangles, capping hubs · p99 with error bars</span></a>
-    <a class="daycard" href="day_3.html"><b>Day 3 · Read less</b><span>Sampling friends, recall against the exact answer · MinHash, LSH, Bloom filters, random walks · several sources under a budget</span></a>
-    <a class="daycard" href="day_4.html"><b>Day 4 · Learn who connects</b><span>Link prediction on a time split · Adamic–Adar, logistic regression, AUC, recall@10 · feedback loops · merging ranked lists</span></a>
-    <a class="daycard" href="day_5.html"><b>Day 5 · A billion users</b><span>Estimating at scale · sharding and consistent hashing · tail latency, caching, fresh suggestions · the product rules, the architecture, A/B tests</span></a>
-    <a class="daycard hi" href="worksheet.html"><b>Weekend · Worksheet and learning checks</b><span>Ship a <code>pymk</code> package on the week's graph, measure recall and latency, check yourself</span></a>
-    <a class="daycard" href="talk.html"><b>The talk · slides</b><span>The whole design as a talk you can give: from friends of friends to a billion-user system</span></a>
+    <a class="daycard" href="day_1.html"><b>Day 1 · Common friends</b><span>Counting mutual friends is intersecting two friend lists: from nested loops to hash sets, merges and bitsets, then with the lists on different machines.</span></a>
+    <a class="daycard" href="day_2.html"><b>Day 2 · The top k</b><span>From counts to the ten shown: a fixed list versus a stream of new friendships, then the same choice spread across many machines.</span></a>
+    <a class="daycard" href="day_3.html"><b>Day 3 · It is a graph</b><span>The friend lists form a graph, and walking it two steps out finds the candidates, shows why popular people are expensive, and gives better scores.</span></a>
+    <a class="daycard" href="day_4.html"><b>Day 4 · Learn what engagement means</b><span>Replace the naive score with a learned probability: the ML design, the data science and A/B tests that judge it, then representations learned from behaviour.</span></a>
+    <a class="daycard" href="day_5.html"><b>Day 5 · A billion users</b><span>The distributed algorithms that serve every user fast, then the product design around them: privacy, notifications, fairness, cold start.</span></a>
+    <a class="daycard hi" href="worksheet.html"><b>Worksheet and checks</b><span>The lab's work items, a check for every day, and interview drills in coding, ML design and system design.</span></a>
+  </div>
+
+  <h3>The lab</h3>
+  <p>The week's lab is the <code>pymk</code> package in <a href="https://github.com/dpaul0501/ai-engineer-100-labs/tree/main/week_01"><code>week_01/</code></a> of this repository. You build People You May Know end to end on a synthetic network of 10,000 users and 100,000 friendships: the exact mutual-friend baseline, faster approximate candidates, a learned ranker, and a small serving layer with a cache and the "never suggest" rules. The acceptance tests start red; its <code>README.md</code> says how to set up and in what order to work, and the <a href="worksheet.html">worksheet</a> lists the work items.</p>
+
+  <div class="check" data-check="index">
+    <div class="ch"><b>Checkpoint · The problem</b><span data-count></span></div>
+    <label class="ck"><input type="checkbox" data-id="r1" data-dim="sys"><span class="tx">State the inputs, outputs and constraints of People You May Know out loud, in under a minute, as you would open an interview answer.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="r2" data-dim="sys"><span class="tx">From a billion users with 300 friends each, work out the list size (2.4 TB at 8 bytes per id) and why comparing with every user cannot meet the time budget.</span><span class="dim sys">System Design</span></label>
+    <label class="ck"><input type="checkbox" data-id="r3" data-dim="ml"><span class="tx">Name the countable events from shown to interact, and say what goes wrong if you optimise for clicks alone.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r4" data-dim="ml"><span class="tx">Explain in two sentences why the number of mutual friends is a sensible first score.</span><span class="dim ml">ML</span></label>
+    <label class="ck"><input type="checkbox" data-id="r5" data-dim="dsa"><span class="tx">Count mutual friends by hand on the six people: Esha 2, Dev 1, Farid 1; say why Ben, Chloe and You are excluded and why Dev comes before Farid.</span><span class="dim dsa">DSA</span></label>
+    <label class="ck"><input type="checkbox" data-id="r6" data-dim="dsa"><span class="tx">Type <code>mutual_friends</code> and <code>suggest</code> yourself and make the asserts pass.</span><span class="dim dsa">DSA</span></label>
   </div>
 </section>
-
-<div class="pager"><span></span><a class="btn pri" href="day_1.html">Count it exactly →</a></div>
+<div class="pager"><span></span><a class="btn pri" href="day_1.html">Common friends →</a></div>
 <footer>
   <p><b>License.</b> This page, its text, code and figures, is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License (CC BY 4.0)</a>. You may share and adapt it for any purpose, including commercially, if you give credit ("People You May Know, AI Engineer 100, Debjyoti Paul, CC BY 4.0"), link to the license, and note any changes.</p>
   <p><b>Third-party material.</b> No third-party text, figures or code are reproduced; papers, videos, blogs, tools and problems are linked and remain under their owners' terms. "People You May Know" is discussed as a classic interview design problem; nothing here describes any company's internal system. Measurements use a synthetic graph generated by the week's own script. Problem names refer to LeetCode problems, which are LeetCode's; solutions here are original.</p>
@@ -776,165 +459,9 @@ const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
 const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
 const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
-const chunk = (t, p) => t.match(p) || [];
-const simChunks = t => $("simMode").value === "words" ? t.split(/\s+/).filter(Boolean) : chunk(t, PAT);
-function show(bytes) {
-  try { return dec.decode(new Uint8Array(bytes)).replace(/ /g, "·").replace(/\n/g, "⏎"); }
-  catch { return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" "); }
-}
-const span = (bytes, cls = "") => `<span class="tk${cls}">${esc(show(bytes))}</span>`;
-
-/* ---------- Chunker ---------- */
-function chRender() {
-  const t = $("chText").value, marks = $("chMarks").checked;
-  const cs = chunk(t, marks ? PAT_M : PAT);
-  $("chOut").innerHTML = cs.map(c => {
-    const lone = /^\p{M}/u.test(c);
-    return `<span class="tk${lone ? " mk" : ""}" title="${enc.encode(c).length} bytes">${esc(c.replace(/ /g, "·"))}</span>`;
-  }).join("");
-  const lone = cs.filter(c => /^\p{M}/u.test(c)).length;
-  $("chStat").innerHTML = `<b>${cs.length}</b> chunks` + (lone ? ` · <b>${lone}</b> start with a mark (red): a word was cut in two` : "");
-}
-if ($("chText")) {
-  $("chText").addEventListener("input", chRender);
-  $("chMarks").addEventListener("change", chRender);
-  chRender();
-}
-
-/* ---------- Min-heap of [negCount, a, b] ---------- */
-const less = (x, y) => x[0] !== y[0] ? x[0] < y[0] : x[1] !== y[1] ? x[1] < y[1] : x[2] < y[2];
-function hpush(h, v) { h.push(v); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(h[i], h[p])) break; [h[i], h[p]] = [h[p], h[i]]; i = p; } }
-function sift(h, i) { const n = h.length; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < n && less(h[l], h[m])) m = l; if (r < n && less(h[r], h[m])) m = r; if (m === i) return; [h[i], h[m]] = [h[m], h[i]]; i = m; } }
-function hpop(h) { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; sift(h, 0); } return top; }
-function heapify(h) { for (let i = (h.length >> 1) - 1; i >= 0; i--) sift(h, i); }
-
-/* ---------- Trainer, written exactly like the Python ---------- */
-const K = (a, b) => a + "," + b;
-const unK = k => k.split(",").map(Number);
-function mergeIds(ids, a, b, id) {
-  const out = [];
-  for (let i = 0; i < ids.length;) {
-    if (i + 1 < ids.length && ids[i] === a && ids[i + 1] === b) { out.push(id); i += 2; }
-    else { out.push(ids[i]); i += 1; }
-  }
-  return out;
-}
-let S;
-function simInit() {
-  const cnt = new Map();
-  for (const c of simChunks($("simText").value)) cnt.set(c, (cnt.get(c) || 0) + 1);
-  const words = [...cnt].map(([c, f]) => ({ids: [...enc.encode(c)], f}));
-  const vocab = new Map(); for (let i = 0; i < 256; i++) vocab.set(i, [i]);
-  const counts = new Map(), where = new Map();
-  words.forEach((w, wi) => {
-    for (let i = 0; i + 1 < w.ids.length; i++) {
-      const k = K(w.ids[i], w.ids[i + 1]);
-      counts.set(k, (counts.get(k) || 0) + w.f);
-      if (!where.has(k)) where.set(k, new Set());
-      where.get(k).add(wi);
-    }
-  });
-  const heap = [...counts].map(([k, c]) => [-c, ...unK(k)]); heapify(heap);
-  const bytes = words.reduce((s, w) => s + w.ids.length * w.f, 0);
-  S = {words, vocab, counts, where, heap, merges: [], done: false, bytes, delta: new Map(), visited: new Set(), last: -1, stalePops: 0, pops: 0, log: []};
-  S.log.push(`<div class="s">${words.length} unique chunks, ${counts.size} distinct pairs, heap of ${heap.length}. Press "Next merge".</div>`);
-}
-function simStep() {
-  if (S.done) return false;
-  S.delta = new Map(); S.visited = new Set();
-  for (;;) {
-    if (!S.heap.length) { S.done = true; S.log.push(`<div class="h">Stop: the heap is empty. Every chunk is one token.</div>`); return false; }
-    const [neg, a, b] = hpop(S.heap); S.pops++;
-    const k = K(a, b), live = S.counts.get(k) || 0;
-    if (live !== -neg) {
-      S.stalePops++;
-      S.log.push(`<div class="s">pop (${-neg}, ${esc(show(S.vocab.get(a)))}+${esc(show(S.vocab.get(b)))}) · live count is ${live}, not ${-neg} → stale, throw away</div>`);
-      continue;
-    }
-    if (live < 2) { S.done = true; S.log.push(`<div class="h">Stop: the best pair occurs ${live} time. Nothing is worth merging.</div>`); return false; }
-    const id = 256 + S.merges.length;
-    S.vocab.set(id, S.vocab.get(a).concat(S.vocab.get(b)));
-    S.merges.push({a, b, id, count: live}); S.last = id;
-    const wis = [...(S.where.get(k) || [])];
-    for (const wi of wis) {
-      const w = S.words[wi], old = w.ids, nw = mergeIds(old, a, b, id);
-      w.ids = nw; S.visited.add(wi);
-      for (let i = 0; i + 1 < old.length; i++) { const q = K(old[i], old[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) - w.f); S.where.get(q)?.delete(wi); }
-      for (let i = 0; i + 1 < nw.length; i++) { const q = K(nw[i], nw[i + 1]); S.delta.set(q, (S.delta.get(q) || 0) + w.f); if (!S.where.has(q)) S.where.set(q, new Set()); S.where.get(q).add(wi); }
-    }
-    const pushed = [];
-    for (const [q, d] of S.delta) {
-      if (!d) continue;
-      const c = (S.counts.get(q) || 0) + d; S.counts.set(q, c);
-      if (c > 0) { hpush(S.heap, [-c, ...unK(q)]); pushed.push(q); }
-    }
-    S.counts.delete(k); S.where.delete(k);
-    const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
-    S.log.push(`<div class="h">merge #${S.merges.length}: ${esc(show(S.vocab.get(a)))} + ${esc(show(S.vocab.get(b)))} → ${esc(show(S.vocab.get(id)))} (id ${id}, count ${live})</div>` +
-      `<div>visited ${wis.length} of ${S.words.length} chunks via where[pair] · pushed ${pushed.length} new counts · corpus now ${tokens} tokens</div>`);
-    return true;
-  }
-}
-function simRender() {
-  const tokens = S.words.reduce((s, w) => s + w.ids.length * w.f, 0);
-  $("simStat").innerHTML = `<b>${S.bytes}</b> bytes → <b>${tokens}</b> tokens · ${S.merges.length} merges · stale pops ${S.stalePops} of ${S.pops} · heap ${S.heap.length}`;
-  $("simVisited").textContent = S.visited.size ? `${S.visited.size} visited` : "";
-  $("simWords").innerHTML = S.words.map((w, wi) =>
-    `<div class="wrow${S.visited.has(wi) ? " hit" : ""}"><span class="f">×${w.f}</span><span class="toks" style="margin:0">${w.ids.map(i => span(S.vocab.get(i), i === S.last ? " new" : "")).join("")}</span></div>`).join("");
-  const rows = [...S.counts].filter(([k, c]) => c > 0 || S.delta.get(k));
-  rows.sort((x, y) => y[1] - x[1] || (unK(x[0])[0] - unK(y[0])[0]) || (unK(x[0])[1] - unK(y[0])[1]));
-  $("simCounts").innerHTML = rows.slice(0, 10).map(([k, c]) => {
-    const [a, b] = unK(k), d = S.delta.get(k) || 0;
-    return `<tr><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${c}</td><td class="r ${d > 0 ? "up" : d < 0 ? "down" : ""}">${d > 0 ? "+" + d : d < 0 ? d : ""}</td></tr>`;
-  }).join("") || `<tr><td class="muted">no pairs left</td></tr>`;
-  const top = [...S.heap].sort((x, y) => less(x, y) ? -1 : less(y, x) ? 1 : 0).slice(0, 10);
-  $("simHeap").innerHTML = top.map(([neg, a, b]) => {
-    const live = S.counts.get(K(a, b)) || 0, stale = live !== -neg;
-    return `<tr class="${stale ? "stale" : ""}"><td>${span(S.vocab.get(a))}${span(S.vocab.get(b))}</td><td class="r">${-neg}</td><td class="r">${stale ? "live " + live : "current"}</td></tr>`;
-  }).join("") || `<tr><td class="muted">empty</td></tr>`;
-  $("simMerges").innerHTML = S.merges.slice(-10).map(m =>
-    `<tr><td class="r">${m.id}</td><td>${span(S.vocab.get(m.a))} + ${span(S.vocab.get(m.b))}</td><td>→ ${span(S.vocab.get(m.id), m.id === S.last ? " new" : "")}</td></tr>`).join("") || `<tr><td class="muted">none yet: the vocabulary is the 256 bytes</td></tr>`;
-  $("simLog").innerHTML = S.log.slice(-40).join("");
-  $("simLog").scrollTop = $("simLog").scrollHeight;
-  encRender();
-}
-if ($("simText")) {
-$("simStep").onclick = () => { simStep(); simRender(); };
-$("simAll").onclick = () => { let n = 0; while (n++ < 500 && simStep()); simRender(); };
-$("simReset").onclick = () => { simInit(); simRender(); };
-$("simText").addEventListener("input", () => { simInit(); simRender(); });
-document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { $("simText").value = b.dataset.preset; $("simMode").value = b.dataset.mode; simInit(); simRender(); });
-$("simMode").addEventListener("change", () => { simInit(); simRender(); });
-
-/* ---------- Encoder: replay merges by rank ---------- */
-var encRender = function () {
-  const ranks = new Map(S.merges.map(m => [K(m.a, m.b), m.id]));
-  const out = [], log = [];
-  for (const c of simChunks($("encText").value)) {
-    let ids = [...enc.encode(c)];
-    const steps = [];
-    while (ids.length >= 2) {
-      let best = null, br = Infinity;
-      for (let i = 0; i + 1 < ids.length; i++) { const r = ranks.get(K(ids[i], ids[i + 1])); if (r !== undefined && r < br) { br = r; best = [ids[i], ids[i + 1]]; } }
-      if (!best) break;
-      ids = mergeIds(ids, best[0], best[1], br);
-      steps.push(`rank ${br - 256}: ${esc(show(S.vocab.get(br)))}`);
-    }
-    out.push(...ids);
-    log.push(`<div><b>${esc(c.replace(/ /g, "·"))}</b> <span class="s">${steps.length ? steps.join(" → ") : "no learned pair: stays bytes"}</span></div>`);
-  }
-  $("encOut").innerHTML = out.map(i => span(S.vocab.get(i))).join("");
-  const nb = enc.encode($("encText").value).length;
-  $("encStat").innerHTML = `<b>${nb}</b> bytes → <b>${out.length}</b> tokens with ${S.merges.length} learned merges`;
-  $("encLog").innerHTML = log.join("");
-};
-$("encText").addEventListener("input", encRender);
-simInit(); simRender();
-}
-
 /* ---------- Progress: checkpoints fill the coverage bars ---------- */
 const KEY = "pymk-week1-progress-v2";
-const ITEMS = [{"id": "r1", "dim": "dsa", "page": "index.html"}, {"id": "r2", "dim": "dsa", "page": "index.html"}, {"id": "r3", "dim": "dsa", "page": "index.html"}, {"id": "r4", "dim": "del", "page": "index.html"}, {"id": "r5", "dim": "ml", "page": "index.html"}, {"id": "r6", "dim": "ml", "page": "index.html"}, {"id": "r7", "dim": "ai", "page": "index.html"}, {"id": "r8", "dim": "sys", "page": "index.html"}, {"id": "d1a", "dim": "dsa", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "ml", "page": "day_1.html"}, {"id": "d1g", "dim": "ml", "page": "day_1.html"}, {"id": "d1h", "dim": "del", "page": "day_1.html"}, {"id": "d2a", "dim": "ml", "page": "day_2.html"}, {"id": "d2b", "dim": "ml", "page": "day_2.html"}, {"id": "d2c", "dim": "ml", "page": "day_2.html"}, {"id": "d2d", "dim": "ml", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "dsa", "page": "day_2.html"}, {"id": "d2g", "dim": "dsa", "page": "day_2.html"}, {"id": "d2h", "dim": "ml", "page": "day_2.html"}, {"id": "d3a", "dim": "ml", "page": "day_3.html"}, {"id": "d3b", "dim": "ml", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "dsa", "page": "day_3.html"}, {"id": "d3f", "dim": "dsa", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "sys", "page": "day_3.html"}, {"id": "d3i", "dim": "del", "page": "day_3.html"}, {"id": "d4a", "dim": "ai", "page": "day_4.html"}, {"id": "d4b", "dim": "ml", "page": "day_4.html"}, {"id": "d4c", "dim": "ml", "page": "day_4.html"}, {"id": "d4d", "dim": "ml", "page": "day_4.html"}, {"id": "d4e", "dim": "ml", "page": "day_4.html"}, {"id": "d4f", "dim": "ml", "page": "day_4.html"}, {"id": "d4g", "dim": "ai", "page": "day_4.html"}, {"id": "d4h", "dim": "dsa", "page": "day_4.html"}, {"id": "d5a", "dim": "sys", "page": "day_5.html"}, {"id": "d5b", "dim": "dsa", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "sys", "page": "day_5.html"}, {"id": "d5f", "dim": "sys", "page": "day_5.html"}, {"id": "d5g", "dim": "sys", "page": "day_5.html"}, {"id": "d5h", "dim": "ml", "page": "day_5.html"}, {"id": "d5i", "dim": "ai", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "sys", "page": "worksheet.html"}, {"id": "w4", "dim": "ml", "page": "worksheet.html"}, {"id": "w5", "dim": "dsa", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "del", "page": "worksheet.html"}, {"id": "w8", "dim": "sys", "page": "worksheet.html"}, {"id": "c1", "dim": "dsa", "page": "worksheet.html"}, {"id": "c2", "dim": "dsa", "page": "worksheet.html"}, {"id": "c3", "dim": "ml", "page": "worksheet.html"}, {"id": "c4", "dim": "dsa", "page": "worksheet.html"}, {"id": "c5", "dim": "ml", "page": "worksheet.html"}, {"id": "c6", "dim": "sys", "page": "worksheet.html"}, {"id": "c7", "dim": "ml", "page": "worksheet.html"}, {"id": "c8", "dim": "dsa", "page": "worksheet.html"}, {"id": "c9", "dim": "ml", "page": "worksheet.html"}, {"id": "c10", "dim": "ai", "page": "worksheet.html"}, {"id": "c11", "dim": "sys", "page": "worksheet.html"}, {"id": "c12", "dim": "sys", "page": "worksheet.html"}, {"id": "c13", "dim": "del", "page": "worksheet.html"}];
+const ITEMS = [{"id": "r1", "dim": "sys", "page": "index.html"}, {"id": "r2", "dim": "sys", "page": "index.html"}, {"id": "r3", "dim": "ml", "page": "index.html"}, {"id": "r4", "dim": "ml", "page": "index.html"}, {"id": "r5", "dim": "dsa", "page": "index.html"}, {"id": "r6", "dim": "dsa", "page": "index.html"}, {"id": "d1a", "dim": "dsa", "page": "day_1.html"}, {"id": "d1b", "dim": "dsa", "page": "day_1.html"}, {"id": "d1c", "dim": "dsa", "page": "day_1.html"}, {"id": "d1d", "dim": "dsa", "page": "day_1.html"}, {"id": "d1e", "dim": "dsa", "page": "day_1.html"}, {"id": "d1f", "dim": "dsa", "page": "day_1.html"}, {"id": "d1g", "dim": "sys", "page": "day_1.html"}, {"id": "d1h", "dim": "ml", "page": "day_1.html"}, {"id": "d1i", "dim": "sys", "page": "day_1.html"}, {"id": "d2a", "dim": "dsa", "page": "day_2.html"}, {"id": "d2b", "dim": "dsa", "page": "day_2.html"}, {"id": "d2c", "dim": "dsa", "page": "day_2.html"}, {"id": "d2d", "dim": "dsa", "page": "day_2.html"}, {"id": "d2e", "dim": "dsa", "page": "day_2.html"}, {"id": "d2f", "dim": "ml", "page": "day_2.html"}, {"id": "d2g", "dim": "ml", "page": "day_2.html"}, {"id": "d2h", "dim": "sys", "page": "day_2.html"}, {"id": "d3a", "dim": "dsa", "page": "day_3.html"}, {"id": "d3b", "dim": "dsa", "page": "day_3.html"}, {"id": "d3c", "dim": "dsa", "page": "day_3.html"}, {"id": "d3d", "dim": "dsa", "page": "day_3.html"}, {"id": "d3e", "dim": "ml", "page": "day_3.html"}, {"id": "d3f", "dim": "ml", "page": "day_3.html"}, {"id": "d3g", "dim": "dsa", "page": "day_3.html"}, {"id": "d3h", "dim": "sys", "page": "day_3.html"}, {"id": "d4a", "dim": "ml", "page": "day_4.html"}, {"id": "d4b", "dim": "ml", "page": "day_4.html"}, {"id": "d4c", "dim": "ml", "page": "day_4.html"}, {"id": "d4d", "dim": "ml", "page": "day_4.html"}, {"id": "d4e", "dim": "ml", "page": "day_4.html"}, {"id": "d4f", "dim": "ml", "page": "day_4.html"}, {"id": "d4g", "dim": "del", "page": "day_4.html"}, {"id": "d4h", "dim": "ml", "page": "day_4.html"}, {"id": "d4i", "dim": "ai", "page": "day_4.html"}, {"id": "d4j", "dim": "ai", "page": "day_4.html"}, {"id": "d5a", "dim": "sys", "page": "day_5.html"}, {"id": "d5b", "dim": "sys", "page": "day_5.html"}, {"id": "d5c", "dim": "dsa", "page": "day_5.html"}, {"id": "d5d", "dim": "sys", "page": "day_5.html"}, {"id": "d5e", "dim": "dsa", "page": "day_5.html"}, {"id": "d5f", "dim": "sys", "page": "day_5.html"}, {"id": "d5g", "dim": "sys", "page": "day_5.html"}, {"id": "d5h", "dim": "ml", "page": "day_5.html"}, {"id": "d5i", "dim": "del", "page": "day_5.html"}, {"id": "d5j", "dim": "sys", "page": "day_5.html"}, {"id": "w1", "dim": "del", "page": "worksheet.html"}, {"id": "w2", "dim": "dsa", "page": "worksheet.html"}, {"id": "w3", "dim": "sys", "page": "worksheet.html"}, {"id": "w4", "dim": "ml", "page": "worksheet.html"}, {"id": "w5", "dim": "dsa", "page": "worksheet.html"}, {"id": "w6", "dim": "ml", "page": "worksheet.html"}, {"id": "w7", "dim": "del", "page": "worksheet.html"}, {"id": "w8", "dim": "sys", "page": "worksheet.html"}, {"id": "c1", "dim": "dsa", "page": "worksheet.html"}, {"id": "c2", "dim": "dsa", "page": "worksheet.html"}, {"id": "c3", "dim": "sys", "page": "worksheet.html"}, {"id": "c4", "dim": "ml", "page": "worksheet.html"}, {"id": "c5", "dim": "dsa", "page": "worksheet.html"}, {"id": "c6", "dim": "ml", "page": "worksheet.html"}, {"id": "c7", "dim": "sys", "page": "worksheet.html"}, {"id": "c8", "dim": "dsa", "page": "worksheet.html"}, {"id": "c9", "dim": "ml", "page": "worksheet.html"}, {"id": "c10", "dim": "sys", "page": "worksheet.html"}, {"id": "c11", "dim": "ml", "page": "worksheet.html"}, {"id": "c12", "dim": "ml", "page": "worksheet.html"}, {"id": "c13", "dim": "del", "page": "worksheet.html"}, {"id": "c14", "dim": "ai", "page": "worksheet.html"}, {"id": "c15", "dim": "ai", "page": "worksheet.html"}, {"id": "c16", "dim": "sys", "page": "worksheet.html"}, {"id": "c17", "dim": "dsa", "page": "worksheet.html"}, {"id": "c18", "dim": "del", "page": "worksheet.html"}, {"id": "c19", "dim": "sys", "page": "worksheet.html"}, {"id": "c20", "dim": "ml", "page": "worksheet.html"}];
 const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
 let done = new Set();
 try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}

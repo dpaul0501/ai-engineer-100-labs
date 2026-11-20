@@ -1,0 +1,7 @@
+You and Esha share ['Ben', 'Chloe']
+intersect_nested   common=[3, 9, 20] ops=25
+intersect_merge    common=[3, 9, 20] ops=9
+intersect_binary   common=[3, 9, 20] ops=20
+intersect_gallop   common=[3, 9, 20] ops=14
+intersect_hash     ops=4
+3000 random tests passed

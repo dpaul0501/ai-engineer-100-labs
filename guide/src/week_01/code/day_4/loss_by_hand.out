@@ -1,0 +1,13 @@
+y=1, p=0.9: loss 0.11
+y=1, p=0.1: loss 2.30
+y=0, p=0.9: loss 2.30
+confidently wrong / confidently right: 21.9x
+true rate 0.2: best q under log loss 0.20, under absolute error 0.01
+  report q=0.1: expected log loss 0.5448
+  report q=0.2: expected log loss 0.5004
+  report q=0.3: expected log loss 0.5261
+accuracy 0.75 -> 0.75; log loss 0.4298 -> 0.3791
+accuracy of 'no' with 100 positives in 10,000: 99%
+AUC of scores (3, 2, 2, 1) for labels (1, 1, 0, 0): 0.875
+average precision of scores (4, 3, 2, 1), labels (1, 0, 1, 0): 0.833
+odds before 0.00200, after 0.04008, ratio 20; log r = -3.00

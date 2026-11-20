@@ -1,0 +1,9 @@
+<div class="tablewrap"><table>
+      <tr><th>Score</th><th>What it rewards</th><th class="num">recall@10</th><th>Cost per user</th></tr>
+      <tr><td>Mutual friends</td><td>many shared friends</td><td class="num">0.0524</td><td>sum of friends' degrees</td></tr>
+      <tr><td>Mutual friends, hubs over 200 skipped</td><td>shared non-hub friends</td><td class="num">0.0533</td><td>60% less on average</td></tr>
+      <tr><td>Jaccard</td><td>similar circles; penalises popular candidates</td><td class="num">0.0287</td><td>same walk</td></tr>
+      <tr><td>Resource allocation</td><td>shared friends with small circles</td><td class="num">0.0616</td><td>same walk</td></tr>
+      <tr><td>Adamic–Adar</td><td>shared friends, gently discounted</td><td class="num">0.0638</td><td>same walk</td></tr>
+      <tr class="hi"><td>Personalised PageRank, α = 0.3</td><td>all short routes, hubs diluted</td><td class="num">0.0674</td><td>4.8 million updates, offline</td></tr>
+    </table></div>

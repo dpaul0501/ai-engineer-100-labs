@@ -1,0 +1,2 @@
+one shard per item: merge is exact; split counts: local top 1 returns Dev, the truth is Esha
+TPUT and shuffle agree with brute force on 3,000 random cases

@@ -1,0 +1,11 @@
+users 10000 friendships 100000 list entries 200000
+adjacency list (CSR): indptr bytes 80008 indices bytes 800000 total 880008
+edge list bytes (two 4-byte ids) 800000
+matrix cells 100000000 bytes at 1 bit 12500000 bytes at 1 byte 100000000
+share of matrix cells that are 1: 0.2000%
+mean cells scanned per friend found in a matrix row: 500
+billion: friendships 150000000000 list entries 300000000000
+billion: matrix bytes at 1 bit 125000000000000000
+billion: CSR bytes, 4-byte ids 1208000000008 8-byte ids 2408000000008
+billion: edge list bytes, 8-byte ids 2400000000000
+2^32 = 4294967296

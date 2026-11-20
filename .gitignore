@@ -6,3 +6,5 @@ __pycache__/
 site/
 *.egg-info/
 .hypothesis/
+
+guide/src/week_01/code/data/*.csv

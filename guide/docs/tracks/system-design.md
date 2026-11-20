@@ -4,30 +4,32 @@ Each week's design problem taken to production: estimates with stated assumption
 
 ## Week 1: People You May Know
 
-- **[Day 3: Read less](../week_01/day_3.html):** several sources under one budget
+- **[Day 5: A billion users](../week_01/day_5.html):** 1 · estimate before you draw
     - The situation
-    - Try the obvious thing: one source, best effort
-    - The next idea: give each source a fixed share
-    - Measure it: fixed shares against pooling
-    - What may be approximate, and what must stay exact
-    - The whole path
-- **[Day 5: A billion users](../week_01/day_5.html):** how big is a billion users?
+    - The obvious attempt
+    - The conclusion the numbers force
+- **[Day 5: A billion users](../week_01/day_5.html):** 2 · batch precompute, online re-rank, and how stale is too stale
     - The situation
-    - Try the obvious thing
-    - The idea: estimate on paper, with every assumption labelled
-- **[Day 5: A billion users](../week_01/day_5.html):** fast at the tail, fresh, and consistent enough
-    - 1 · Fast: fan-out makes the slow machine everyone's problem
-    - 2 · Hot keys
-    - 3 · Little's law: how many requests are in flight
-    - 4 · Fresh: precompute, or compute on request?
-    - 5 · Incremental updates: when two people connect, whose suggestions change?
-    - 6 · Consistent enough: why the final check runs on every response
-- **[Day 5: A billion users](../week_01/day_5.html):** the product: rules people trust, goals traded off, the whole architecture
-    - 1 · The rules people must be able to trust
-    - 2 · The goals traded off against each other
-    - 3 · The whole architecture, where every box answers a problem from the week
-    - 4 · Training–serving skew, and point-in-time features
-- **[Day 5: A billion users](../week_01/day_5.html):** how to walk an interviewer through it
+    - The obvious worry, measured: staleness
+    - The trade-off
+- **[Day 5: A billion users](../week_01/day_5.html):** 5 · incremental updates from the stream of new friendships
+    - The situation
+    - Work it by hand
+    - Measured on the week's edge stream
+    - Versioned keys and snapshots
+- **[Day 5: A billion users](../week_01/day_5.html):** 6 · fan-out, tail latency, hedged requests and Little's law
+    - The situation
+    - The obvious answer, and why it is wrong
+    - Hedged requests
+    - Little's law: how many requests are in flight
+- **[Day 5: A billion users](../week_01/day_5.html):** 8 · the architecture end to end
+- **[Day 5: A billion users](../week_01/day_5.html):** 9 · rules on every response
+    - The situation
+    - Explaining a suggestion, and its privacy risk
+    - Fatigue and notifications
+    - Fair exposure
+    - Cold start
+- **[Day 5: A billion users](../week_01/day_5.html):** 10 · the same design in other products
 
 ## Week 3: Tokenization
 

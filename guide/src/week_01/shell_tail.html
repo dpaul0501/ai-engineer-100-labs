@@ -1,0 +1,72 @@
+<script>window.MathJax = {tex: {inlineMath: [["\\(", "\\)"]]}, svg: {fontCache: "global"}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder("utf-8", {fatal: true});
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAT = /'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
+const PAT_M = /'(?:[sdmt]|ll|ve|re)| ?[\p{L}\p{M}]+| ?\p{N}+| ?[^\s\p{L}\p{M}\p{N}]+|\s+(?!\S)|\s+/gu;
+/* ---------- Progress: checkpoints fill the coverage bars ---------- */
+const KEY = "pymk-week1-progress-v2";
+const ITEMS = {{ITEMS}};
+const DIMS = [["dsa", "DSA"], ["ml", "ML"], ["ai", "AI"], ["sys", "System Design"], ["del", "Delivery"]];
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch {}
+const boxes = [...document.querySelectorAll("label.ck input")];
+function save() { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch {} }
+function progRender() {
+  const html = DIMS.map(([d, name]) => {
+    const all = ITEMS.filter(it => it.dim === d), n = all.filter(it => done.has(it.id)).length;
+    const pct = all.length ? Math.round(100 * n / all.length) : 0;
+    return `<div class="prow"><span class="t-${d}">${name}</span><span class="bar"><i style="width:${pct}%;background:var(--${d})"></i></span><span class="v">${n}/${all.length}</span></div>`;
+  }).join("");
+  document.querySelectorAll("[data-prog]").forEach(el => el.innerHTML = html);
+  const n = ITEMS.filter(it => done.has(it.id)).length;
+  document.querySelectorAll("[data-total]").forEach(el => el.textContent = `${n} of ${ITEMS.length} checks done this week`);
+  document.querySelectorAll(".check").forEach(c => {
+    const bs = [...c.querySelectorAll("input")], k = bs.filter(b => b.checked).length;
+    c.querySelector("[data-count]").textContent = `${k}/${bs.length}`;
+  });
+  document.querySelectorAll("nav.rail a[data-page]").forEach(link => {
+    const mine = ITEMS.filter(it => it.page === link.dataset.page), all = mine.length && mine.every(it => done.has(it.id));
+    let ok = link.querySelector(".ok");
+    if (all && !ok) { ok = document.createElement("span"); ok.className = "ok"; ok.textContent = "✓"; link.append(ok); }
+    else if (!all && ok) ok.remove();
+  });
+}
+boxes.forEach(b => {
+  b.checked = done.has(b.dataset.id);
+  b.addEventListener("change", () => { b.checked ? done.add(b.dataset.id) : done.delete(b.dataset.id); save(); progRender(); });
+});
+document.querySelectorAll("[data-reset]").forEach(btn => {
+  let armed = false, t;
+  btn.addEventListener("click", () => {
+    if (!armed) { armed = true; btn.textContent = "Click again to clear"; t = setTimeout(() => { armed = false; btn.textContent = "Reset"; }, 3000); return; }
+    clearTimeout(t); armed = false; btn.textContent = "Reset";
+    done.clear(); boxes.forEach(b => b.checked = false); save(); progRender();
+  });
+});
+progRender();
+
+/* ---------- Copy buttons on code cards ---------- */
+document.querySelectorAll(".code").forEach(card => {
+  const btn = card.querySelector("button.copy"), code = card.querySelector("code");
+  if (!btn || !code) return;
+  btn.addEventListener("click", () => {
+    const done = t => { btn.textContent = t; setTimeout(() => btn.textContent = "Copy", 1500); };
+    navigator.clipboard.writeText(code.textContent).then(() => done("Copied"), () => {
+      const r = document.createRange(); r.selectNodeContents(code);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done("Selected: press Ctrl/Cmd+C");
+    });
+  });
+});
+
+})();
+</script>
+
+</body></html>

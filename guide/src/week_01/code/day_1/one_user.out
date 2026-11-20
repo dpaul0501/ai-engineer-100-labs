@@ -1,0 +1,9 @@
+You: {'Dev': 1, 'Esha': 2, 'Farid': 1} entries read 8
+entries read per user: mean 1477, median 1023, worst 51806 (user 1781, 1480 friends)
+two-step people per user: mean 1191, worst user's 8119
+sum over all users of entries read 14768324 (= sum of squared list lengths)
+one intersection per two-step person: mean 19714 lookups per user, 13.3x the counting pass
+comparing with all 9999 others (the reading's loop): 9999 intersections per user
+worst user's three largest friends' lists: [1132, 1117, 1108], 6% of what it reads
+all 10000 users counted in 3.12 s on one laptop core (0.31 ms per user)
+worst user alone: 11.91 ms

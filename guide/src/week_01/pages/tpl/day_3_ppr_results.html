@@ -1,0 +1,24 @@
+<div class="tablewrap"><table>
+      <tr><th class="num">rounds t</th><th class="num">total error (against 300 rounds)</th><th class="num">guaranteed at most 2(0.7)<sup>t</sup></th></tr>
+      <tr><td class="num">1</td><td class="num">0.935</td><td class="num">1.40</td></tr>
+      <tr><td class="num">5</td><td class="num">0.0295</td><td class="num">0.336</td></tr>
+      <tr><td class="num">10</td><td class="num">1.8 × 10<sup>−4</sup></td><td class="num">0.0565</td></tr>
+      <tr><td class="num">20</td><td class="num">9.5 × 10<sup>−9</sup></td><td class="num">1.6 × 10<sup>−3</sup></td></tr>
+      <tr class="hi"><td class="num">30</td><td class="num">1.0 × 10<sup>−12</sup></td><td class="num">4.5 × 10<sup>−5</sup></td></tr>
+    </table></div>
+    <p>The error shrinks every round, faster than the guarantee (the deep block proves the guarantee). Now the quality, on the same time split as section 5:</p>
+    <div class="chart"><div class="t">recall@10 on the time split, 9,357 evaluated users</div>
+      <div class="br"><span>mutual friends</span><span class="tr"><i style="width:77.7%;--c:var(--muted)"></i></span><span class="v">0.0524</span></div>
+      <div class="br"><span>Adamic–Adar</span><span class="tr"><i style="width:94.7%"></i></span><span class="v">0.0638</span></div>
+      <div class="br"><span>PageRank, α = 0.15</span><span class="tr"><i style="width:96.4%;--c:var(--ai)"></i></span><span class="v">0.0650</span></div>
+      <div class="br"><span>PageRank, α = 0.5</span><span class="tr"><i style="width:98.1%;--c:var(--ai)"></i></span><span class="v">0.0661</span></div>
+      <div class="br"><span>PageRank, α = 0.3</span><span class="tr"><i style="width:100%;--c:var(--ai)"></i></span><span class="v">0.0674</span></div>
+      <div class="cap">Bars to scale. PageRank at α = 0.3 finds 2,292 of the 40,000 (user, future friend) pairs in its top 10s.</div>
+    </div>
+    <ul>
+      <li><b>The walk is the best single score on this page</b>: 0.0674 against 0.0524 for the count, +0.0150 (paired standard error 0.0015), and above Adamic–Adar's 0.0638.</li>
+      <li><b>It wins mostly by ranking, not by reaching.</b> Of its 2,292 hits at α = 0.3, only 13 are people more than two steps away; at α = 0.15, which lets the walker wander further, 70; at α = 0.5, none. In a top 10, three-step people rarely beat two-step people. The gain comes from scoring the two-step candidates better: hubs diluted, plus credit for many short routes.</li>
+      <li><b>It costs much more.</b> Each round touches all 160,000 list entries of the past graph, so 30 rounds are 4,800,000 updates per user, against about a thousand reads for the two-step walk. So walk scores are computed offline in batch, for everyone, and stored as each user's top list; section 9 shows how that runs across machines.</li>
+    </ul>
+    <p><b>Trade-off and interview takeaway.</b> Say: "random walk with restart; it sums all short routes with hubs diluted, its two-step part is resource allocation, it converges geometrically at rate 1 − α, and it runs offline." In an interview, also mention the cheaper estimate: run a few thousand actual walks and count where they stop.</p>
+    <p class="idea"><b>In one line.</b> Personalised PageRank scores everyone by a walker that keeps going home; it lifts recall@10 to 0.0674 here, mostly by ranking two-step candidates better, at a cost that makes it a batch job.</p>
