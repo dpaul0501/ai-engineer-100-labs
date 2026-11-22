@@ -77,18 +77,44 @@
           <td>(0, 1) (0, 2) (1, 2)<br>(1, 3) (1, 4)<br>(2, 4) (2, 5)</td>
           <td><code>0 1 1 0 0 0<br>1 0 1 1 1 0<br>1 1 0 0 1 1<br>0 1 0 0 0 0<br>0 1 1 0 0 0<br>0 0 1 0 0 0</code></td></tr>
     </table></div>
-    <p>A compact way to keep adjacency lists is to glue them into one array, <code>indices</code>, and keep a second array, <code>indptr</code>, saying where each person's run starts (the compressed sparse row, or CSR, layout). Ben's friends are <code>indices[indptr[1]:indptr[2]]</code>.</p>
-    {{CODE:representations.py:csr}}
-    <p><b>Measured on the week's graph</b> (10,000 users, 100,000 friendships; <code>representations.py</code>):</p>
+    <p><b>In code: a dict of dicts.</b> The first adjacency list most people write is a dictionary from each person to their friends. Make the inner one a dictionary too, and each friendship can carry a value: here, when it formed.</p>
+    {{CODE:representations.py:dict_of_dicts}}
+    <p>For the six people, Ben's entry is <code>{0: 0, 2: 2, 3: 3, 4: 4}</code>: You, Chloe, Dev and Esha, and the order each friendship arrived in. What it gives you:</p>
+    <ul>
+      <li><b>Friends of Ben</b>: read his inner dict, four entries. No scanning 10,000 cells as in a matrix row.</li>
+      <li><b>Are Ben and Esha friends?</b> <code>4 in G[1]</code>: one hash lookup, as fast as a matrix cell.</li>
+      <li><b>A new friendship</b>: two assignments. Nothing else moves.</li>
+      <li><b>A value per friendship</b>: when it formed, how often the two interact. Day 4 needs the formation time: its features may only look at friendships that formed before a cut.</li>
+    </ul>
+    <p>When there is no value to keep, the inner dict becomes a set, and that is what this week's code uses: <code>adjacency()</code> returns one set per person (a list of sets, since ids run 0 to \(n-1\)). The price of both is memory. Every entry is a full Python integer object plus a table slot holding its hash and pointers, and each table keeps empty slots spare so lookups stay fast.</p>
+
+    <p><b>Packing the lists: CSR.</b> Once the graph stops changing for a while (a nightly snapshot), the same lists fit in a much tighter layout called <b>compressed sparse row</b>, or <b>CSR</b>. The name comes from sparse matrices: it stores only the 1s of the adjacency matrix, row by row. It is two plain arrays:</p>
+    <ul>
+      <li><code>indices</code>: every friend list written end to end, each list sorted.</li>
+      <li><code>indptr</code> ("index pointer"): where each person's list starts. Person \(u\)'s friends are <code>indices[indptr[u]:indptr[u+1]]</code>.</li>
+    </ul>
+    <p>For the six people:</p>
     <div class="tablewrap"><table>
-      <tr><th>Layout</th><th class="num">Bytes</th><th>Friends of u</th><th>Are u and v friends?</th></tr>
-      <tr><td>Adjacency matrix, 1 byte per cell</td><td class="num">100,000,000</td><td>scan 10,000 cells</td><td>1 look</td></tr>
-      <tr><td>Adjacency matrix, 1 bit per cell</td><td class="num">12,500,000</td><td>scan 10,000 cells</td><td>1 look</td></tr>
-      <tr><td>Edge list, two 4-byte ids per friendship</td><td class="num">800,000</td><td>scan 100,000 rows</td><td>scan</td></tr>
-      <tr class="hi"><td>Adjacency list as CSR: <code>indptr</code> 80,008 + <code>indices</code> 800,000</td><td class="num">880,008</td><td>read your run, about 20 ids</td><td>binary search in your run</td></tr>
+      <tr><th>Position in <code>indices</code></th><th>0–1</th><th>2–5</th><th>6–9</th><th>10</th><th>11–12</th><th>13</th></tr>
+      <tr><td>Whose list</td><td>You</td><td>Ben</td><td>Chloe</td><td>Dev</td><td>Esha</td><td>Farid</td></tr>
+      <tr><td>Ids stored</td><td>1, 2</td><td>0, 2, 3, 4</td><td>0, 1, 4, 5</td><td>1</td><td>1, 2</td><td>2</td></tr>
     </table></div>
-    <p><b>At a billion users.</b> Suppose a billion users with 300 friends each. That is \(10^9 \times 300 / 2 = 1.5 \times 10^{11}\) friendships and \(3 \times 10^{11}\) list entries. The bit matrix needs \(10^{18}/8\) bytes, 125 petabytes, almost all of it zeros. CSR with 4-byte ids (enough, since \(10^9 &lt; 2^{32} \approx 4.29 \times 10^9\)) needs \(3 \times 10^{11} \times 4 = 1.2 \times 10^{12}\) bytes for <code>indices</code> plus 8 GB for <code>indptr</code>: about 1.2 TB. An edge list with 8-byte ids needs \(1.5 \times 10^{11} \times 16 = 2.4\) TB. The matrix grows with the square of the users; the lists grow with the friendships.</p>
-    <p><b>Trade-off, and what to say.</b> Adjacency lists (hash sets while the graph changes, CSR for a read-mostly snapshot) for anything social: sparse, and "friends of u" costs only the friends. An edge list for logs, streams and batch shuffles. A matrix only when the graph is small and dense, or as a slow, obviously correct reference in tests. In an interview: "it is a sparse graph; I store adjacency lists; the matrix would be \(n^2\) bits, 125 PB at a billion users."</p>
+    <p>So <code>indices = [1, 2, 0, 2, 3, 4, 0, 1, 4, 5, 1, 1, 2, 2]</code> and <code>indptr = [0, 2, 6, 10, 11, 13, 14]</code>. Ben is person 1, so his friends are <code>indices[2:6]</code> = 0, 2, 3, 4: You, Chloe, Dev, Esha. <code>indptr</code> is a running total of friend counts, and its last entry, 14, is the number of list entries (seven friendships, each stored twice). Each list sits in one contiguous run of memory and is already sorted, so Day 1's merge and binary-search intersections work on it directly. A value per friendship, like the formation time, goes in a third array lined up with <code>indices</code>. The catch: adding a friend shifts everything after that person's run.</p>
+    {{CODE:representations.py:csr}}
+
+    <p><b>The comparison, measured on the week's graph</b> (10,000 users, 100,000 friendships; <code>representations.py</code>):</p>
+    <div class="tablewrap"><table>
+      <tr><th>Layout</th><th class="num">Bytes</th><th>Friends of u</th><th>Are u and v friends?</th><th>Add a friendship</th></tr>
+      <tr><td>Adjacency matrix, 1 byte per cell</td><td class="num">100,000,000</td><td>scan 10,000 cells</td><td>1 look</td><td>set 2 cells</td></tr>
+      <tr><td>Adjacency matrix, 1 bit per cell</td><td class="num">12,500,000</td><td>scan 10,000 cells</td><td>1 look</td><td>set 2 bits</td></tr>
+      <tr><td>Edge list, two 4-byte ids per friendship</td><td class="num">800,000</td><td>scan 100,000 rows</td><td>scan</td><td>append 1 row</td></tr>
+      <tr><td>Dict of dicts (with formation time)</td><td class="num">16,790,644</td><td>read your dict, about 20 ids</td><td>1 hash lookup</td><td>2 assignments</td></tr>
+      <tr><td>List of sets (no value)</td><td class="num">19,433,792</td><td>read your set, about 20 ids</td><td>1 hash lookup</td><td>2 inserts</td></tr>
+      <tr class="hi"><td>CSR: <code>indptr</code> 80,008 + <code>indices</code> 800,000</td><td class="num">880,008</td><td>read your run, about 20 ids</td><td>binary search in your run</td><td>rebuild, or shift everything after your run</td></tr>
+    </table></div>
+    <p>Two things stand out. The hash layouts take 19 to 22 times the bytes of CSR for the same lists (Python sets keep more spare room than dicts, which is why the set version is the larger one here). And at 10,000 users they are even larger than the bit matrix. That flips as the graph grows: the matrix grows with the square of the users, the lists with the friendships.</p>
+    <p><b>At a billion users.</b> Suppose a billion users with 300 friends each. That is \(10^9 \times 300 / 2 = 1.5 \times 10^{11}\) friendships and \(3 \times 10^{11}\) list entries. The bit matrix needs \(10^{18}/8\) bytes, 125 petabytes, almost all of it zeros. CSR with 4-byte ids (enough, since \(10^9 &lt; 2^{32} \approx 4.29 \times 10^9\)) needs \(3 \times 10^{11} \times 4 = 1.2 \times 10^{12}\) bytes for <code>indices</code> plus 8 GB for <code>indptr</code>: about 1.2 TB. An edge list with 8-byte ids needs \(1.5 \times 10^{11} \times 16 = 2.4\) TB. A dict of dicts at the measured 84 bytes per entry (16,790,644 / 200,000) would need about \(3 \times 10^{11} \times 84 \approx 25\) TB: twenty times CSR, still thousands of times less than the matrix. The matrix grows with the square of the users; the lists grow with the friendships.</p>
+    <p><b>Trade-off, and what to say.</b> Adjacency lists (a dict of dicts or of sets while the graph changes, CSR for a read-mostly snapshot) for anything social: sparse, and "friends of u" costs only the friends. An edge list for logs, streams and batch shuffles. A matrix only when the graph is small and dense, or as a slow, obviously correct reference in tests. In an interview: "it is a sparse graph; I store adjacency lists; the matrix would be \(n^2\) bits, 125 PB at a billion users."</p>
     <p class="idea"><b>In one line.</b> People are nodes, friendships are edges, a friend list is the list of edges leaving a node, and friends of friends are the nodes two steps away.</p>
     <details class="deep"><summary>The math, step by step: how many entries, and how many bytes</summary><div>
       <p><b>Step 1: count list entries.</b> The six degrees are 2, 4, 4, 1, 2, 1; they add up to 14, twice the 7 edges. Each edge puts one entry in each of its two people's lists, so for any undirected graph with \(m\) edges</p>
